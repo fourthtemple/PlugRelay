@@ -1,113 +1,184 @@
 # SoundBridge
 
-SoundBridge is an open browser-to-native audio plugin bridge prototype. It lets a Web Audio host talk to a local native daemon that owns native plugin loading, plugin DSP, state, parameters, latency reporting, and eventually native editor integration.
+Host installed VST (VST3) and Audio Unit plugins from a website.
 
-The native side is being designed for full VST3, Audio Unit, and LV2 support. Those formats share one browser protocol and plugin metadata model, but each native backend stays isolated behind its own scanner and host adapter so licensing, platform APIs, and crash behavior can be handled correctly.
+SoundBridge runs a small local bridge daemon on the user's machine. Your browser app talks to that daemon over localhost WebSocket, and the daemon loads the native plugin.
 
-The first implementation slice is intentionally modest:
+## Quick Start: Host VST/AU In A Web Page
 
-- a documented localhost WebSocket protocol
-- a TypeScript browser SDK and AudioWorklet processor
-- a dependency-free Node mock daemon with a stereo gain effect plus example VST3/AU/LV2 instrument facades
-- a browser demo that processes microphone/audio-file input and plays the example instruments through the daemon
-- a macOS-first C++ native daemon skeleton with VST3, Audio Unit, and LV2 discovery hooks plus AU and optional VST3 host workers
-
-AudioGridder is treated as prior art for the native hard parts, especially plugin hosting, client/server separation, transport, latency compensation, and UI streaming. SoundBridge starts clean because its first-class client is the browser/Web Audio runtime, not a native DAW plugin.
-
-## Quick Start
-
-Run the mock daemon:
+Build the native bridge:
 
 ```sh
-npm run mock:daemon
+git clone git@github.com:fourthtemple/SoundBridge.git
+cd SoundBridge
+npm run build:native
 ```
 
-In another terminal, serve the browser demo:
+Confirm native hosting is available:
+
+```sh
+npm run host-status
+```
+
+You want to see `hostAvailable: true` for `vst3` and/or `au`.
+
+List installed plugins:
+
+```sh
+npm run scan:vst3
+npm run scan:au
+```
+
+Start the local bridge daemon:
+
+```sh
+npm run bridge
+```
+
+The dev pairing token is `dev-token` unless `SOUNDBRIDGE_PAIRING_TOKEN` is set.
+
+## Use It From Your Website
+
+Serve these two files from your site:
+
+```text
+packages/web-client/dist/soundbridge-client.js
+packages/web-client/dist/soundbridge-worklet.js
+```
+
+Then create a plugin instance and put it in your Web Audio graph:
+
+```html
+<script type="module">
+  import {
+    SoundBridgeAudioNode,
+    SoundBridgeClient
+  } from "/soundbridge/soundbridge-client.js";
+
+  const audioContext = new AudioContext();
+  const client = new SoundBridgeClient({
+    url: "ws://127.0.0.1:47370/bridge"
+  });
+
+  await client.connect();
+  await client.pair("dev-token");
+
+  const { plugins } = await client.scanPlugins({
+    formats: ["vst3", "au"]
+  });
+
+  const plugin = plugins.find((candidate) =>
+    candidate.hostable !== false &&
+    candidate.kind !== "instrument"
+  );
+
+  if (!plugin) {
+    throw new Error("No hostable VST3 or AU effect found.");
+  }
+
+  const inputChannels = plugin.inputs || 2;
+  const outputChannels = plugin.outputs || 2;
+  const { instanceId } = await client.createInstance({
+    pluginId: plugin.pluginId,
+    format: plugin.format,
+    sampleRate: audioContext.sampleRate,
+    maxBlockSize: 128,
+    inputChannels,
+    outputChannels
+  });
+
+  const pluginNode = await SoundBridgeAudioNode.create(audioContext, client, {
+    instanceId,
+    inputChannels,
+    outputChannels,
+    workletUrl: "/soundbridge/soundbridge-worklet.js"
+  });
+
+  const oscillator = new OscillatorNode(audioContext, { frequency: 110 });
+  oscillator.connect(pluginNode.node);
+  pluginNode.connect(audioContext.destination);
+  oscillator.start();
+
+  await audioContext.resume();
+</script>
+```
+
+That is the core integration: scan, create an instance, connect `SoundBridgeAudioNode`.
+
+## Try The Demo
+
+With `npm run bridge` running in one terminal:
 
 ```sh
 npm run demo
 ```
 
-Open <http://127.0.0.1:5173>. The development pairing token is `dev-token` unless `SOUNDBRIDGE_PAIRING_TOKEN` is set.
+Open <http://127.0.0.1:5173>. The demo can select installed VST3/AU plugins, create an instance, and process microphone or file input through the local bridge.
 
-The mock daemon exposes:
+## What Works Now
 
-- `[Mock] SoundBridge Mock Gain`
-- `[VST3] SoundBridge Example PolySynth · built-in example`
-- `[AU] SoundBridge Example Tonewheel · built-in example`
-- installed Audio Units as hostable native plugins when they expose AudioComponent metadata
-- installed VST3 audio effects as hostable native plugins when the Steinberg SDK host worker is linked
-- installed LV2 scan results from the native scanner as disabled `scan only` entries when present
+- VST3: installed audio effects through the Steinberg VST3 SDK host worker.
+- AU: installed macOS Audio Units through the CoreAudio host worker.
+- LV2: scanning and example bundles only; installed LV2 hosting is not wired yet.
+- VST2: not supported.
 
-The VST3/AU/LV2 entries are intentionally simple repo-local example bundles under `native/example-plugins/`. They use `.vst3`, `.component`, and `.lv2` bundle layouts plus `SoundBridgePlugin.json` manifests, are discovered by the native scanners, and use the same website-to-daemon protocol path as real native plugins. After the native build, each bundle contains a Mach-O helper executable; the website daemon keeps a long-lived helper worker per plugin instance, sends note events into that worker, and renders through the bundle executable with oscillator state preserved across blocks. A JavaScript fallback is still available for development. They are not full VST3 SDK, AudioComponent, or LV2 binary plugins yet.
+VST3 hosting is enabled when `SOUNDBRIDGE_VST3_SDK_PATH` points to a Steinberg VST3 SDK checkout, or when the local development SDK path exists.
 
-The example bundle manifests also declare simple presets. The browser demo exposes those presets and applies them through normal parameter changes, so the example instruments exercise scanning, instantiation, MIDI, parameter control, state, presets, and audio rendering through the same website protocol.
+## Common Problems
 
-Installed Audio Unit scan results with registry metadata are hostable through a CoreAudio worker process. Installed VST3 audio-effect bundles are hostable through the optional Steinberg SDK worker when `SOUNDBRIDGE_VST3_SDK_PATH` points at a SDK checkout or the local development SDK path is present. Installed LV2 scan results are still discovery-only for now: the browser demo shows them as `scan only`, disables selection, and the protocol rejects `createInstance` with `plugin_not_hostable` until the LV2 binary host adapter is linked.
+`vst3.hostAvailable` is false:
 
-## Repository Layout
+```sh
+export SOUNDBRIDGE_VST3_SDK_PATH=/path/to/vst3sdk
+npm run build:native
+```
+
+No plugins show up:
+
+```sh
+npm run scan:vst3
+npm run scan:au
+```
+
+Installed VST3s are scanned from:
 
 ```text
-packages/
-  web-client/          TypeScript SDK, AudioWorklet processor, generic UI helpers
-  protocol/            Shared protocol schema and TypeScript message types
-native/
-  bridge-daemon/       macOS-first native daemon skeleton and VST3/AU/LV2 scanners
-docs/
-  architecture.md      Technical architecture and tradeoffs
-  protocol.md          Transport and message contract
-  security.md          Local pairing, origin allowlist, and threat model
-  daw-integration.md   Web DAW integration model
-examples/
-  browser-demo/        Reference browser host demo
-installer/
-  macos/               Packaging, launch agent, and Homebrew notes
-scripts/
-  mock-daemon.mjs      Development daemon with a mock gain plugin
-  demo-server.mjs      Static server for the demo and SDK files
-  browser-smoke.mjs    Headless browser verification for the website instrument path
+/Library/Audio/Plug-Ins/VST3
+~/Library/Audio/Plug-Ins/VST3
 ```
 
-## Native Skeleton
+Installed Audio Units are scanned from the macOS AudioComponent registry and:
 
-Build the native scanner skeleton:
+```text
+/Library/Audio/Plug-Ins/Components
+~/Library/Audio/Plug-Ins/Components
+```
+
+The browser cannot connect:
+
+- Make sure `npm run bridge` is running.
+- Use `ws://127.0.0.1:47370/bridge`.
+- Pair with the correct token.
+- Serve your page over `http://` or `https://`, not `file://`.
+
+## Useful Commands
 
 ```sh
-cmake -S native/bridge-daemon -B native/bridge-daemon/build
-cmake --build native/bridge-daemon/build
-native/bridge-daemon/build/soundbridge-daemon --scan
+npm run build:native
+npm run bridge
+npm run host-status
+npm run scan:vst3
+npm run scan:au
+npm run check
 ```
 
-The skeleton does real bundle discovery for VST3, Audio Unit, and LV2 search paths. Audio Unit plugins can be instantiated and rendered through the native CoreAudio worker. VST3 audio-effect bundles can be instantiated and rendered through the Steinberg SDK worker when the SDK is available at configure time. LV2 still needs its optional stack adapter before installed binaries become hostable.
+## More Docs
 
-The browser-facing `hello` capabilities are derived from the native `--host-status` command: scanning and example-bundle hosting are advertised separately from full installed-plugin binary hosting, and native status notes are surfaced in the demo.
-
-Focused scanner commands are available while developing format backends:
-
-```sh
-native/bridge-daemon/build/soundbridge-daemon --scan-vst3
-native/bridge-daemon/build/soundbridge-daemon --scan-au
-native/bridge-daemon/build/soundbridge-daemon --scan-lv2
-native/bridge-daemon/build/soundbridge-daemon --scan-examples
-native/bridge-daemon/build/soundbridge-daemon --scan-installed
-native/bridge-daemon/build/soundbridge-daemon --host-status
-native/bridge-daemon/build/soundbridge-daemon --host-vst3-worker "/Library/Audio/Plug-Ins/VST3/Example.vst3" 48000 128 2 2 effect
-native/bridge-daemon/build/soundbridge-daemon --render-example-block vst3:soundbridge-example-polysynth.vst3 128 48000 0.42 0.68 0.5 60:0.8
-```
-
-`--scan` returns installed plugin bundles plus the repo-local example bundles. `--scan-installed` returns only discovered non-example plugin bundles; the browser protocol exposes hostable AU/VST3 metadata without raw executable paths and keeps LV2 installed plugins scan-only. `--scan-examples` returns only the website-playable AU/VST/LV2 example bundles.
-
-## Verification
-
-With the mock daemon and demo server running:
-
-```sh
-npm run smoke:mock
-npm run smoke:browser
-```
-
-`smoke:mock` validates the protocol path directly, including installed AU rendering through `renderEngine: "native-au"`, installed VST3 rendering through `renderEngine: "native-vst3"`, plus note-on/note-off events and rendered audio from the example VST3/AU/LV2 instruments. For repo-local example bundles, it expects `renderEngine: "bundle-worker"` and verifies a second audio block continues without resending note state, then verifies audio stops after note-off. `smoke:browser` drives the website in Chrome, plays each example instrument through the browser UI, and verifies the page reports `Bundle worker` as the render engine.
+- [Protocol](docs/protocol.md)
+- [Security](docs/security.md)
+- [Architecture](docs/architecture.md)
+- [Web DAW integration](docs/daw-integration.md)
 
 ## License
 
-MIT. The browser SDK, protocol, and core bridge should stay permissively licensed to encourage adoption by commercial and open-source Web DAWs.
+MIT

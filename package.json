@@ -9,6 +9,12 @@
     "examples/browser-demo"
   ],
   "scripts": {
+    "build:native": "cmake -S native/bridge-daemon -B native/bridge-daemon/build-current && cmake --build native/bridge-daemon/build-current",
+    "bridge": "node scripts/mock-daemon.mjs",
+    "host-status": "native/bridge-daemon/build-current/soundbridge-daemon --host-status",
+    "scan": "native/bridge-daemon/build-current/soundbridge-daemon --scan-installed",
+    "scan:vst3": "native/bridge-daemon/build-current/soundbridge-daemon --scan-vst3",
+    "scan:au": "native/bridge-daemon/build-current/soundbridge-daemon --scan-au",
     "mock:daemon": "node scripts/mock-daemon.mjs",
     "demo": "node scripts/demo-server.mjs",
     "smoke:mock": "node scripts/smoke-test.mjs",
