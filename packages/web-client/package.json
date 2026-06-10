@@ -1,0 +1,12 @@
+{
+  "name": "@soundbridge/web-client",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/soundbridge-client.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./dist/soundbridge-client.js",
+    "./worklet": "./dist/soundbridge-worklet.js"
+  }
+}

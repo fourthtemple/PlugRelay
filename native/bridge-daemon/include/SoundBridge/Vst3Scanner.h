@@ -1,0 +1,23 @@
+#pragma once
+
+#include "SoundBridge/NativePlugin.h"
+
+#include <filesystem>
+#include <vector>
+
+namespace soundbridge {
+
+class Vst3Scanner {
+public:
+  Vst3Scanner();
+
+  std::vector<std::filesystem::path> searchPaths() const;
+  std::vector<NativePluginInfo> scan() const;
+
+private:
+  std::vector<std::filesystem::path> paths_;
+};
+
+std::string vst3BundleListToJson(const std::vector<NativePluginInfo>& plugins);
+
+} // namespace soundbridge

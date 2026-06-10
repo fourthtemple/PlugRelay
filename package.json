@@ -1,0 +1,22 @@
+{
+  "name": "soundbridge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Open browser-to-native audio plugin bridge prototype.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/browser-demo"
+  ],
+  "scripts": {
+    "mock:daemon": "node scripts/mock-daemon.mjs",
+    "demo": "node scripts/demo-server.mjs",
+    "smoke:mock": "node scripts/smoke-test.mjs",
+    "smoke:browser": "node scripts/browser-smoke.mjs",
+    "check": "node --check scripts/mock-daemon.mjs && node --check scripts/demo-server.mjs && node --check scripts/smoke-test.mjs && node --check scripts/browser-smoke.mjs && node --check examples/browser-demo/src/app.js && node --check packages/web-client/dist/soundbridge-client.js && node --check packages/web-client/dist/soundbridge-worklet.js"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

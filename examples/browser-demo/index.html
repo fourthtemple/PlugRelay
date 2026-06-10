@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SoundBridge Browser Demo</title>
+    <link rel="stylesheet" href="/examples/browser-demo/src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>SoundBridge</h1>
+          <p>Browser audio routed through a local native-style plugin bridge.</p>
+        </div>
+        <div class="status-strip" aria-live="polite">
+          <span id="connectionStatus" class="status-pill">Offline</span>
+          <span id="capabilityStatus" class="status-pill">Host unknown</span>
+          <span id="engineStatus" class="status-pill">Engine stopped</span>
+          <span id="latencyStatus" class="status-pill">Latency unknown</span>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="panel controls-panel">
+          <div class="section">
+            <h2>Bridge</h2>
+            <label class="field">
+              <span>Daemon URL</span>
+              <input id="daemonUrl" value="ws://127.0.0.1:47370/bridge" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span>Pairing token</span>
+              <input id="pairingToken" value="dev-token" spellcheck="false" />
+            </label>
+            <button id="connectButton" class="primary-button" type="button">Connect</button>
+          </div>
+
+          <div class="section">
+            <h2>Plugin</h2>
+            <label class="field">
+              <span>Plugin</span>
+              <select id="pluginSelect"></select>
+            </label>
+            <output id="pluginStatus" class="plugin-status">No plugins scanned</output>
+            <label class="field">
+              <span>Preset</span>
+              <select id="presetSelect"></select>
+            </label>
+            <button id="applyPresetButton" type="button">Apply Preset</button>
+            <button id="createInstanceButton" type="button">Create Instance</button>
+          </div>
+
+          <div class="section instrument-section">
+            <h2>Instrument</h2>
+            <div id="keyboard" class="keyboard" aria-label="Instrument keyboard">
+              <button class="piano-key" type="button" data-note="60" data-key="a">C</button>
+              <button class="piano-key" type="button" data-note="62" data-key="s">D</button>
+              <button class="piano-key" type="button" data-note="64" data-key="d">E</button>
+              <button class="piano-key" type="button" data-note="65" data-key="f">F</button>
+              <button class="piano-key" type="button" data-note="67" data-key="g">G</button>
+              <button class="piano-key" type="button" data-note="69" data-key="h">A</button>
+              <button class="piano-key" type="button" data-note="71" data-key="j">B</button>
+              <button class="piano-key" type="button" data-note="72" data-key="k">C</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>Source</h2>
+            <label class="file-picker">
+              <span>Audio File</span>
+              <input id="fileInput" type="file" accept="audio/*" />
+            </label>
+            <button id="micButton" type="button">Use Microphone</button>
+            <button id="stopButton" type="button">Stop Source</button>
+          </div>
+        </aside>
+
+        <section class="panel monitor-panel">
+          <div class="monitor-header">
+            <div>
+              <h2>Signal</h2>
+              <p id="sourceLabel">No source selected</p>
+            </div>
+            <button id="latencyButton" type="button">Refresh Latency</button>
+          </div>
+          <canvas id="scope" width="960" height="260" aria-label="Output waveform monitor"></canvas>
+          <div class="stats-grid">
+            <div>
+              <span class="stat-label">Processed blocks</span>
+              <strong id="processedBlocks">0</strong>
+            </div>
+            <div>
+              <span class="stat-label">Underruns</span>
+              <strong id="underruns">0</strong>
+            </div>
+            <div>
+              <span class="stat-label">Queued blocks</span>
+              <strong id="queuedBlocks">0</strong>
+            </div>
+            <div>
+              <span class="stat-label">Render engine</span>
+              <strong id="renderEngine">Idle</strong>
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel parameters-panel">
+          <div class="section">
+            <h2>Parameters</h2>
+            <div id="parameterControls" class="parameter-controls"></div>
+          </div>
+
+          <div class="section">
+            <h2>State</h2>
+            <div class="state-actions">
+              <button id="saveStateButton" type="button">Save</button>
+              <button id="restoreStateButton" type="button">Restore</button>
+            </div>
+            <textarea id="stateText" spellcheck="false" rows="5" aria-label="Opaque plugin state"></textarea>
+          </div>
+        </aside>
+      </section>
+
+      <output id="log" class="log" aria-live="polite"></output>
+    </main>
+
+    <script type="module" src="/examples/browser-demo/src/app.js?v=20260610i"></script>
+  </body>
+</html>

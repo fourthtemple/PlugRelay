@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soundbridge.dev/schema/protocol.schema.json",
+  "title": "SoundBridge Protocol",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/requestEnvelope" },
+    { "$ref": "#/$defs/responseEnvelope" },
+    { "$ref": "#/$defs/eventEnvelope" }
+  ],
+  "$defs": {
+    "command": {
+      "type": "string",
+      "enum": [
+        "hello",
+        "pair",
+        "scanPlugins",
+        "listPlugins",
+        "createInstance",
+        "destroyInstance",
+        "getParameters",
+        "setParameter",
+        "getState",
+        "setState",
+        "processAudioBlock",
+        "sendMidiEvents",
+        "getLatency",
+        "openEditor",
+        "closeEditor",
+        "heartbeat"
+      ]
+    },
+    "pluginFormat": {
+      "type": "string",
+      "enum": ["vst3", "au", "lv2", "mock", "unknown"]
+    },
+    "pluginFormatCapability": {
+      "type": "object",
+      "required": ["scan", "host"],
+      "additionalProperties": true,
+      "properties": {
+        "scan": { "type": "boolean" },
+        "host": { "type": "boolean" },
+        "exampleHost": { "type": "boolean" },
+        "mockExamples": { "type": "boolean" },
+        "notes": { "type": "string" }
+      }
+    },
+    "helloResponse": {
+      "type": "object",
+      "required": ["name", "protocolVersion", "pairingRequired", "transports", "capabilities"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "protocolVersion": { "type": "string" },
+        "pairingRequired": { "type": "boolean" },
+        "transports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "url"],
+            "additionalProperties": true,
+            "properties": {
+              "kind": { "type": "string" },
+              "url": { "type": "string" },
+              "audioEncoding": { "type": "string" }
+            }
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "required": ["pluginFormats"],
+          "additionalProperties": true,
+          "properties": {
+            "pluginFormats": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/pluginFormatCapability" },
+              "properties": {
+                "vst3": { "$ref": "#/$defs/pluginFormatCapability" },
+                "au": { "$ref": "#/$defs/pluginFormatCapability" },
+                "lv2": { "$ref": "#/$defs/pluginFormatCapability" },
+                "mock": { "$ref": "#/$defs/pluginFormatCapability" },
+                "unknown": { "$ref": "#/$defs/pluginFormatCapability" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "requestEnvelope": {
+      "type": "object",
+      "required": ["type", "id", "command", "payload"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "request" },
+        "id": { "type": "string", "minLength": 1 },
+        "command": { "$ref": "#/$defs/command" },
+        "payload": { "type": "object" },
+        "sessionToken": { "type": "string" }
+      }
+    },
+    "responseEnvelope": {
+      "type": "object",
+      "required": ["type", "id", "ok"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "response" },
+        "id": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "payload": {},
+        "error": { "$ref": "#/$defs/error" }
+      }
+    },
+    "eventEnvelope": {
+      "type": "object",
+      "required": ["type", "event", "payload"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "event" },
+        "event": { "type": "string", "minLength": 1 },
+        "payload": {}
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": true,
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "details": {}
+      }
+    },
+    "pluginParameter": {
+      "type": "object",
+      "required": ["id", "name", "normalizedValue", "defaultNormalizedValue", "automatable"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "normalizedValue": { "type": "number", "minimum": 0, "maximum": 1 },
+        "defaultNormalizedValue": { "type": "number", "minimum": 0, "maximum": 1 },
+        "unit": { "type": "string" },
+        "minPlain": { "type": "number" },
+        "maxPlain": { "type": "number" },
+        "plainValue": { "type": "number" },
+        "automatable": { "type": "boolean" }
+      }
+    },
+    "pluginMetadata": {
+      "type": "object",
+      "required": ["pluginId", "format", "name", "vendor", "category", "kind", "inputs", "outputs", "parameters"],
+      "additionalProperties": true,
+      "properties": {
+        "pluginId": { "type": "string" },
+        "format": { "$ref": "#/$defs/pluginFormat" },
+        "name": { "type": "string" },
+        "vendor": { "type": "string" },
+        "category": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["effect", "instrument", "midi-effect", "unknown"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["scan", "example-bundle", "builtin-example", "mock", "unknown"]
+        },
+        "hostable": { "type": "boolean" },
+        "hostUnavailableReason": { "type": "string" },
+        "inputs": { "type": "integer", "minimum": 0 },
+        "outputs": { "type": "integer", "minimum": 0 },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pluginParameter" }
+        },
+        "presets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pluginPreset" }
+        }
+      }
+    },
+    "pluginPreset": {
+      "type": "object",
+      "required": ["id", "name", "parameters"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "midiEvent": {
+      "type": "object",
+      "required": ["type", "note"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["noteOn", "noteOff"]
+        },
+        "note": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "velocity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "time": {
+          "type": "number"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        }
+      }
+    }
+  }
+}

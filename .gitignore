@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+native/bridge-daemon/build/
+native/bridge-daemon/build-*/
+native/example-plugins/VST3/*/Contents/MacOS/*
+native/example-plugins/Components/*/Contents/MacOS/*
+native/example-plugins/LV2/*/soundbridge-example-wavefold
