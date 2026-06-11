@@ -4,6 +4,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
+import {
+  assertLoopbackHost,
+  createDaemonValidators,
+  envInteger,
+  envList,
+  isLoopbackHostHeader,
+  protocolError,
+  sendError,
+  tokenEquals
+} from "./daemon-security-helpers.mjs";
 import { createDaemonWebSocketServer } from "./daemon-websocket-server.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
@@ -56,6 +66,19 @@ const MAX_PAIR_ATTEMPTS_PER_CONNECTION = envInteger("SOUNDBRIDGE_MAX_PAIR_ATTEMP
 const MIN_SAMPLE_RATE = 8000;
 const MAX_SAMPLE_RATE = 384000;
 const ALLOWED_ORIGINS = envList("SOUNDBRIDGE_ALLOWED_ORIGINS");
+const {
+  boundedFrames,
+  isPowerOfTwo,
+  requireBoolean,
+  requireIntInRange,
+  requireIntegerInRange,
+  requireNumberInRange,
+  requireSampleRate
+} = createDaemonValidators({
+  minSampleRate: MIN_SAMPLE_RATE,
+  maxSampleRate: MAX_SAMPLE_RATE,
+  makeProtocolError: protocolError
+});
 
 assertLoopbackHost(HOST, "SOUNDBRIDGE_HOST", "SOUNDBRIDGE_ALLOW_NON_LOOPBACK");
 
@@ -1943,37 +1966,6 @@ function sessionsForOrigin(origin) {
   return Array.from(sessions.values()).filter((session) => session.origin === origin);
 }
 
-function envInteger(name, fallback) {
-  const value = Number(process.env[name]);
-  if (!Number.isFinite(value) || value <= 0) {
-    return fallback;
-  }
-  return Math.floor(value);
-}
-
-function envList(name) {
-  return String(process.env[name] ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
-function assertLoopbackHost(host, hostEnvName, allowEnvName) {
-  if (isLoopbackHost(host) || process.env[allowEnvName] === "1") {
-    return;
-  }
-
-  console.error(
-    `${hostEnvName}=${host} would expose SoundBridge off this machine. ` +
-      `Use 127.0.0.1, localhost, or ::1, or set ${allowEnvName}=1 if you are intentionally testing a non-loopback bind.`
-  );
-  process.exit(1);
-}
-
-function isLoopbackHost(host) {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
-}
-
 function makeInstrumentParameters(values) {
   return [
     makeGainParameter(values.gain),
@@ -2584,111 +2576,4 @@ function formatCategory(format) {
     default:
       return "Unknown";
   }
-}
-
-function requireIntInRange(value, min, max, label) {
-  const number = Math.floor(Number(value));
-  if (!Number.isFinite(number) || number < min || number > max) {
-    throw protocolError("invalid_argument", `${label} must be an integer in ${min}..${max}.`, {
-      value
-    });
-  }
-  return number;
-}
-
-function requireIntegerInRange(value, min, max, label) {
-  const number = Number(value);
-  if (!Number.isInteger(number) || number < min || number > max) {
-    throw protocolError("invalid_argument", `${label} must be an integer in ${min}..${max}.`, {
-      value
-    });
-  }
-  return number;
-}
-
-function requireSampleRate(value, label = "sampleRate") {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < MIN_SAMPLE_RATE || number > MAX_SAMPLE_RATE) {
-    throw protocolError("invalid_argument", `${label} must be a number in ${MIN_SAMPLE_RATE}..${MAX_SAMPLE_RATE} Hz.`, {
-      value
-    });
-  }
-  return number;
-}
-
-function requireNumberInRange(value, min, max, label) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < min || number > max) {
-    throw protocolError("invalid_argument", `${label} must be a number in ${min}..${max}.`, {
-      value
-    });
-  }
-  return number;
-}
-
-function requireBoolean(value, label) {
-  if (typeof value !== "boolean") {
-    throw protocolError("invalid_argument", `${label} must be a boolean.`, {
-      value
-    });
-  }
-  return value;
-}
-
-function isPowerOfTwo(value) {
-  return Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
-}
-
-function boundedFrames(requested, maxBlockSize) {
-  const number = Math.floor(Number(requested));
-  if (!Number.isFinite(number) || number < 1) {
-    return 1;
-  }
-  return Math.min(number, maxBlockSize);
-}
-
-function tokenEquals(provided, expected) {
-  const a = Buffer.from(String(provided ?? ""), "utf8");
-  const b = Buffer.from(String(expected ?? ""), "utf8");
-  if (a.length !== b.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(a, b);
-}
-
-function isLoopbackHostHeader(hostHeader) {
-  if (typeof hostHeader !== "string" || hostHeader.length === 0) {
-    return false;
-  }
-  let host = hostHeader.trim();
-  const bracketed = host.match(/^\[(.+)\]/);
-  if (bracketed) {
-    host = bracketed[1];
-  } else {
-    const lastColon = host.lastIndexOf(":");
-    if (lastColon !== -1 && host.indexOf(":") === lastColon) {
-      host = host.slice(0, lastColon);
-    }
-  }
-  return isLoopbackHost(host);
-}
-
-function protocolError(code, message, details) {
-  const error = new Error(message);
-  error.code = code;
-  error.details = details;
-  return error;
-}
-
-function sendError(send, id, code, message, details) {
-  send({
-    type: "response",
-    id,
-    ok: false,
-    error: {
-      code,
-      message,
-      details
-    }
-  });
 }
