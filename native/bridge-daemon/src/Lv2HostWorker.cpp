@@ -308,6 +308,11 @@ struct PendingMidiMessage {
   std::uint32_t sampleOffset = 0;
 };
 
+struct IndexedAudioBus {
+  std::uint32_t index = 0;
+  std::vector<std::vector<float>> channels;
+};
+
 struct HostTransportContext {
   bool explicitTransport = false;
   bool playing = false;
@@ -1561,10 +1566,11 @@ std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::u
   return channels;
 }
 
-bool applyMainInputBusChannels(
+bool parseAudioBuses(
     const std::string& encoded,
     std::uint32_t frames,
-    std::vector<std::vector<float>>& channels) {
+    std::vector<IndexedAudioBus>& buses) {
+  buses.clear();
   if (encoded.empty() || encoded == "-") {
     return true;
   }
@@ -1590,11 +1596,20 @@ bool applyMainInputBusChannels(
     if (!seenIndexes.insert(index).second) {
       return false;
     }
-    if (index == 0) {
-      channels = parseChannels(token.substr(separator + 1), frames);
-    }
+    buses.push_back(IndexedAudioBus{
+        index,
+        parseChannels(token.substr(separator + 1), frames)});
   }
   return true;
+}
+
+const std::vector<std::vector<float>>* findBusChannels(const std::vector<IndexedAudioBus>& buses, std::uint32_t index) {
+  for (const auto& bus : buses) {
+    if (bus.index == index) {
+      return &bus.channels;
+    }
+  }
+  return nullptr;
 }
 
 std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels) {
@@ -1618,10 +1633,18 @@ std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels)
   return output.str();
 }
 
-std::string mainOutputBusBlockToJson(const std::vector<std::vector<float>>& channels) {
+std::string lv2OutputBusBlockToJson(const std::vector<std::vector<float>>& channels) {
   const auto channelsJson = audioChannelsToJson(channels);
-  return std::string("{\"channels\":") + channelsJson +
-      ",\"outputBuses\":[{\"index\":0,\"channels\":" + channelsJson + "}]}";
+  std::ostringstream output;
+  output << "{\"channels\":" << channelsJson
+         << ",\"outputBuses\":[{\"index\":0,\"channels\":" << channelsJson << "}";
+  const auto outputBusCount = std::min<std::size_t>(channels.size() + 1, kMaxWorkerAudioPorts);
+  for (std::size_t busIndex = 1; busIndex < outputBusCount; ++busIndex) {
+    output << ",{\"index\":" << busIndex
+           << ",\"channels\":" << audioChannelsToJson({channels[busIndex - 1]}) << "}";
+  }
+  output << "]}";
+  return output.str();
 }
 
 class HostedLv2Plugin {
@@ -1671,21 +1694,37 @@ public:
       std::uint32_t frames,
       double sampleRate,
       std::vector<std::vector<float>> inputChannels,
+      std::vector<IndexedAudioBus> inputBuses,
       HostTransportContext transport) {
     if (std::abs(sampleRate - sampleRate_) > 0.01) {
       throw std::runtime_error("LV2 worker cannot change sample rate after initialization.");
     }
 
     frames = std::clamp<std::uint32_t>(frames, 1, maxBlockSize_);
+    if (inputBuses.empty() && !inputChannels.empty()) {
+      inputBuses.push_back(IndexedAudioBus{0, std::move(inputChannels)});
+    }
     inputBuffers_.resize(inputPortIndexes_.size());
     outputBuffers_.resize(outputPortIndexes_.size());
 
+    const auto* aggregateInputBus = findBusChannels(inputBuses, 0);
     for (std::size_t index = 0; index < inputBuffers_.size(); ++index) {
       inputBuffers_[index].assign(frames, 0.0F);
-      if (index < inputChannels.size()) {
-        const auto copyFrames = std::min<std::size_t>(frames, inputChannels[index].size());
+      if (aggregateInputBus != nullptr && index < aggregateInputBus->size()) {
+        const auto copyFrames = std::min<std::size_t>(frames, (*aggregateInputBus)[index].size());
         for (std::size_t frame = 0; frame < copyFrames; ++frame) {
-          inputBuffers_[index][frame] = sanitizeSample(inputChannels[index][frame]);
+          inputBuffers_[index][frame] = sanitizeSample((*aggregateInputBus)[index][frame]);
+        }
+      }
+
+      const auto* portInputBus = findBusChannels(inputBuses, static_cast<std::uint32_t>(index + 1));
+      if (portInputBus != nullptr) {
+        std::fill(inputBuffers_[index].begin(), inputBuffers_[index].end(), 0.0F);
+        if (!portInputBus->empty()) {
+          const auto copyFrames = std::min<std::size_t>(frames, (*portInputBus)[0].size());
+          for (std::size_t frame = 0; frame < copyFrames; ++frame) {
+            inputBuffers_[index][frame] = sanitizeSample((*portInputBus)[0][frame]);
+          }
         }
       }
     }
@@ -1797,10 +1836,10 @@ public:
            << ",\"requestedOutputChannels\":" << requestedOutputChannels_
            << ",\"inputChannels\":" << inputChannels_
            << ",\"outputChannels\":" << outputChannels_
-           << ",\"inputBuses\":" << (inputChannels_ > 0 ? 1 : 0)
-           << ",\"outputBuses\":1"
-           << ",\"inputBusLayouts\":" << mainBusLayoutToJson("input", inputChannels_, inputChannels_ > 0)
-           << ",\"outputBusLayouts\":" << mainBusLayoutToJson("output", outputChannels_, true)
+           << ",\"inputBuses\":" << inputBusCount()
+           << ",\"outputBuses\":" << outputBusCount()
+           << ",\"inputBusLayouts\":" << inputBusLayoutsToJson()
+           << ",\"outputBusLayouts\":" << outputBusLayoutsToJson()
            << ",\"sampleRate\":" << sampleRate_
            << ",\"maxBlockSize\":" << maxBlockSize_
            << "}";
@@ -1808,20 +1847,71 @@ public:
   }
 
 private:
-  static std::string mainBusLayoutToJson(const char* direction, std::uint32_t channels, bool active) {
-    const std::string directionText(direction);
-    if (!active && directionText == "input") {
-      return "[]";
+  std::uint32_t inputBusCount() const {
+    if (inputChannels_ == 0) {
+      return 0;
     }
+    return std::min<std::uint32_t>(inputChannels_ + 1, kMaxWorkerAudioPorts);
+  }
+
+  std::uint32_t outputBusCount() const {
+    return std::max<std::uint32_t>(1, std::min<std::uint32_t>(outputChannels_ + 1, kMaxWorkerAudioPorts));
+  }
+
+  std::string inputBusLayoutsToJson() const {
+    std::ostringstream output;
+    output << "[";
+    const auto busCount = inputBusCount();
+    if (busCount > 0) {
+      output << "{\"index\":0"
+             << ",\"direction\":\"input\""
+             << ",\"mediaType\":\"audio\""
+             << ",\"name\":\"Main Input\""
+             << ",\"type\":\"main\""
+             << ",\"channels\":" << std::min<std::uint32_t>(inputChannels_, kMaxWorkerAudioPorts)
+             << ",\"active\":true}";
+    }
+    for (std::uint32_t busIndex = 1; busIndex < busCount; ++busIndex) {
+      const auto portOffset = busIndex - 1;
+      const auto portName = portOffset < inputPortIndexes_.size()
+          ? ports_[inputPortIndexes_[portOffset]].name
+          : std::string("Input Port ") + std::to_string(busIndex);
+      output << ",{\"index\":" << busIndex
+             << ",\"direction\":\"input\""
+             << ",\"mediaType\":\"audio\""
+             << ",\"name\":\"" << jsonEscape(portName.empty() ? std::string("Input Port ") + std::to_string(busIndex) : portName) << "\""
+             << ",\"type\":\"aux\""
+             << ",\"channels\":1"
+             << ",\"active\":true}";
+    }
+    output << "]";
+    return output.str();
+  }
+
+  std::string outputBusLayoutsToJson() const {
     std::ostringstream output;
     output << "[{\"index\":0"
-           << ",\"direction\":\"" << directionText << "\""
+           << ",\"direction\":\"output\""
            << ",\"mediaType\":\"audio\""
-           << ",\"name\":\"" << (directionText == "input" ? "Main Input" : "Main Output") << "\""
+           << ",\"name\":\"Main Output\""
            << ",\"type\":\"main\""
-           << ",\"channels\":" << std::min<std::uint32_t>(channels, kMaxWorkerAudioPorts)
-           << ",\"active\":" << (active ? "true" : "false")
-           << "}]";
+           << ",\"channels\":" << std::min<std::uint32_t>(outputChannels_, kMaxWorkerAudioPorts)
+           << ",\"active\":true}";
+    const auto busCount = outputBusCount();
+    for (std::uint32_t busIndex = 1; busIndex < busCount; ++busIndex) {
+      const auto portOffset = busIndex - 1;
+      const auto portName = portOffset < outputPortIndexes_.size()
+          ? ports_[outputPortIndexes_[portOffset]].name
+          : std::string("Output Port ") + std::to_string(busIndex);
+      output << ",{\"index\":" << busIndex
+             << ",\"direction\":\"output\""
+             << ",\"mediaType\":\"audio\""
+             << ",\"name\":\"" << jsonEscape(portName.empty() ? std::string("Output Port ") + std::to_string(busIndex) : portName) << "\""
+             << ",\"type\":\"aux\""
+             << ",\"channels\":1"
+             << ",\"active\":true}";
+    }
+    output << "]";
     return output.str();
   }
 
@@ -2770,12 +2860,18 @@ int runLv2HostWorkerNative(int argc, char** argv) {
             continue;
           }
           auto channels = parseChannels(encodedChannels, frames);
-          if (!applyMainInputBusChannels(encodedInputBuses, frames, channels)) {
+          std::vector<IndexedAudioBus> inputBuses;
+          if (!parseAudioBuses(encodedInputBuses, frames, inputBuses)) {
             std::cout << "{\"error\":\"invalid_render_arguments\"}" << std::endl;
             continue;
           }
-          const auto renderedChannels = host.render(frames, renderSampleRate, std::move(channels), transport);
-          std::cout << mainOutputBusBlockToJson(renderedChannels) << std::endl;
+          const auto renderedChannels = host.render(
+              frames,
+              renderSampleRate,
+              std::move(channels),
+              std::move(inputBuses),
+              transport);
+          std::cout << lv2OutputBusBlockToJson(renderedChannels) << std::endl;
           continue;
         }
 
@@ -2805,7 +2901,7 @@ bool lv2HostWorkerAvailable() {
 
 std::string lv2HostWorkerStatus() {
 #ifndef _WIN32
-  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI extensions remain disabled.";
+  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, per-audio-port bus routing, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI extensions remain disabled.";
 #else
   return "LV2 host worker is not available on this platform build.";
 #endif
