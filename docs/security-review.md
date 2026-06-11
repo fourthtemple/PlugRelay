@@ -6,6 +6,8 @@ The architecture and stated threat model are sound, and several controls are alr
 
 > **Status: all findings below have been remediated** in the daemon (`scripts/mock-daemon.mjs`), the native C++ workers, the protocol schema, and the docs. A regression test (`scripts/security-smoke.mjs`, `npm run smoke:security`) exercises the fixes against a live daemon — 21/21 checks pass, including the previously fatal DoS now returning in ~0 ms with bounded output. The original findings are retained below for the audit trail.
 
+> **Follow-up roadmap:** example render entry points now reject unknown example plugin ids before numeric argument parsing. Full production hardening still needs OS-level sandboxing for third-party plugin worker processes, especially on macOS where the host should evaluate App Sandbox and seatbelt-profile options.
+
 ## Summary
 
 | # | Severity | Issue | Location |

@@ -31,6 +31,11 @@ void printUsage(const char* argv0) {
 int main(int argc, char** argv) {
   if (argc == 2 && std::string(argv[1]) == "--worker") {
     const auto pluginId = pluginIdForExecutable(argv[0]);
+    if (!soundbridge::isExampleInstrumentPluginId(pluginId)) {
+      std::cerr << "Unknown example instrument plugin id: " << pluginId << "\n";
+      return 3;
+    }
+
     soundbridge::ExampleInstrumentState state(pluginId);
     std::string line;
     while (std::getline(std::cin, line)) {
@@ -103,6 +108,11 @@ int main(int argc, char** argv) {
 
   soundbridge::ExampleRenderConfig config;
   config.pluginId = pluginIdForExecutable(argv[0]);
+  if (!soundbridge::isExampleInstrumentPluginId(config.pluginId)) {
+    std::cerr << "Unknown example instrument plugin id: " << config.pluginId << "\n";
+    return 3;
+  }
+
   try {
     config.frames = static_cast<std::uint32_t>(std::stoul(argv[2]));
     config.sampleRate = std::stod(argv[3]);

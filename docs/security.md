@@ -44,9 +44,16 @@ Non-goals for the MVP:
 - Restart crashed plugin workers without killing the daemon.
 - Keep VST3, AU, and LV2 host adapters behind the same pairing and origin checks.
 - Prefer per-format worker processes so a crash or exploit in one plugin stack cannot poison all native hosting.
+- Treat worker process sandboxing as a production hardening requirement for third-party plugin code.
 - Reject any HTTP request or WebSocket upgrade whose `Host` header is not a loopback name, to defeat DNS rebinding.
 - Compare the pairing token in constant time and throttle/lock out repeated failed pairing attempts.
 - Validate and bound every numeric field on untrusted commands before allocating buffers or spawning workers.
+
+## Worker Process Sandboxing Roadmap
+
+Worker processes contain plugin crashes, but they do not automatically contain a malicious plugin. Production hosts should apply an operating-system sandbox around third-party plugin workers wherever the platform permits it. On macOS, that means evaluating an App Sandbox entitlement model for distributed builds and a tighter seatbelt profile for internal helpers where allowed. The sandbox should deny ambient network access, keep filesystem access to explicit plugin/state locations, and expose only the brokered audio, MIDI, parameter, and state IPC needed by SoundBridge.
+
+The reference implementation does not claim that sandboxing is complete today. It keeps plugin hosting behind worker boundaries and input validation now, and tracks OS sandboxing as the next containment layer before this should be treated as a hardened general-purpose host.
 
 ## DNS Rebinding And Host Headers
 

@@ -58,6 +58,8 @@ flowchart LR
 
 The worker process boundary is important. A bad plugin should be able to kill its own worker without taking down the daemon, browser, or other plugin instances.
 
+The next production containment layer is an operating-system sandbox around third-party plugin workers. On macOS, that should be implemented with the platform sandbox/App Sandbox model or a constrained seatbelt profile where distribution rules permit it, with plugin code receiving only the brokered audio, MIDI, parameter, and state access it needs.
+
 ## Language And Framework Choices
 
 Browser:

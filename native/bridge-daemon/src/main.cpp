@@ -146,6 +146,11 @@ int main(int argc, char** argv) {
 
     soundbridge::ExampleRenderConfig config;
     config.pluginId = argv[2];
+    if (!soundbridge::isExampleInstrumentPluginId(config.pluginId)) {
+      std::cerr << "Unknown example instrument plugin id: " << config.pluginId << "\n";
+      return 3;
+    }
+
     try {
       config.frames = static_cast<std::uint32_t>(std::stoul(argv[3]));
       config.sampleRate = std::stod(argv[4]);
@@ -157,10 +162,6 @@ int main(int argc, char** argv) {
       return 2;
     }
     config.voices = soundbridge::parseExampleVoices(argv[8]);
-    if (!soundbridge::isExampleInstrumentPluginId(config.pluginId)) {
-      std::cerr << "Unknown example instrument plugin id: " << config.pluginId << "\n";
-      return 3;
-    }
 
     std::cout << soundbridge::exampleInstrumentBlockToJson(
         soundbridge::renderExampleInstrumentBlock(config)) << "\n";
