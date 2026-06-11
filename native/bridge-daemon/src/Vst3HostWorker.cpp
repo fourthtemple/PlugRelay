@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -345,31 +346,41 @@ std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::u
   return channels;
 }
 
-std::vector<IndexedAudioBus> parseAudioBuses(const std::string& encoded, std::uint32_t frames) {
-  std::vector<IndexedAudioBus> buses;
+bool parseAudioBuses(
+    const std::string& encoded,
+    std::uint32_t frames,
+    std::vector<IndexedAudioBus>& buses) {
+  buses.clear();
   if (encoded.empty() || encoded == "-") {
-    return buses;
+    return true;
   }
 
   std::stringstream stream(encoded);
   std::string token;
-  while (buses.size() < kMaxWorkerChannels && std::getline(stream, token, ';')) {
+  std::set<std::uint32_t> seenIndexes;
+  while (std::getline(stream, token, ';')) {
     if (token.empty()) {
-      continue;
+      return false;
+    }
+    if (buses.size() >= kMaxWorkerChannels) {
+      return false;
     }
     const auto separator = token.find('=');
     if (separator == std::string::npos) {
-      continue;
+      return false;
     }
     std::uint32_t index = 0;
     if (!parseUint32Arg(token.substr(0, separator).c_str(), 0, kMaxWorkerChannels - 1, index)) {
-      continue;
+      return false;
+    }
+    if (!seenIndexes.insert(index).second) {
+      return false;
     }
     buses.push_back(IndexedAudioBus{
         index,
         parseChannels(token.substr(separator + 1), frames)});
   }
-  return buses;
+  return true;
 }
 
 const std::vector<std::vector<float>>* findBusChannels(const std::vector<IndexedAudioBus>& buses, std::uint32_t index) {
@@ -1585,11 +1596,16 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
             std::cout << "{\"error\":\"invalid_render_arguments\"}" << std::endl;
             continue;
           }
+          std::vector<IndexedAudioBus> inputBuses;
+          if (!parseAudioBuses(encodedInputBuses, frames, inputBuses)) {
+            std::cout << "{\"error\":\"invalid_render_arguments\"}" << std::endl;
+            continue;
+          }
           const auto rendered = host.render(
               frames,
               renderSampleRate,
               parseChannels(encodedChannels, frames),
-              parseAudioBuses(encodedInputBuses, frames),
+              std::move(inputBuses),
               transport);
           std::cout << renderedAudioToJson(rendered) << std::endl;
           continue;

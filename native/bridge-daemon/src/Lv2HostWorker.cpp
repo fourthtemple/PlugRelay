@@ -1561,36 +1561,40 @@ std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::u
   return channels;
 }
 
-bool parseMainInputBusChannels(
+bool applyMainInputBusChannels(
     const std::string& encoded,
     std::uint32_t frames,
     std::vector<std::vector<float>>& channels) {
   if (encoded.empty() || encoded == "-") {
-    return false;
+    return true;
   }
 
   std::stringstream stream(encoded);
   std::string token;
-  std::size_t seenBuses = 0;
-  while (seenBuses < kMaxWorkerAudioPorts && std::getline(stream, token, ';')) {
+  std::set<std::uint32_t> seenIndexes;
+  while (std::getline(stream, token, ';')) {
     if (token.empty()) {
-      continue;
+      return false;
     }
-    ++seenBuses;
+    if (seenIndexes.size() >= kMaxWorkerAudioPorts) {
+      return false;
+    }
     const auto separator = token.find('=');
     if (separator == std::string::npos) {
-      continue;
+      return false;
     }
     std::uint32_t index = 0;
     if (!parseUint32Arg(token.substr(0, separator).c_str(), 0, kMaxWorkerAudioPorts - 1, index)) {
-      continue;
+      return false;
+    }
+    if (!seenIndexes.insert(index).second) {
+      return false;
     }
     if (index == 0) {
       channels = parseChannels(token.substr(separator + 1), frames);
-      return true;
     }
   }
-  return false;
+  return true;
 }
 
 std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels) {
@@ -2766,7 +2770,10 @@ int runLv2HostWorkerNative(int argc, char** argv) {
             continue;
           }
           auto channels = parseChannels(encodedChannels, frames);
-          parseMainInputBusChannels(encodedInputBuses, frames, channels);
+          if (!applyMainInputBusChannels(encodedInputBuses, frames, channels)) {
+            std::cout << "{\"error\":\"invalid_render_arguments\"}" << std::endl;
+            continue;
+          }
           const auto renderedChannels = host.render(frames, renderSampleRate, std::move(channels), transport);
           std::cout << mainOutputBusBlockToJson(renderedChannels) << std::endl;
           continue;

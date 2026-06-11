@@ -1096,6 +1096,14 @@ async function runNativeLv2WorkerSmoke() {
       "native LV2 worker renders explicit main input bus audio"
     );
 
+    worker.stdin.write("render 4 48000 - malformed-bus-token -\n", "utf8");
+    const invalidBusToken = await readJsonLine();
+    assert(invalidBusToken.error === "invalid_render_arguments", "native LV2 worker rejects malformed input bus framing");
+
+    worker.stdin.write("render 4 48000 - 0=0.1,0.1,0.1,0.1;0=0.2,0.2,0.2,0.2 -\n", "utf8");
+    const duplicateBusIndex = await readJsonLine();
+    assert(duplicateBusIndex.error === "invalid_render_arguments", "native LV2 worker rejects duplicate input bus indexes");
+
     const transported = await requestWorker(
       "render 4 48000 0.1,0.1,0.1,0.1|0.1,0.1,0.1,0.1 - playing=1,tempo=118,num=4,den=4,ppq=32,bar=32,sample=960000"
     );

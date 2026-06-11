@@ -90,7 +90,7 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Max block size | 1–8192 frames | `createInstance.maxBlockSize` |
 | Frames per block | clamped to the instance `maxBlockSize` | `processAudioBlock` |
 | Audio channels | 0–32 in, 1–32 out | `createInstance.inputChannels` / `outputChannels` |
-| Plugin buses | 0–32 in, 1–32 out; explicit input bus indexes must be unique integers in 0–31 | `getLayout`, `createInstance.layout`, `processAudioBlock.inputBuses` |
+| Plugin buses | 0–32 in, 1–32 out; explicit input bus indexes must be unique integers in 0–31 and worker line-protocol bus framing must be revalidated | `getLayout`, `createInstance.layout`, `processAudioBlock.inputBuses` |
 | MIDI events per request | 4096 | `sendMidiEvents.events` |
 | Parameter automation events per request | 4096 | `setParameterEvents.events`, expanded `setParameterCurve` events |
 | Parameter automation curve points | 256, never above the parameter-event cap | `setParameterCurve.points` |
