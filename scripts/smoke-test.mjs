@@ -32,6 +32,11 @@ assert(hello.protocolVersion, "hello returned protocolVersion");
 assert(hello.capabilities?.tail === true, "hello advertises tail-time reporting capability after pairing");
 assert(hello.capabilities?.layout === true, "hello advertises layout reporting capability after pairing");
 assert(hello.capabilities?.automation === true, "hello advertises bounded parameter automation capability after pairing");
+assert(
+  hello.capabilities?.security?.maxAutomationLanesPerInstance >= 1 &&
+    hello.capabilities?.security?.maxAutomationLanePoints >= 1,
+  "hello advertises bounded automation lane limits after pairing"
+);
 const nativeExampleRendererAvailable = hello.capabilities?.nativeExampleRenderer === true;
 const exampleFormats = ["vst3", "au", "lv2"];
 for (const format of exampleFormats) {
@@ -735,6 +740,55 @@ assert(
     Math.abs(automated.parameters?.[0]?.normalizedValue - 0.75) < 0.000001,
   "mock setParameterEvents accepts bounded parameter automation and reports final state"
 );
+
+const lane = await request(
+  socket,
+  "setAutomationLane",
+  {
+    instanceId: created.instanceId,
+    parameterId: "gain",
+    points: [
+      { samplePosition: 2048, normalizedValue: 0.2 },
+      { samplePosition: 2056, normalizedValue: 0.6 }
+    ]
+  },
+  true,
+  pair.sessionToken
+);
+assert(
+  lane.accepted === true && lane.pointCount === 2 && lane.laneCount === 1,
+  "mock setAutomationLane stores bounded timeline automation"
+);
+
+await request(
+  socket,
+  "processAudioBlock",
+  {
+    instanceId: created.instanceId,
+    frames: 16,
+    channels: [
+      new Array(16).fill(0.25),
+      new Array(16).fill(0.25)
+    ],
+    transport: { samplePosition: 2048 }
+  },
+  true,
+  pair.sessionToken
+);
+const laneParameters = await request(socket, "getParameters", { instanceId: created.instanceId }, true, pair.sessionToken);
+assert(
+  Math.abs(laneParameters.parameters?.find((parameter) => parameter.id === "gain")?.normalizedValue - 0.6) < 0.000001,
+  "mock processAudioBlock applies stored automation lanes from transport sample position"
+);
+
+const laneClear = await request(
+  socket,
+  "clearAutomationLane",
+  { instanceId: created.instanceId, parameterId: "gain" },
+  true,
+  pair.sessionToken
+);
+assert(laneClear.cleared === true && laneClear.laneCount === 0, "mock clearAutomationLane clears stored timeline automation");
 
 const noOriginSocket = await connectWebSocket(HOST, PORT, null);
 await request(noOriginSocket, "pair", { origin: ORIGIN, pairingToken: PAIRING_TOKEN }, false).then(

@@ -1,6 +1,8 @@
 import type {
   AudioBlockRequest,
   AudioBlockResponse,
+  AutomationLanePoint,
+  ClearAutomationLaneResponse,
   CreateInstanceRequest,
   CreateInstanceResponse,
   CloseEditorResponse,
@@ -14,7 +16,8 @@ import type {
   PluginScanRequest,
   ProtocolCommand,
   RequestEnvelope,
-  ResponseEnvelope
+  ResponseEnvelope,
+  SetAutomationLaneResponse
 } from "../../protocol/src/messages";
 
 export interface SoundBridgeClientOptions {
@@ -145,6 +148,18 @@ export class SoundBridgeClient extends EventTarget {
     interpolation: "linear" | "step" = "linear"
   ): Promise<{ accepted: boolean; eventCount: number; parameter: PluginParameter }> {
     return this.request("setParameterCurve", { instanceId, parameterId, points, interpolation });
+  }
+
+  setAutomationLane(
+    instanceId: string,
+    parameterId: string,
+    points: AutomationLanePoint[]
+  ): Promise<SetAutomationLaneResponse> {
+    return this.request("setAutomationLane", { instanceId, parameterId, points });
+  }
+
+  clearAutomationLane(instanceId: string, parameterId?: string): Promise<ClearAutomationLaneResponse> {
+    return this.request("clearAutomationLane", { instanceId, parameterId });
   }
 
   getState(instanceId: string): Promise<{ state: string }> {

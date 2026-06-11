@@ -91,7 +91,11 @@ Example paired capability payload:
       "instanceOwnership": true,
       "cleanupOnDisconnect": true,
       "maxInstancesPerSession": 8,
-      "maxTotalInstances": 32
+      "maxTotalInstances": 32,
+      "maxParameterEventsPerRequest": 4096,
+      "maxAutomationCurvePoints": 256,
+      "maxAutomationLanesPerInstance": 128,
+      "maxAutomationLanePoints": 4096
     },
     "nativeExampleRenderer": true,
     "automation": true
@@ -356,7 +360,28 @@ Expands a bounded step or linear automation curve for one parameter into a bound
 }
 ```
 
-This is per-render-block curve interpolation. Offline DAW automation lanes, host timeline curves, and plugin-specific smoothing policies remain host-level concerns and must still obey the same parameter count, point count, event count, timing, and instance-ownership limits before dispatch.
+This is per-render-block curve interpolation. For timeline automation that should persist across render calls, use `setAutomationLane`.
+
+### `setAutomationLane` / `clearAutomationLane`
+
+Stores or clears a bounded absolute-sample automation lane for one known writable parameter on one instance. Lanes are owned by the same paired session as the plugin instance and are destroyed with the instance or session.
+
+```json
+{
+  "instanceId": "inst-2",
+  "parameterId": "gain",
+  "points": [
+    { "samplePosition": 1536000, "normalizedValue": 0.1 },
+    { "samplePosition": 1536064, "normalizedValue": 0.8 }
+  ]
+}
+```
+
+`points` must be strictly increasing by `samplePosition`. The reference daemon defaults to 128 lanes per instance and 4096 points per lane, advertised as `hello.capabilities.security.maxAutomationLanesPerInstance` and `maxAutomationLanePoints`. Values are normalized `0..1`; sample positions are integers in the same bounded range as `processAudioBlock.transport.samplePosition`.
+
+During `processAudioBlock`, if the host supplies `transport.samplePosition`, the daemon dispatches only lane points that fall inside that render block as bounded parameter events with sample offsets. The combined lane-derived event count for one block is capped by `maxParameterEventsPerRequest`. If a host omits `transport.samplePosition`, stored lanes remain in memory but are not applied because the daemon cannot infer the host timeline.
+
+`clearAutomationLane` takes `{ "instanceId": "inst-2", "parameterId": "gain" }` to clear one lane, or `{ "instanceId": "inst-2" }` to clear every lane owned by that instance.
 
 ### `getState` / `setState`
 
@@ -413,6 +438,8 @@ Request:
 `channels` is the backwards-compatible main input bus. `inputBuses` is optional and carries explicit indexed input bus buffers for sidechain-style routing. When both are present, bus index `0` is the main input bus. Explicit `inputBuses` must be an array of at most 32 bus blocks with unique integer indexes in `0..31`; malformed, duplicate, non-integer, or out-of-range indexes are rejected at the daemon boundary and rechecked by native worker line-protocol parsers. All channel counts are capped to 32, and all frame counts are capped to the instance `maxBlockSize`. Installed VST3 workers negotiate bounded per-bus SDK speaker arrangements where accepted and route bounded indexed input buffers into active VST3 buses. Installed AU and LV2 workers currently consume explicit bus index `0` as their main input bus and ignore non-main bus indexes until their sidechain routing is implemented.
 
 `transport` is optional bounded host timeline context. Supported fields are `playing`, `recording`, `loopActive`, `tempo`, `timeSignatureNumerator`, `timeSignatureDenominator`, `projectTimeMusic`, `barPositionMusic`, `cycleStartMusic`, `cycleEndMusic`, and `samplePosition`. Tempo is `1..960` BPM, time-signature denominators must be powers of two in `1..64`, musical positions are quarter-note values in `0..1000000000`, sample positions are integers in `0..9007199254740991`, and cycle start/end must be supplied together with `cycleEndMusic >= cycleStartMusic`. VST3 workers map accepted values into Steinberg `ProcessContext`; AU workers map accepted values into `AudioTimeStamp` sample time plus `kAudioUnitProperty_HostCallbacks`; LV2 workers map supported timeline values into bounded atom `time:Position` events for compatible atom/event input ports.
+
+Stored automation lanes use `transport.samplePosition` to decide which absolute-sample points belong in the current render block. Lane points are expanded into the same bounded per-block parameter event path used by `setParameterEvents`.
 
 Response:
 

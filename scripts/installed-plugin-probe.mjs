@@ -143,6 +143,27 @@ async function probePlugin(socket, session, plugin) {
     );
     await phase(result, "getTailTime", () => request(socket, "getTailTime", { instanceId }, true, session));
 
+    if (writableParameter) {
+      const laneStartSample = 4096;
+      const lanePoints = [{ samplePosition: laneStartSample, normalizedValue: 0.25 }];
+      if (MAX_BLOCK_SIZE > 1) {
+        lanePoints.push({
+          samplePosition: laneStartSample + Math.min(8, MAX_BLOCK_SIZE - 1),
+          normalizedValue: 0.5
+        });
+      }
+      const lane = await phase(result, "setAutomationLane", () =>
+        request(
+          socket,
+          "setAutomationLane",
+          { instanceId, parameterId: writableParameter.id, points: lanePoints },
+          true,
+          session
+        )
+      );
+      result.automationLanePointCount = lane.pointCount;
+    }
+
     const midiEvents = midiEventsForBlock();
     const midiAccepted = await phase(result, "sendMidiEvents", () =>
       request(socket, "sendMidiEvents", { instanceId, events: midiEvents }, true, session)
@@ -155,12 +176,27 @@ async function probePlugin(socket, session, plugin) {
     result.midiEventCount = midiAccepted.eventCount;
 
     const renderPayload = renderPayloadForLayout(instanceId, result.layout);
+    if (writableParameter) {
+      renderPayload.transport = { samplePosition: 4096, tempo: SAMPLE_RATE / 400 };
+    }
     const rendered = await phase(result, "processAudioBlock", async () => {
       const response = await request(socket, "processAudioBlock", renderPayload, true, session);
       assertRenderMatchesLayout(response, result.layout);
       return response;
     });
     result.renderedChannels = Array.isArray(rendered.channels) ? rendered.channels.length : 0;
+
+    if (writableParameter) {
+      await phase(result, "clearAutomationLane", () =>
+        request(
+          socket,
+          "clearAutomationLane",
+          { instanceId, parameterId: writableParameter.id },
+          true,
+          session
+        )
+      );
+    }
 
     await phase(result, "sendMidiNoteOff", () =>
       request(

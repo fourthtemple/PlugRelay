@@ -27,6 +27,14 @@ const MAX_AUTOMATION_CURVE_POINTS = Math.min(
   256,
   MAX_PARAMETER_EVENTS_PER_REQUEST
 );
+const MAX_AUTOMATION_LANES_PER_INSTANCE = Math.min(
+  envInteger("SOUNDBRIDGE_MAX_AUTOMATION_LANES_PER_INSTANCE", 128),
+  1024
+);
+const MAX_AUTOMATION_LANE_POINTS = Math.min(
+  envInteger("SOUNDBRIDGE_MAX_AUTOMATION_LANE_POINTS", 4096),
+  4096
+);
 const MAX_EDITORS_PER_SESSION = envInteger("SOUNDBRIDGE_MAX_EDITORS_PER_SESSION", 8);
 const MAX_TOTAL_EDITORS = envInteger("SOUNDBRIDGE_MAX_TOTAL_EDITORS", 32);
 const EDITOR_SESSION_TTL_MS = envInteger("SOUNDBRIDGE_EDITOR_SESSION_TTL_MS", 10 * 60 * 1000);
@@ -274,6 +282,12 @@ async function dispatchCommand(envelope, context) {
     case "setParameterCurve":
       return setParameterCurve(payload.instanceId, payload.parameterId, payload.points, payload.interpolation, session);
 
+    case "setAutomationLane":
+      return setAutomationLane(payload.instanceId, payload.parameterId, payload.points, session);
+
+    case "clearAutomationLane":
+      return clearAutomationLane(payload.instanceId, payload.parameterId, session);
+
     case "getState":
       return getState(payload.instanceId, session);
 
@@ -361,6 +375,8 @@ function helloResponse(paired) {
         maxBlockSize: MAX_BLOCK_SIZE,
         maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST,
         maxAutomationCurvePoints: MAX_AUTOMATION_CURVE_POINTS,
+        maxAutomationLanesPerInstance: MAX_AUTOMATION_LANES_PER_INSTANCE,
+        maxAutomationLanePoints: MAX_AUTOMATION_LANE_POINTS,
         maxTransportTempoBpm: MAX_TRANSPORT_TEMPO_BPM,
         maxTransportPositionMusic: MAX_TRANSPORT_POSITION_MUSIC,
         maxTransportSamplePosition: MAX_TRANSPORT_SAMPLE_POSITION
@@ -501,6 +517,7 @@ async function createInstance(payload, session) {
     pluginLatencySamples: 0,
     pluginTailSamples: 0,
     pluginInfiniteTail: false,
+    automationLanes: new Map(),
     voices: new Map(),
     renderEngine: undefined,
     worker: undefined
@@ -655,6 +672,67 @@ async function setParameterCurve(instanceId, parameterId, points, interpolation,
     eventCount: events.length,
     parameter: { ...instance.parameters[parameterIndex] }
   };
+}
+
+function setAutomationLane(instanceId, parameterId, points, session) {
+  const instance = getInstance(instanceId, session);
+  const safeParameterId = requireParameterId(parameterId, "parameterId");
+  const parameterIndex = instance.parameters.findIndex((parameter) => parameter.id === safeParameterId);
+  if (parameterIndex < 0) {
+    throw protocolError("parameter_not_found", `Unknown parameter: ${safeParameterId}`);
+  }
+  assertParameterAutomatable(instance.parameters[parameterIndex]);
+
+  const normalizedPoints = normalizeAutomationLanePoints(points);
+  if (!instance.automationLanes.has(safeParameterId) && instance.automationLanes.size >= MAX_AUTOMATION_LANES_PER_INSTANCE) {
+    throw protocolError("quota_exceeded", "This plugin instance has reached its automation lane limit.", {
+      maxAutomationLanesPerInstance: MAX_AUTOMATION_LANES_PER_INSTANCE
+    });
+  }
+  instance.automationLanes.set(safeParameterId, normalizedPoints);
+
+  return {
+    accepted: true,
+    parameterId: safeParameterId,
+    pointCount: normalizedPoints.length,
+    laneCount: instance.automationLanes.size,
+    parameter: { ...instance.parameters[parameterIndex] }
+  };
+}
+
+function clearAutomationLane(instanceId, parameterId, session) {
+  const instance = getInstance(instanceId, session);
+  const safeParameterId = parameterId == null ? undefined : requireParameterId(parameterId, "parameterId");
+  if (safeParameterId) {
+    if (!instance.parameters.some((parameter) => parameter.id === safeParameterId)) {
+      throw protocolError("parameter_not_found", `Unknown parameter: ${safeParameterId}`);
+    }
+    instance.automationLanes.delete(safeParameterId);
+  } else {
+    instance.automationLanes.clear();
+  }
+
+  return {
+    cleared: true,
+    parameterId: safeParameterId,
+    laneCount: instance.automationLanes.size
+  };
+}
+
+async function applyAutomationLanesForBlock(instance, transport, frames) {
+  const laneEvents = collectAutomationLaneEvents(instance, transport, frames);
+  const preparedEvents = laneEvents.map((event) => {
+    const parameterIndex = instance.parameters.findIndex((parameter) => parameter.id === event.parameterId);
+    if (parameterIndex < 0) {
+      throw protocolError("parameter_not_found", `Unknown parameter: ${event.parameterId}`);
+    }
+    assertParameterAutomatable(instance.parameters[parameterIndex]);
+    return { ...event, parameterIndex };
+  });
+  for (const event of preparedEvents) {
+    await applyParameterValue(instance, event.parameterIndex, event.normalizedValue, event.time);
+  }
+  return laneEvents.length;
 }
 
 async function applyParameterValue(instance, parameterIndex, normalizedValue, sampleOffset = 0) {
@@ -885,6 +963,7 @@ async function processAudioBlock(payload, session) {
   });
   const channels = inputBuses.find((bus) => bus.index === 0)?.channels ?? mainInputChannels;
   const transport = normalizeTransportState(payload.transport);
+  await applyAutomationLanesForBlock(instance, transport, frames);
 
   if (instance.kind === "instrument") {
     const processed = await processInstrumentBlock(instance, frames, blockSampleRate);
@@ -3169,6 +3248,78 @@ function normalizeParameterCurve(parameterId, points, interpolation, maxBlockSiz
       time
     };
   });
+}
+
+function normalizeAutomationLanePoints(points) {
+  if (!Array.isArray(points)) {
+    throw protocolError("invalid_argument", "points must be an array.");
+  }
+  if (points.length < 1 || points.length > MAX_AUTOMATION_LANE_POINTS) {
+    throw protocolError("invalid_argument", `points must contain 1..${MAX_AUTOMATION_LANE_POINTS} automation lane points.`, {
+      maxAutomationLanePoints: MAX_AUTOMATION_LANE_POINTS
+    });
+  }
+
+  const normalizedPoints = points.map((point, index) => {
+    if (!point || typeof point !== "object") {
+      throw protocolError("invalid_argument", `points[${index}] must be an object.`);
+    }
+    return {
+      samplePosition: requireIntegerInRange(
+        point.samplePosition,
+        0,
+        MAX_TRANSPORT_SAMPLE_POSITION,
+        `points[${index}].samplePosition`
+      ),
+      normalizedValue: requireNumberInRange(point.normalizedValue, 0, 1, `points[${index}].normalizedValue`)
+    };
+  });
+
+  for (let index = 1; index < normalizedPoints.length; ++index) {
+    if (normalizedPoints[index].samplePosition <= normalizedPoints[index - 1].samplePosition) {
+      throw protocolError("invalid_argument", "automation lane sample positions must be strictly increasing.");
+    }
+  }
+
+  return normalizedPoints;
+}
+
+function collectAutomationLaneEvents(instance, transport, frames) {
+  if (!instance.automationLanes || instance.automationLanes.size === 0 || !Object.hasOwn(transport ?? {}, "samplePosition")) {
+    return [];
+  }
+
+  const blockStart = transport.samplePosition;
+  const maxOffset = Math.max(0, frames - 1);
+  const blockEndInclusive =
+    blockStart > MAX_TRANSPORT_SAMPLE_POSITION - maxOffset ? MAX_TRANSPORT_SAMPLE_POSITION : blockStart + maxOffset;
+  const events = [];
+  let laneOrder = 0;
+
+  for (const [parameterId, points] of instance.automationLanes) {
+    for (const point of points) {
+      if (point.samplePosition < blockStart) {
+        continue;
+      }
+      if (point.samplePosition > blockEndInclusive) {
+        break;
+      }
+      events.push({
+        parameterId,
+        normalizedValue: point.normalizedValue,
+        time: point.samplePosition - blockStart,
+        laneOrder
+      });
+      if (events.length > MAX_PARAMETER_EVENTS_PER_REQUEST) {
+        throw protocolError("invalid_argument", "automation lanes produced too many events for one render block.", {
+          maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST
+        });
+      }
+    }
+    laneOrder += 1;
+  }
+
+  return events.sort((left, right) => left.time - right.time || left.laneOrder - right.laneOrder);
 }
 
 function requireParameterId(value, label) {

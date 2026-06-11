@@ -85,6 +85,11 @@ async function run() {
   const pairedHello = await request(main, "hello", {}, true, session);
   check(pairedHello.capabilities?.automation === true, "paired hello advertises bounded parameter automation");
   check(
+    pairedHello.capabilities?.security?.maxAutomationLanesPerInstance >= 1 &&
+      pairedHello.capabilities?.security?.maxAutomationLanePoints >= 1,
+    "paired hello advertises bounded automation lane limits"
+  );
+  check(
     pairedHello.capabilities?.transport === true &&
       pairedHello.capabilities?.security?.maxTransportTempoBpm >= 960 &&
       pairedHello.capabilities?.security?.maxTransportSamplePosition > 0,
@@ -563,6 +568,112 @@ async function run() {
     "setParameterCurve expands bounded linear automation and reports final state"
   );
 
+  const lane = await request(
+    main,
+    "setAutomationLane",
+    {
+      instanceId: created.instanceId,
+      parameterId: "gain",
+      points: [
+        { samplePosition: 1024, normalizedValue: 0.2 },
+        { samplePosition: 1032, normalizedValue: 0.65 }
+      ]
+    },
+    true,
+    session
+  );
+  check(
+    lane.accepted === true &&
+      lane.pointCount === 2 &&
+      lane.laneCount === 1 &&
+      lane.parameterId === "gain",
+    "setAutomationLane accepts bounded absolute-sample automation lanes"
+  );
+
+  await request(
+    main,
+    "processAudioBlock",
+    {
+      instanceId: created.instanceId,
+      frames: 16,
+      channels: [
+        new Array(16).fill(0.1),
+        new Array(16).fill(0.1)
+      ],
+      transport: {
+        samplePosition: 1024,
+        tempo: 120
+      }
+    },
+    true,
+    session
+  );
+  const laneParameters = await request(main, "getParameters", { instanceId: created.instanceId }, true, session);
+  check(
+    Math.abs(laneParameters.parameters?.find((parameter) => parameter.id === "gain")?.normalizedValue - 0.65) < 0.000001,
+    "processAudioBlock applies stored automation lane points inside the bounded transport block"
+  );
+
+  const laneCleared = await request(
+    main,
+    "clearAutomationLane",
+    { instanceId: created.instanceId, parameterId: "gain" },
+    true,
+    session
+  );
+  check(laneCleared.cleared === true && laneCleared.laneCount === 0, "clearAutomationLane removes a stored parameter lane");
+
+  const laneReadOnly = await request(
+    main,
+    "setAutomationLane",
+    {
+      instanceId: created.instanceId,
+      parameterId: "output-level",
+      points: [{ samplePosition: 0, normalizedValue: 0.5 }]
+    },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(laneReadOnly.code === "parameter_read_only", "setAutomationLane rejects read-only parameters before worker dispatch");
+
+  const tooManyLanePoints = Array.from(
+    { length: 4097 },
+    (_, index) => ({ samplePosition: index, normalizedValue: 0.5 })
+  );
+  const laneTooLarge = await request(
+    main,
+    "setAutomationLane",
+    { instanceId: created.instanceId, parameterId: "gain", points: tooManyLanePoints },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(laneTooLarge.code === "invalid_argument", "setAutomationLane rejects oversized timeline point lists");
+
+  const laneDuplicatePosition = await request(
+    main,
+    "setAutomationLane",
+    {
+      instanceId: created.instanceId,
+      parameterId: "gain",
+      points: [
+        { samplePosition: 10, normalizedValue: 0.2 },
+        { samplePosition: 10, normalizedValue: 0.3 }
+      ]
+    },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(laneDuplicatePosition.code === "invalid_argument", "setAutomationLane rejects duplicate or unsorted sample positions");
+
   const automationReadOnly = await request(
     main,
     "setParameterEvents",
@@ -755,6 +866,32 @@ async function run() {
     (error) => ({ code: error.code })
   );
   check(curveDenied.code === "instance_access_denied", "another session cannot curve-automate this instance's parameters");
+  const laneDenied = await request(
+    other,
+    "setAutomationLane",
+    {
+      instanceId: created.instanceId,
+      parameterId: "gain",
+      points: [{ samplePosition: 0, normalizedValue: 0.2 }]
+    },
+    true,
+    otherPair.sessionToken
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(laneDenied.code === "instance_access_denied", "another session cannot set this instance's automation lanes");
+  const laneClearDenied = await request(
+    other,
+    "clearAutomationLane",
+    { instanceId: created.instanceId, parameterId: "gain" },
+    true,
+    otherPair.sessionToken
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(laneClearDenied.code === "instance_access_denied", "another session cannot clear this instance's automation lanes");
   const editorOpenDenied = await request(
     other,
     "openEditor",

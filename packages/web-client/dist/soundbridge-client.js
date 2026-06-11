@@ -88,6 +88,14 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("setParameterCurve", { instanceId, parameterId, points, interpolation });
   }
 
+  setAutomationLane(instanceId, parameterId, points) {
+    return this.request("setAutomationLane", { instanceId, parameterId, points });
+  }
+
+  clearAutomationLane(instanceId, parameterId) {
+    return this.request("clearAutomationLane", { instanceId, parameterId });
+  }
+
   getState(instanceId) {
     return this.request("getState", { instanceId });
   }

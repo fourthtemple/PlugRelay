@@ -10,6 +10,8 @@ export type ProtocolCommand =
   | "setPreset"
   | "setParameterEvents"
   | "setParameterCurve"
+  | "setAutomationLane"
+  | "clearAutomationLane"
   | "getState"
   | "setState"
   | "processAudioBlock"
@@ -66,6 +68,8 @@ export interface HelloResponse {
       maxEditorSessionTtlMs?: number;
       maxParameterEventsPerRequest?: number;
       maxAutomationCurvePoints?: number;
+      maxAutomationLanesPerInstance?: number;
+      maxAutomationLanePoints?: number;
       maxTransportTempoBpm?: number;
       maxTransportPositionMusic?: number;
       maxTransportSamplePosition?: number;
@@ -348,6 +352,36 @@ export interface SetParameterCurveResponse {
   accepted: boolean;
   eventCount: number;
   parameter: PluginParameter;
+}
+
+export interface AutomationLanePoint {
+  samplePosition: number;
+  normalizedValue: number;
+}
+
+export interface SetAutomationLaneRequest {
+  instanceId: string;
+  parameterId: string;
+  points: AutomationLanePoint[];
+}
+
+export interface SetAutomationLaneResponse {
+  accepted: boolean;
+  parameterId: string;
+  pointCount: number;
+  laneCount: number;
+  parameter: PluginParameter;
+}
+
+export interface ClearAutomationLaneRequest {
+  instanceId: string;
+  parameterId?: string;
+}
+
+export interface ClearAutomationLaneResponse {
+  cleared: boolean;
+  parameterId?: string;
+  laneCount: number;
 }
 
 export type MidiEvent =
