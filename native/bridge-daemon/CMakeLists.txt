@@ -9,8 +9,11 @@ add_executable(soundbridge-daemon
   src/AudioUnitScanner.cpp
   src/Base64.cpp
   src/ExampleInstrumentRenderer.cpp
+  src/Lv2AtomSupport.cpp
+  src/Lv2BusSupport.cpp
   src/Lv2HostWorker.cpp
   src/Lv2HostWorkerSupport.cpp
+  src/Lv2StateSupport.cpp
   src/Lv2Scanner.cpp
   src/NativePlugin.cpp
   src/PluginCatalog.cpp

@@ -2,7 +2,10 @@
 
 #include "SoundBridge/Base64.h"
 #include "SoundBridge/Lv2Abi.h"
+#include "SoundBridge/Lv2AtomSupport.h"
+#include "SoundBridge/Lv2BusSupport.h"
 #include "SoundBridge/Lv2HostWorkerSupport.h"
+#include "SoundBridge/Lv2StateSupport.h"
 #include "SoundBridge/NativePlugin.h"
 
 #ifndef _WIN32
@@ -11,19 +14,13 @@
 
 #include <algorithm>
 #include <cerrno>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <iterator>
 #include <memory>
 #include <optional>
-#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -39,113 +36,6 @@ namespace {
 using namespace lv2_abi;
 using namespace lv2_worker;
 
-struct Lv2StateProperty {
-  std::string keyUri;
-  std::string typeUri;
-  std::uint32_t flags = 0;
-  std::vector<std::uint8_t> value;
-};
-
-struct Lv2StateFile {
-  std::string abstractPath;
-  std::vector<std::uint8_t> value;
-};
-
-struct Lv2SavedExtensionState {
-  std::vector<Lv2StateProperty> properties;
-  std::vector<Lv2StateFile> files;
-};
-
-struct Lv2RestoredStateProperty {
-  LV2_URID key = 0;
-  LV2_URID type = 0;
-  std::uint32_t flags = 0;
-  std::vector<std::uint8_t> value;
-};
-
-class Lv2UridMapper {
-public:
-  Lv2UridMapper() {
-    mappings_.reserve(kMaxWorkerUridMappings);
-    addKnown(kUridAtomSequence, kLv2AtomSequenceUri);
-    addKnown(kUridAtomFrameTime, kLv2AtomFrameTimeUri);
-    addKnown(kUridMidiEvent, kLv2MidiEventUri);
-    addKnown(kUridAtomFloat, kLv2AtomFloatUri);
-    addKnown(kUridAtomPath, kLv2AtomPathUri);
-    addKnown(kUridAtomInt, kLv2AtomIntUri);
-    addKnown(kUridAtomLong, kLv2AtomLongUri);
-    addKnown(kUridAtomDouble, kLv2AtomDoubleUri);
-    addKnown(kUridAtomObject, kLv2AtomObjectUri);
-    addKnown(kUridTimePosition, kLv2TimePositionUri);
-    addKnown(kUridTimeFrame, kLv2TimeFrameUri);
-    addKnown(kUridTimeSpeed, kLv2TimeSpeedUri);
-    addKnown(kUridTimeBeat, kLv2TimeBeatUri);
-    addKnown(kUridTimeBarBeat, kLv2TimeBarBeatUri);
-    addKnown(kUridTimeBeatUnit, kLv2TimeBeatUnitUri);
-    addKnown(kUridTimeBeatsPerBar, kLv2TimeBeatsPerBarUri);
-    addKnown(kUridTimeBeatsPerMinute, kLv2TimeBeatsPerMinuteUri);
-    nextUrid_ = kUridTimeBeatsPerMinute + 1;
-  }
-
-  LV2_URID map(const char* uri) {
-    if (uri == nullptr || *uri == '\0') {
-      return 0;
-    }
-    const std::string text(uri);
-    if (text.size() > kMaxWorkerUriBytes) {
-      return 0;
-    }
-    for (const auto& mapping : mappings_) {
-      if (mapping.uri == text) {
-        return mapping.urid;
-      }
-    }
-    if (mappings_.size() >= kMaxWorkerUridMappings) {
-      return 0;
-    }
-    const auto urid = nextUrid_++;
-    mappings_.push_back(Lv2MappedUri{urid, text});
-    return urid;
-  }
-
-  const char* unmap(LV2_URID urid) const {
-    for (const auto& mapping : mappings_) {
-      if (mapping.urid == urid) {
-        return mapping.uri.c_str();
-      }
-    }
-    return nullptr;
-  }
-
-private:
-  struct Lv2MappedUri {
-    LV2_URID urid = 0;
-    std::string uri;
-  };
-
-  void addKnown(LV2_URID urid, const char* uri) {
-    mappings_.push_back(Lv2MappedUri{urid, uri});
-  }
-
-  std::vector<Lv2MappedUri> mappings_;
-  LV2_URID nextUrid_ = kUridTimeBeatsPerMinute + 1;
-};
-
-class Lv2StateFileBroker;
-
-struct Lv2StateSaveContext {
-  Lv2UridMapper* mapper = nullptr;
-  std::vector<Lv2StateProperty>* properties = nullptr;
-  std::vector<Lv2StateFile>* files = nullptr;
-  Lv2StateFileBroker* fileBroker = nullptr;
-  std::size_t totalValueBytes = 0;
-  std::size_t totalFileBytes = 0;
-};
-
-struct Lv2StateRestoreContext {
-  const std::vector<Lv2RestoredStateProperty>* properties = nullptr;
-};
-
 struct DlCloser {
   void operator()(void* handle) const {
     if (handle != nullptr) {
@@ -153,333 +43,6 @@ struct DlCloser {
     }
   }
 };
-
-LV2_URID mapLv2Urid(LV2_URID_Map_Handle handle, const char* uri) {
-  if (handle == nullptr) {
-    return 0;
-  }
-  return static_cast<Lv2UridMapper*>(handle)->map(uri);
-}
-
-const char* unmapLv2Urid(LV2_URID_Unmap_Handle handle, LV2_URID urid) {
-  if (handle == nullptr) {
-    return nullptr;
-  }
-  return static_cast<const Lv2UridMapper*>(handle)->unmap(urid);
-}
-
-class Lv2StateFileBroker {
-public:
-  Lv2StateFileBroker() {
-    const auto seed = std::chrono::steady_clock::now().time_since_epoch().count();
-    const auto base = std::filesystem::temp_directory_path() /
-        ("soundbridge-lv2-state-" + std::to_string(seed));
-    for (std::uint32_t index = 0; index < 32; ++index) {
-      auto candidate = base;
-      if (index > 0) {
-        candidate += "-" + std::to_string(index);
-      }
-      std::error_code error;
-      if (std::filesystem::create_directory(candidate, error)) {
-        root_ = std::move(candidate);
-        return;
-      }
-    }
-    throw std::runtime_error("lv2_state_broker_unavailable");
-  }
-
-  Lv2StateFileBroker(const Lv2StateFileBroker&) = delete;
-  Lv2StateFileBroker& operator=(const Lv2StateFileBroker&) = delete;
-
-  ~Lv2StateFileBroker() {
-    std::error_code error;
-    std::filesystem::remove_all(root_, error);
-  }
-
-  char* makePath(const char* pathText) {
-    const auto relativePath = safeRelativePath(pathText);
-    if (!relativePath) {
-      return nullptr;
-    }
-    const auto absolutePath = (root_ / *relativePath).lexically_normal();
-    std::error_code error;
-    std::filesystem::create_directories(absolutePath.parent_path(), error);
-    if (error) {
-      return nullptr;
-    }
-    return duplicateCString(absolutePath.string());
-  }
-
-  char* abstractPath(const char* absolutePathText) {
-    if (absolutePathText == nullptr || *absolutePathText == '\0') {
-      return nullptr;
-    }
-    std::error_code error;
-    const auto root = std::filesystem::weakly_canonical(root_, error);
-    if (error) {
-      return nullptr;
-    }
-    const auto absolutePath = std::filesystem::weakly_canonical(std::filesystem::path(absolutePathText), error);
-    if (error || !pathIsInsideRoot(absolutePath, root)) {
-      return nullptr;
-    }
-    const auto relativePath = std::filesystem::relative(absolutePath, root, error);
-    if (error || !safeRelativePath(relativePath.generic_string().c_str())) {
-      return nullptr;
-    }
-    return duplicateCString(relativePath.generic_string());
-  }
-
-  char* absolutePath(const char* abstractPathText) {
-    const auto relativePath = safeRelativePath(abstractPathText);
-    if (!relativePath) {
-      return nullptr;
-    }
-    return duplicateCString((root_ / *relativePath).lexically_normal().string());
-  }
-
-  bool recordFile(const std::string& abstractPath, std::vector<Lv2StateFile>& files, std::size_t& totalFileBytes) const {
-    if (files.size() >= kMaxWorkerStateFiles) {
-      return false;
-    }
-    for (const auto& file : files) {
-      if (file.abstractPath == abstractPath) {
-        return true;
-      }
-    }
-    const auto relativePath = safeRelativePath(abstractPath.c_str());
-    if (!relativePath) {
-      return false;
-    }
-    const auto absolutePath = (root_ / *relativePath).lexically_normal();
-    std::error_code error;
-    if (std::filesystem::is_symlink(std::filesystem::symlink_status(absolutePath, error)) || error ||
-        !std::filesystem::is_regular_file(absolutePath, error) || error) {
-      return false;
-    }
-    const auto size = std::filesystem::file_size(absolutePath, error);
-    if (error || size == 0 || size > kMaxWorkerStateFileBytes ||
-        totalFileBytes + size > kMaxWorkerStateFileTotalBytes) {
-      return false;
-    }
-    std::ifstream input(absolutePath, std::ios::binary);
-    if (!input) {
-      return false;
-    }
-    std::vector<std::uint8_t> bytes(size);
-    input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-    if (!input) {
-      return false;
-    }
-    totalFileBytes += bytes.size();
-    files.push_back(Lv2StateFile{abstractPath, std::move(bytes)});
-    return true;
-  }
-
-  bool materializeFiles(const std::vector<Lv2StateFile>& files) {
-    std::size_t totalFileBytes = 0;
-    std::set<std::string> seenPaths;
-    for (const auto& file : files) {
-      if (file.value.empty() || file.value.size() > kMaxWorkerStateFileBytes ||
-          totalFileBytes + file.value.size() > kMaxWorkerStateFileTotalBytes) {
-        return false;
-      }
-      if (!seenPaths.insert(file.abstractPath).second) {
-        return false;
-      }
-      const auto relativePath = safeRelativePath(file.abstractPath.c_str());
-      if (!relativePath) {
-        return false;
-      }
-      const auto absolutePath = (root_ / *relativePath).lexically_normal();
-      std::error_code error;
-      std::filesystem::create_directories(absolutePath.parent_path(), error);
-      if (error || std::filesystem::is_symlink(std::filesystem::symlink_status(absolutePath, error))) {
-        return false;
-      }
-      std::ofstream output(absolutePath, std::ios::binary | std::ios::trunc);
-      if (!output) {
-        return false;
-      }
-      output.write(reinterpret_cast<const char*>(file.value.data()), static_cast<std::streamsize>(file.value.size()));
-      if (!output) {
-        return false;
-      }
-      totalFileBytes += file.value.size();
-    }
-    return true;
-  }
-
-  static void freePath(char* path) {
-    delete[] path;
-  }
-
-private:
-  static char* duplicateCString(const std::string& value) {
-    auto* output = new char[value.size() + 1];
-    std::memcpy(output, value.c_str(), value.size() + 1);
-    return output;
-  }
-
-  static std::optional<std::filesystem::path> safeRelativePath(const char* pathText) {
-    if (pathText == nullptr || *pathText == '\0') {
-      return std::nullopt;
-    }
-    const std::string text(pathText);
-    if (text.size() > kMaxWorkerStatePathBytes || text.find('\\') != std::string::npos) {
-      return std::nullopt;
-    }
-    if (std::any_of(text.begin(), text.end(), [](unsigned char character) {
-      return character == '\0' || character < 0x20 || character == 0x7F;
-    })) {
-      return std::nullopt;
-    }
-    const std::filesystem::path relativePath(text);
-    if (relativePath.empty() || relativePath.is_absolute()) {
-      return std::nullopt;
-    }
-    for (const auto& part : relativePath) {
-      const auto partText = part.generic_string();
-      if (partText.empty() || partText == "." || partText == "..") {
-        return std::nullopt;
-      }
-    }
-    return relativePath.lexically_normal();
-  }
-
-  static bool pathIsInsideRoot(const std::filesystem::path& child, const std::filesystem::path& root) {
-    auto childIterator = child.begin();
-    auto rootIterator = root.begin();
-    for (; rootIterator != root.end(); ++rootIterator, ++childIterator) {
-      if (childIterator == child.end() || *childIterator != *rootIterator) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  std::filesystem::path root_;
-};
-
-struct Lv2AudioBusGroup {
-  std::uint32_t index = 0;
-  std::string name;
-  std::vector<std::size_t> portIndexes;
-};
-
-char* makeLv2StatePath(LV2_State_Make_Path_Handle handle, const char* path) {
-  if (handle == nullptr) {
-    return nullptr;
-  }
-  return static_cast<Lv2StateFileBroker*>(handle)->makePath(path);
-}
-
-char* abstractLv2StatePath(LV2_State_Map_Path_Handle handle, const char* absolutePath) {
-  if (handle == nullptr) {
-    return nullptr;
-  }
-  return static_cast<Lv2StateFileBroker*>(handle)->abstractPath(absolutePath);
-}
-
-char* absoluteLv2StatePath(LV2_State_Map_Path_Handle handle, const char* abstractPath) {
-  if (handle == nullptr) {
-    return nullptr;
-  }
-  return static_cast<Lv2StateFileBroker*>(handle)->absolutePath(abstractPath);
-}
-
-void freeLv2StatePath(LV2_State_Free_Path_Handle /* handle */, char* path) {
-  Lv2StateFileBroker::freePath(path);
-}
-
-std::string statePathValueToString(const void* value, std::size_t size) {
-  if (value == nullptr || size == 0 || size > kMaxWorkerStatePathBytes + 1) {
-    return "";
-  }
-  const auto* bytes = static_cast<const char*>(value);
-  std::size_t length = 0;
-  while (length < size && bytes[length] != '\0') {
-    ++length;
-  }
-  if (length == size) {
-    return "";
-  }
-  return std::string(bytes, bytes + length);
-}
-
-LV2_State_Status storeLv2StateProperty(
-    LV2_State_Handle handle,
-    std::uint32_t key,
-    const void* value,
-    std::size_t size,
-    std::uint32_t type,
-    std::uint32_t flags) {
-  auto* context = static_cast<Lv2StateSaveContext*>(handle);
-  if (context == nullptr || context->mapper == nullptr || context->properties == nullptr || value == nullptr || size == 0) {
-    return kLv2StateErrUnknown;
-  }
-  if (size > kMaxWorkerStatePropertyBytes ||
-      context->totalValueBytes + size > kMaxWorkerStateBytes / 2 ||
-      context->properties->size() >= kMaxWorkerStateProperties) {
-    return kLv2StateErrNoSpace;
-  }
-
-  const char* keyUri = context->mapper->unmap(key);
-  const char* typeUri = context->mapper->unmap(type);
-  if (keyUri == nullptr || typeUri == nullptr || !isValidStateUri(keyUri) || !isValidStateUri(typeUri)) {
-    return kLv2StateErrBadType;
-  }
-  if (type == kUridAtomPath) {
-    if ((flags & kLv2StateIsPod) == 0 || (flags & kLv2StateIsNative) != 0 ||
-        context->fileBroker == nullptr || context->files == nullptr) {
-      return kLv2StateErrBadFlags;
-    }
-    const auto abstractPath = statePathValueToString(value, size);
-    if (abstractPath.empty() ||
-        !context->fileBroker->recordFile(abstractPath, *context->files, context->totalFileBytes)) {
-      return kLv2StateErrNoSpace;
-    }
-  } else if (!isPortablePodState(flags)) {
-    return kLv2StateErrBadFlags;
-  }
-
-  auto* bytes = static_cast<const std::uint8_t*>(value);
-  context->properties->push_back(Lv2StateProperty{
-      keyUri,
-      typeUri,
-      flags,
-      std::vector<std::uint8_t>(bytes, bytes + size)});
-  context->totalValueBytes += size;
-  return kLv2StateSuccess;
-}
-
-const void* retrieveLv2StateProperty(
-    LV2_State_Handle handle,
-    std::uint32_t key,
-    std::size_t* size,
-    std::uint32_t* type,
-    std::uint32_t* flags) {
-  auto* context = static_cast<Lv2StateRestoreContext*>(handle);
-  if (context == nullptr || context->properties == nullptr) {
-    return nullptr;
-  }
-  for (const auto& property : *context->properties) {
-    if (property.key != key) {
-      continue;
-    }
-    if (size != nullptr) {
-      *size = property.value.size();
-    }
-    if (type != nullptr) {
-      *type = property.type;
-    }
-    if (flags != nullptr) {
-      *flags = property.flags;
-    }
-    return property.value.data();
-  }
-  return nullptr;
-}
 
 class HostedLv2Plugin {
 public:
@@ -761,96 +324,6 @@ private:
     return static_cast<std::size_t>(std::distance(outputPortIndexes_.begin(), position));
   }
 
-  static std::string groupNameFromUri(const std::string& uri, const std::string& fallback) {
-    if (uri.empty()) {
-      return fallback;
-    }
-    const auto separator = uri.find_last_of("#/");
-    auto name = separator == std::string::npos ? uri : uri.substr(separator + 1);
-    if (name.empty()) {
-      name = fallback;
-    }
-    for (auto& character : name) {
-      if (character == '_' || character == '-') {
-        character = ' ';
-      }
-    }
-    return cappedString(name);
-  }
-
-  std::vector<Lv2AudioBusGroup> groupedAudioBuses(
-      const std::vector<std::size_t>& portIndexes,
-      const std::string& mainGroupUri,
-      const char* mainName,
-      const char* fallbackPortName) const {
-    std::vector<Lv2AudioBusGroup> groups;
-    if (portIndexes.empty()) {
-      return groups;
-    }
-
-    const bool hasDeclaredGroups = std::any_of(portIndexes.begin(), portIndexes.end(), [&](std::size_t portIndex) {
-      return !ports_[portIndex].groupUri.empty();
-    });
-    if (!hasDeclaredGroups) {
-      groups.push_back(Lv2AudioBusGroup{0, mainName, portIndexes});
-      for (std::size_t offset = 0; offset < portIndexes.size() && groups.size() < kMaxWorkerAudioPorts; ++offset) {
-        const auto portIndex = portIndexes[offset];
-        const auto fallback = std::string(fallbackPortName) + " " + std::to_string(offset + 1);
-        groups.push_back(Lv2AudioBusGroup{
-            static_cast<std::uint32_t>(groups.size()),
-            ports_[portIndex].name.empty() ? fallback : ports_[portIndex].name,
-            {portIndex}});
-      }
-      return groups;
-    }
-
-    std::vector<std::string> orderedGroupUris;
-    for (const auto portIndex : portIndexes) {
-      const auto& uri = ports_[portIndex].groupUri;
-      if (!uri.empty() && std::find(orderedGroupUris.begin(), orderedGroupUris.end(), uri) == orderedGroupUris.end()) {
-        orderedGroupUris.push_back(uri);
-      }
-    }
-
-    std::string effectiveMainUri = mainGroupUri;
-    if (effectiveMainUri.empty() ||
-        std::find(orderedGroupUris.begin(), orderedGroupUris.end(), effectiveMainUri) == orderedGroupUris.end()) {
-      effectiveMainUri = orderedGroupUris.empty() ? std::string {} : orderedGroupUris.front();
-    }
-
-    auto appendGroup = [&](const std::string& uri, const std::string& name) {
-      if (groups.size() >= kMaxWorkerAudioPorts) {
-        return;
-      }
-      std::vector<std::size_t> members;
-      for (const auto portIndex : portIndexes) {
-        if (ports_[portIndex].groupUri == uri) {
-          members.push_back(portIndex);
-        }
-      }
-      if (!members.empty()) {
-        groups.push_back(Lv2AudioBusGroup{static_cast<std::uint32_t>(groups.size()), name, std::move(members)});
-      }
-    };
-
-    appendGroup(effectiveMainUri, mainName);
-    for (const auto& uri : orderedGroupUris) {
-      if (uri != effectiveMainUri) {
-        appendGroup(uri, groupNameFromUri(uri, std::string(fallbackPortName) + " Group"));
-      }
-    }
-    for (const auto portIndex : portIndexes) {
-      if (!ports_[portIndex].groupUri.empty() || groups.size() >= kMaxWorkerAudioPorts) {
-        continue;
-      }
-      groups.push_back(Lv2AudioBusGroup{
-          static_cast<std::uint32_t>(groups.size()),
-          ports_[portIndex].name.empty() ? std::string(fallbackPortName) : ports_[portIndex].name,
-          {portIndex}});
-    }
-    return groups;
-  }
-
   std::string stateBase64() {
     std::ostringstream state;
     state << kLv2StateMagic << "\n";
@@ -1027,46 +500,7 @@ private:
   }
 
   Lv2SavedExtensionState extensionStateProperties() {
-    Lv2SavedExtensionState savedState;
-    if (stateInterface_ == nullptr || stateInterface_->save == nullptr || handle_ == nullptr) {
-      return savedState;
-    }
-
-    Lv2StateFileBroker fileBroker;
-    LV2_URID_Map uridMap {&uridMapper_, &mapLv2Urid};
-    LV2_URID_Unmap uridUnmap {&uridMapper_, &unmapLv2Urid};
-    LV2_State_Map_Path mapPath {&fileBroker, &abstractLv2StatePath, &absoluteLv2StatePath};
-    LV2_State_Make_Path makePath {&fileBroker, &makeLv2StatePath};
-    LV2_State_Free_Path freePath {&fileBroker, &freeLv2StatePath};
-    LV2_Feature uridMapFeature {kLv2UridMapUri, &uridMap};
-    LV2_Feature uridUnmapFeature {kLv2UridUnmapUri, &uridUnmap};
-    LV2_Feature mapPathFeature {kLv2StateMapPathUri, &mapPath};
-    LV2_Feature makePathFeature {kLv2StateMakePathUri, &makePath};
-    LV2_Feature freePathFeature {kLv2StateFreePathUri, &freePath};
-    const LV2_Feature* const features[] = {
-        &uridMapFeature,
-        &uridUnmapFeature,
-        &mapPathFeature,
-        &makePathFeature,
-        &freePathFeature,
-        nullptr};
-    Lv2StateSaveContext context {
-        &uridMapper_,
-        &savedState.properties,
-        &savedState.files,
-        &fileBroker,
-        0,
-        0};
-    const auto status = stateInterface_->save(
-        handle_,
-        &storeLv2StateProperty,
-        &context,
-        kLv2StateIsPod | kLv2StateIsPortable,
-        features);
-    if (status != kLv2StateSuccess) {
-      throw std::runtime_error("lv2_state_save_failed");
-    }
-    return savedState;
+    return saveLv2ExtensionState(handle_, stateInterface_, uridMapper_);
   }
 
   void restoreExtensionState(
@@ -1079,35 +513,13 @@ private:
       throw std::runtime_error("lv2_state_extension_unavailable");
     }
 
-    Lv2StateFileBroker fileBroker;
-    if (!fileBroker.materializeFiles(files)) {
-      throw std::runtime_error("lv2_state_file_restore_failed");
-    }
-    LV2_URID_Map uridMap {&uridMapper_, &mapLv2Urid};
-    LV2_URID_Unmap uridUnmap {&uridMapper_, &unmapLv2Urid};
-    LV2_State_Map_Path mapPath {&fileBroker, &abstractLv2StatePath, &absoluteLv2StatePath};
-    LV2_State_Free_Path freePath {&fileBroker, &freeLv2StatePath};
-    LV2_Feature uridMapFeature {kLv2UridMapUri, &uridMap};
-    LV2_Feature uridUnmapFeature {kLv2UridUnmapUri, &uridUnmap};
-    LV2_Feature mapPathFeature {kLv2StateMapPathUri, &mapPath};
-    LV2_Feature freePathFeature {kLv2StateFreePathUri, &freePath};
-    const LV2_Feature* const features[] = {
-        &uridMapFeature,
-        &uridUnmapFeature,
-        &mapPathFeature,
-        &freePathFeature,
-        nullptr};
-    Lv2StateRestoreContext context {&properties};
     const bool reactivate = activated_ && descriptor_->deactivate != nullptr && descriptor_->activate != nullptr;
     if (reactivate) {
       descriptor_->deactivate(handle_);
       activated_ = false;
     }
     try {
-      const auto status = stateInterface_->restore(handle_, &retrieveLv2StateProperty, &context, 0, features);
-      if (status != kLv2StateSuccess) {
-        throw std::runtime_error("lv2_state_restore_failed");
-      }
+      restoreLv2ExtensionState(handle_, stateInterface_, uridMapper_, properties, files);
     } catch (...) {
       if (reactivate) {
         descriptor_->activate(handle_);
@@ -1142,12 +554,14 @@ private:
   }
 
   void buildAudioBusGroups() {
-    inputBusGroups_ = groupedAudioBuses(
+    inputBusGroups_ = groupedLv2AudioBuses(
+        ports_,
         inputPortIndexes_,
         metadata_.mainInputGroupUri,
         "Main Input",
         "Input Port");
-    outputBusGroups_ = groupedAudioBuses(
+    outputBusGroups_ = groupedLv2AudioBuses(
+        ports_,
         outputPortIndexes_,
         metadata_.mainOutputGroupUri,
         "Main Output",
@@ -1220,7 +634,7 @@ private:
     }
     inputBuffers_.assign(inputPortIndexes_.size(), std::vector<float>(1, 0.0F));
     outputBuffers_.assign(outputPortIndexes_.size(), std::vector<float>(1, 0.0F));
-    midiBuffers_.assign(inputMidiPortIndexes_.size(), emptyMidiSequenceBuffer());
+    midiBuffers_.assign(inputMidiPortIndexes_.size(), emptyLv2MidiSequenceBuffer(maxBlockSize_));
     connectPorts(0);
     if (descriptor_->activate != nullptr) {
       descriptor_->activate(handle_);
@@ -1417,12 +831,6 @@ private:
     }
   }
 
-  std::vector<std::uint64_t> emptyMidiSequenceBuffer() const {
-    Lv2Port emptyPort;
-    emptyPort.acceptsMidi = true;
-    return midiSequenceBuffer(emptyPort, {}, 0, maxBlockSize_, maxBlockSize_, HostTransportContext {});
-  }
-
   void prepareMidiBuffers(
       std::uint32_t frameOffset,
       std::uint32_t frames,
@@ -1431,7 +839,7 @@ private:
     midiBuffers_.resize(inputMidiPortIndexes_.size());
     for (std::size_t index = 0; index < inputMidiPortIndexes_.size(); ++index) {
       const auto& port = ports_[inputMidiPortIndexes_[index]];
-      midiBuffers_[index] = midiSequenceBuffer(port, pendingMidiMessages_, frameOffset, frames, totalFrames, transport);
+      midiBuffers_[index] = lv2MidiSequenceBuffer(port, pendingMidiMessages_, frameOffset, frames, totalFrames, transport);
     }
   }
 
@@ -1439,231 +847,8 @@ private:
     midiBuffers_.resize(inputMidiPortIndexes_.size());
     for (std::size_t index = 0; index < inputMidiPortIndexes_.size(); ++index) {
       const auto& port = ports_[inputMidiPortIndexes_[index]];
-      midiBuffers_[index] = midiSequenceBuffer(port, {}, 0, maxBlockSize_, maxBlockSize_, HostTransportContext {});
+      midiBuffers_[index] = lv2MidiSequenceBuffer(port, {}, 0, maxBlockSize_, maxBlockSize_, HostTransportContext {});
     }
-  }
-  enum class Lv2AtomScalarKind {
-    Int,
-    Long,
-    Float,
-    Double,
-  };
-
-  struct Lv2AtomScalarProperty {
-    LV2_URID key = 0;
-    Lv2AtomScalarKind kind = Lv2AtomScalarKind::Float;
-    double value = 0.0;
-  };
-
-  static LV2_URID atomTypeForScalar(Lv2AtomScalarKind kind) {
-    switch (kind) {
-      case Lv2AtomScalarKind::Int:
-        return kUridAtomInt;
-      case Lv2AtomScalarKind::Long:
-        return kUridAtomLong;
-      case Lv2AtomScalarKind::Float:
-        return kUridAtomFloat;
-      case Lv2AtomScalarKind::Double:
-        return kUridAtomDouble;
-    }
-    return kUridAtomFloat;
-  }
-
-  static std::size_t atomScalarBodySize(Lv2AtomScalarKind kind) {
-    switch (kind) {
-      case Lv2AtomScalarKind::Int:
-        return sizeof(std::int32_t);
-      case Lv2AtomScalarKind::Long:
-        return sizeof(std::int64_t);
-      case Lv2AtomScalarKind::Float:
-        return sizeof(float);
-      case Lv2AtomScalarKind::Double:
-        return sizeof(double);
-    }
-    return sizeof(float);
-  }
-
-  static std::size_t atomScalarPropertyBytes(Lv2AtomScalarKind kind) {
-    return alignAtomSize(sizeof(LV2_Atom_Property_Body) + atomScalarBodySize(kind));
-  }
-
-  static void writeAtomScalarBody(std::uint8_t* body, const Lv2AtomScalarProperty& property) {
-    switch (property.kind) {
-      case Lv2AtomScalarKind::Int: {
-        const auto value = static_cast<std::int32_t>(std::clamp(property.value, -2147483648.0, 2147483647.0));
-        std::memcpy(body, &value, sizeof(value));
-        return;
-      }
-      case Lv2AtomScalarKind::Long: {
-        const auto value = static_cast<std::int64_t>(std::clamp(
-            property.value,
-            static_cast<double>(-kMaxWorkerTransportSamplePosition),
-            static_cast<double>(kMaxWorkerTransportSamplePosition)));
-        std::memcpy(body, &value, sizeof(value));
-        return;
-      }
-      case Lv2AtomScalarKind::Float: {
-        const auto value = static_cast<float>(property.value);
-        std::memcpy(body, &value, sizeof(value));
-        return;
-      }
-      case Lv2AtomScalarKind::Double: {
-        const auto value = property.value;
-        std::memcpy(body, &value, sizeof(value));
-        return;
-      }
-    }
-  }
-
-  static std::vector<Lv2AtomScalarProperty> transportScalarProperties(const HostTransportContext& transport) {
-    std::vector<Lv2AtomScalarProperty> properties;
-    properties.reserve(8);
-    properties.push_back(Lv2AtomScalarProperty{
-        kUridTimeFrame,
-        Lv2AtomScalarKind::Long,
-        static_cast<double>(transport.samplePosition)});
-    properties.push_back(Lv2AtomScalarProperty{
-        kUridTimeSpeed,
-        Lv2AtomScalarKind::Float,
-        transport.playing ? 1.0 : 0.0});
-
-    const auto beatFactor = transport.hasTimeSignature
-        ? static_cast<double>(transport.timeSignatureDenominator) / 4.0
-        : 1.0;
-    if (transport.hasProjectTimeMusic) {
-      properties.push_back(Lv2AtomScalarProperty{
-          kUridTimeBeat,
-          Lv2AtomScalarKind::Double,
-          transport.projectTimeMusic * beatFactor});
-    }
-    if (transport.hasProjectTimeMusic && transport.hasBarPositionMusic) {
-      auto barBeat = (transport.projectTimeMusic - transport.barPositionMusic) * beatFactor;
-      if (transport.hasTimeSignature) {
-        barBeat = std::clamp(barBeat, 0.0, static_cast<double>(transport.timeSignatureNumerator));
-      }
-      properties.push_back(Lv2AtomScalarProperty{
-          kUridTimeBarBeat,
-          Lv2AtomScalarKind::Float,
-          std::max(0.0, barBeat)});
-    }
-    if (transport.hasTimeSignature) {
-      properties.push_back(Lv2AtomScalarProperty{
-          kUridTimeBeatUnit,
-          Lv2AtomScalarKind::Int,
-          static_cast<double>(transport.timeSignatureDenominator)});
-      properties.push_back(Lv2AtomScalarProperty{
-          kUridTimeBeatsPerBar,
-          Lv2AtomScalarKind::Float,
-          static_cast<double>(transport.timeSignatureNumerator)});
-    }
-    if (transport.hasTempo) {
-      properties.push_back(Lv2AtomScalarProperty{
-          kUridTimeBeatsPerMinute,
-          Lv2AtomScalarKind::Float,
-          transport.tempo});
-    }
-    return properties;
-  }
-
-  static std::size_t transportObjectBodyBytes(const std::vector<Lv2AtomScalarProperty>& properties) {
-    std::size_t bytes = sizeof(LV2_Atom_Object_Body);
-    for (const auto& property : properties) {
-      bytes += atomScalarPropertyBytes(property.kind);
-    }
-    return bytes;
-  }
-
-  static std::size_t writeTransportEvent(
-      std::uint8_t* bytes,
-      std::size_t offset,
-      const std::vector<Lv2AtomScalarProperty>& properties) {
-    const auto objectBodyBytes = transportObjectBodyBytes(properties);
-    auto* event = reinterpret_cast<LV2_Atom_Event*>(bytes + offset);
-    event->time.frames = 0;
-    event->body.type = kUridAtomObject;
-    event->body.size = static_cast<std::uint32_t>(objectBodyBytes);
-
-    auto* objectBody = reinterpret_cast<LV2_Atom_Object_Body*>(bytes + offset + sizeof(LV2_Atom_Event));
-    objectBody->id = 0;
-    objectBody->otype = kUridTimePosition;
-
-    std::size_t propertyOffset = offset + sizeof(LV2_Atom_Event) + sizeof(LV2_Atom_Object_Body);
-    for (const auto& property : properties) {
-      auto* propertyBody = reinterpret_cast<LV2_Atom_Property_Body*>(bytes + propertyOffset);
-      propertyBody->key = property.key;
-      propertyBody->context = 0;
-      propertyBody->value.type = atomTypeForScalar(property.kind);
-      propertyBody->value.size = static_cast<std::uint32_t>(atomScalarBodySize(property.kind));
-      writeAtomScalarBody(bytes + propertyOffset + sizeof(LV2_Atom_Property_Body), property);
-      propertyOffset += atomScalarPropertyBytes(property.kind);
-    }
-    return offset + alignAtomSize(sizeof(LV2_Atom_Event) + objectBodyBytes);
-  }
-
-  std::vector<std::uint64_t> midiSequenceBuffer(
-      const Lv2Port& port,
-      const std::vector<PendingMidiMessage>& messages,
-      std::uint32_t frameOffset,
-      std::uint32_t frames,
-      std::uint32_t totalFrames,
-      const HostTransportContext& transport) const {
-    const auto eventBytes = alignAtomSize(sizeof(LV2_Atom_Event) + 3);
-    const auto includeTransport = port.acceptsTimePosition && transport.explicitTransport && frameOffset == 0;
-    const auto transportProperties = includeTransport
-        ? transportScalarProperties(transport)
-        : std::vector<Lv2AtomScalarProperty> {};
-    const auto transportEventBytes = includeTransport
-        ? alignAtomSize(sizeof(LV2_Atom_Event) + transportObjectBodyBytes(transportProperties))
-        : std::size_t {0};
-    const auto segmentEnd = static_cast<std::uint64_t>(frameOffset) + frames;
-    const auto lastFrame = totalFrames > 0 ? totalFrames - 1 : 0;
-    std::size_t boundedCount = 0;
-    if (port.acceptsMidi) {
-      for (const auto& message : messages) {
-        const auto effectiveOffset = std::min<std::uint32_t>(message.sampleOffset, lastFrame);
-        if (effectiveOffset >= frameOffset && effectiveOffset < segmentEnd) {
-          ++boundedCount;
-        }
-      }
-    }
-    boundedCount = std::min<std::size_t>(boundedCount, kMaxWorkerMidiEvents);
-    const auto totalBytes = sizeof(LV2_Atom_Sequence) + transportEventBytes + eventBytes * boundedCount;
-    std::vector<std::uint64_t> storage((alignAtomSize(totalBytes) + sizeof(std::uint64_t) - 1) / sizeof(std::uint64_t), 0);
-    auto* sequence = reinterpret_cast<LV2_Atom_Sequence*>(storage.data());
-    sequence->atom.type = kUridAtomSequence;
-    sequence->atom.size = static_cast<std::uint32_t>(totalBytes - sizeof(LV2_Atom));
-    sequence->body.unit = kUridAtomFrameTime;
-    sequence->body.pad = 0;
-
-    auto* bytes = reinterpret_cast<std::uint8_t*>(storage.data());
-    std::size_t offset = sizeof(LV2_Atom_Sequence);
-    if (includeTransport) {
-      offset = writeTransportEvent(bytes, offset, transportProperties);
-    }
-    std::size_t emitted = 0;
-    if (!port.acceptsMidi) {
-      return storage;
-    }
-    for (const auto& message : messages) {
-      if (emitted >= boundedCount) {
-        break;
-      }
-      const auto effectiveOffset = std::min<std::uint32_t>(message.sampleOffset, lastFrame);
-      if (effectiveOffset < frameOffset || effectiveOffset >= segmentEnd) {
-        continue;
-      }
-      auto* event = reinterpret_cast<LV2_Atom_Event*>(bytes + offset);
-      event->time.frames = effectiveOffset - frameOffset;
-      event->body.type = kUridMidiEvent;
-      event->body.size = 3;
-      auto* body = bytes + offset + sizeof(LV2_Atom_Event);
-      body[0] = message.status;
-      body[1] = message.data1;
-      body[2] = message.data2;
-      offset += eventBytes;
-      ++emitted;
-    }
-    return storage;
   }
 
   std::string parameterIdForPort(const Lv2Port& port) const {

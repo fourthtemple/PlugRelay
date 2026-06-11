@@ -5,7 +5,6 @@ const ROOT = process.cwd();
 const MAX_SOURCE_LINES = 1200;
 
 const OVERSIZED_BASELINE = new Map([
-  ["native/bridge-daemon/src/Lv2HostWorker.cpp", 1985],
   ["scripts/mock-daemon.mjs", 2877],
   ["scripts/smoke-test.mjs", 1334]
 ]);
