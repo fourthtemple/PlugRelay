@@ -568,6 +568,7 @@ async function setParameter(instanceId, parameterId, normalizedValue, session) {
   if (parameterIndex < 0) {
     throw protocolError("parameter_not_found", `Unknown parameter: ${safeParameterId}`);
   }
+  assertParameterWritable(instance.parameters[parameterIndex]);
 
   const value = requireNumberInRange(normalizedValue, 0, 1, "normalizedValue");
   await applyParameterValue(instance, parameterIndex, value, 0);
@@ -597,6 +598,9 @@ async function setPreset(instanceId, presetId, session) {
     if (parameterIndex < 0) {
       continue;
     }
+    if (instance.parameters[parameterIndex].readOnly) {
+      continue;
+    }
     await applyParameterValue(instance, parameterIndex, normalizedValue, 0);
     updatedParameterIndexes.add(parameterIndex);
   }
@@ -620,6 +624,7 @@ async function setParameterEvents(instanceId, events, session) {
     if (parameterIndex < 0) {
       throw protocolError("parameter_not_found", `Unknown parameter: ${event.parameterId}`);
     }
+    assertParameterAutomatable(instance.parameters[parameterIndex]);
     await applyParameterValue(instance, parameterIndex, event.normalizedValue, event.time);
     updatedParameterIndexes.add(parameterIndex);
   }
@@ -638,6 +643,7 @@ async function setParameterCurve(instanceId, parameterId, points, interpolation,
   if (parameterIndex < 0) {
     throw protocolError("parameter_not_found", `Unknown parameter: ${safeParameterId}`);
   }
+  assertParameterAutomatable(instance.parameters[parameterIndex]);
 
   const events = normalizeParameterCurve(safeParameterId, points, interpolation, instance.maxBlockSize);
   for (const event of events) {
@@ -703,6 +709,9 @@ async function setState(instanceId, state, session) {
   } else {
     for (const [parameterIndex, parameter] of instance.parameters.entries()) {
       if (parsed.parameters && Object.hasOwn(parsed.parameters, parameter.id)) {
+        if (parameter.readOnly) {
+          continue;
+        }
         const value = clamp01(Number(parsed.parameters[parameter.id]));
         await applyParameterValue(instance, parameterIndex, value);
       }
@@ -1717,14 +1726,15 @@ function createPluginCatalog() {
       hostable: true,
       inputs: 2,
       outputs: 2,
-      parameters: [makeGainParameter(0.5), makeProgramParameter(0)],
+      parameters: [makeGainParameter(0.5), makeProgramParameter(0), makeOutputLevelParameter(0)],
       presets: [
         {
           id: "gain-unity",
           name: "Unity",
           parameters: {
             gain: 0.5,
-            program: 0
+            program: 0,
+            "output-level": 1
           }
         },
         {
@@ -1732,7 +1742,8 @@ function createPluginCatalog() {
           name: "Bright Gain",
           parameters: {
             gain: 0.75,
-            program: 2 / 3
+            program: 2 / 3,
+            "output-level": 1
           }
         }
       ]
@@ -2476,6 +2487,22 @@ function makeProgramParameter(normalizedValue) {
   };
 }
 
+function makeOutputLevelParameter(normalizedValue) {
+  const clamped = clamp01(normalizedValue);
+  return {
+    id: "output-level",
+    name: "Output Level",
+    normalizedValue: clamped,
+    defaultNormalizedValue: 0,
+    unit: "%",
+    minPlain: 0,
+    maxPlain: 100,
+    plainValue: clamped * 100,
+    automatable: false,
+    readOnly: true
+  };
+}
+
 function normalizedGainToDb(normalizedValue) {
   return -24 + clamp01(normalizedValue) * 48;
 }
@@ -3132,6 +3159,23 @@ function requirePresetId(value, label) {
     throw protocolError("invalid_argument", `${label} must be a non-empty string up to 64 bytes.`);
   }
   return text;
+}
+
+function assertParameterWritable(parameter) {
+  if (parameter?.readOnly === true) {
+    throw protocolError("parameter_read_only", `Parameter is read-only: ${parameter.id}`, {
+      parameterId: parameter.id
+    });
+  }
+}
+
+function assertParameterAutomatable(parameter) {
+  assertParameterWritable(parameter);
+  if (parameter?.automatable === false) {
+    throw protocolError("parameter_not_automatable", `Parameter is not automatable: ${parameter.id}`, {
+      parameterId: parameter.id
+    });
+  }
 }
 
 function clonePluginMetadata(plugin) {

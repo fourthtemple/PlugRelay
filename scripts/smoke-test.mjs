@@ -711,8 +711,9 @@ assert(
   mockPreset.applied === true &&
     mockPreset.parameterCount === 2 &&
     Math.abs(mockPreset.parameters.find((parameter) => parameter.id === "gain")?.normalizedValue - 0.75) < 0.000001 &&
-    Math.abs(mockPreset.parameters.find((parameter) => parameter.id === "program")?.normalizedValue - 2 / 3) < 0.000001,
-  "mock setPreset applies a bounded listed preset snapshot"
+    Math.abs(mockPreset.parameters.find((parameter) => parameter.id === "program")?.normalizedValue - 2 / 3) < 0.000001 &&
+    !mockPreset.parameters.some((parameter) => parameter.id === "output-level"),
+  "mock setPreset applies writable entries from a bounded listed preset snapshot"
 );
 
 const automated = await request(

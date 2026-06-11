@@ -275,6 +275,8 @@ Returns the negotiated channel and bus layout for an instance. `requestedInputCh
 
 Sets one normalized parameter value. Values outside `0..1` are rejected. For installed VST3 plugins, the reference daemon updates the edit controller and queues a processor-side `IParameterChanges` point for the next render block. For installed Audio Units, the reference daemon maps normalized values onto the CoreAudio parameter range and calls `AudioUnitSetParameter`. For compatible LV2 audio/control plugins, the reference daemon maps normalized values onto bounded LV2 input control ports parsed from bundle TTL and rounds toggled/integer/enumeration controls to legal plain values.
 
+Parameters marked `readOnly: true` are display-only. Conforming daemons must reject `setParameter` for those ids with `parameter_read_only` before dispatching to native workers.
+
 ### `setPreset`
 
 Applies one daemon-listed preset snapshot to an existing instance.
@@ -309,11 +311,13 @@ The browser sends only `presetId`; it does not send an arbitrary parameter map o
 }
 ```
 
-`presetId` is capped at 64 bytes. Preset snapshots are capped to the same 1024 parameter-value ceiling used for parameter metadata, and every value is clamped to normalized `0..1` before the snapshot can be applied. If a listed snapshot contains parameters that the live worker does not expose, those entries are ignored rather than treated as new host commands. Arbitrary preset files, sample folders, caches, and licensing data still require a separate user-approved file broker.
+`presetId` is capped at 64 bytes. Preset snapshots are capped to the same 1024 parameter-value ceiling used for parameter metadata, and every value is clamped to normalized `0..1` before the snapshot can be applied. If a listed snapshot contains parameters that the live worker does not expose, those entries are ignored rather than treated as new host commands. Read-only live parameters are skipped. Arbitrary preset files, sample folders, caches, and licensing data still require a separate user-approved file broker.
 
 ### `setParameterEvents`
 
 Queues a bounded list of normalized parameter events for the next render block. `time` is an integer sample offset into the next block and is clamped by schema/daemon validation to the instance block size. The reference daemon rejects more than 4096 events per request, rejects parameter ids longer than 64 bytes, and enforces instance ownership before dispatching events to workers.
+
+Automation requests must target writable automatable parameters. `readOnly: true` parameters are rejected with `parameter_read_only`, and `automatable: false` parameters are rejected with `parameter_not_automatable`.
 
 ```json
 {
@@ -359,6 +363,8 @@ This is per-render-block curve interpolation. Offline DAW automation lanes, host
 State is opaque base64. Hosts store it without interpreting it.
 
 The reference daemon wraps state in a bounded base64 JSON envelope that records the producing `pluginId`, `format`, normalized parameter snapshot, and, for installed VST3/AU/LV2 instances that expose native worker state, a `nativeState` payload. `setState` rejects state produced by a different plugin id. Native state is bounded before it is returned to the host or restored into a worker.
+
+For daemon-managed parameter snapshots, read-only live parameters are not restored from host-supplied state values. Native worker state remains opaque and format-specific.
 
 Installed VST3 state stores the component and edit-controller state streams. Installed Audio Unit state stores the CoreAudio `kAudioUnitProperty_ClassInfo` property list. Compatible basic LV2 audio/control plugins store bounded control-port state keyed by LV2 port index and can also save/restore bounded portable POD `state:interface` properties. LV2 file-backed state is supported only through brokered `state:makePath`, `state:mapPath`, and `state:freePath` callbacks: paths must be relative, path text is bounded, symlinks and traversal are rejected, file bytes are capped, and the host stores the resulting files as opaque state payload data. Hosts should treat native state payloads as opaque bytes.
 

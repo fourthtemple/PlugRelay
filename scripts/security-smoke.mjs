@@ -155,6 +155,22 @@ async function run() {
       Math.abs(selectedProgram.parameter.normalizedValue - 2 / 3) < 0.000001,
     "setParameter selects a bounded program-list value"
   );
+  const readOnlyParameter = created.plugin?.parameters?.find((parameter) => parameter.id === "output-level");
+  check(
+    readOnlyParameter?.readOnly === true && readOnlyParameter.automatable === false,
+    "createInstance exposes bounded read-only parameter metadata"
+  );
+  const readOnlyWrite = await request(
+    main,
+    "setParameter",
+    { instanceId: created.instanceId, parameterId: "output-level", normalizedValue: 1 },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(readOnlyWrite.code === "parameter_read_only", "setParameter rejects read-only parameters before worker dispatch");
   check(
     Array.isArray(created.plugin?.presets) &&
       created.plugin.presets.length >= 2 &&
@@ -172,8 +188,23 @@ async function run() {
     presetApplied.applied === true &&
       presetApplied.parameterCount === 2 &&
       presetApplied.parameters?.some((parameter) => parameter.id === "gain" && Math.abs(parameter.normalizedValue - 0.75) < 0.000001) &&
-      presetApplied.parameters?.some((parameter) => parameter.id === "program" && Math.abs(parameter.normalizedValue - 2 / 3) < 0.000001),
-    "setPreset applies only a daemon-listed bounded preset snapshot"
+      presetApplied.parameters?.some((parameter) => parameter.id === "program" && Math.abs(parameter.normalizedValue - 2 / 3) < 0.000001) &&
+      !presetApplied.parameters?.some((parameter) => parameter.id === "output-level"),
+    "setPreset applies only writable entries from a daemon-listed bounded preset snapshot"
+  );
+  const savedState = await request(main, "getState", { instanceId: created.instanceId }, true, session);
+  const tamperedState = JSON.parse(Buffer.from(savedState.state, "base64").toString("utf8"));
+  tamperedState.parameters["output-level"] = 1;
+  const restoredTamperedState = await request(
+    main,
+    "setState",
+    { instanceId: created.instanceId, state: Buffer.from(JSON.stringify(tamperedState), "utf8").toString("base64") },
+    true,
+    session
+  );
+  check(
+    restoredTamperedState.parameters?.some((parameter) => parameter.id === "output-level" && parameter.normalizedValue === 0),
+    "setState ignores read-only parameter values in opaque state envelopes"
   );
   const missingPreset = await request(
     main,
@@ -470,6 +501,37 @@ async function run() {
       Math.abs(curve.parameter?.normalizedValue - 0.25) < 0.000001,
     "setParameterCurve expands bounded linear automation and reports final state"
   );
+
+  const automationReadOnly = await request(
+    main,
+    "setParameterEvents",
+    { instanceId: created.instanceId, events: [{ parameterId: "output-level", normalizedValue: 0.5, time: 0 }] },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(automationReadOnly.code === "parameter_read_only", "setParameterEvents rejects read-only parameters before worker dispatch");
+
+  const curveReadOnly = await request(
+    main,
+    "setParameterCurve",
+    {
+      instanceId: created.instanceId,
+      parameterId: "output-level",
+      points: [
+        { time: 0, normalizedValue: 0.1 },
+        { time: 8, normalizedValue: 0.9 }
+      ]
+    },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(curveReadOnly.code === "parameter_read_only", "setParameterCurve rejects read-only parameters before worker dispatch");
 
   const tooManyParameterEvents = Array.from(
     { length: 4097 },

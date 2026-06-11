@@ -9,7 +9,7 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | Area | Status | Notes |
 | --- | --- | --- |
 | Original findings #1-#9 | Fixed | Remediated in the daemon (`scripts/mock-daemon.mjs`), native C++ workers, protocol schema, and docs. |
-| Regression coverage | Passing | `npm run smoke:security` exercises the fixes against a live daemon. Last recorded result: 61/61 checks passing. |
+| Regression coverage | Passing | `npm run smoke:security` exercises the fixes against a live daemon. Last recorded result: 66/66 checks passing. |
 | Installed-plugin compatibility probe | Added | `npm run probe:installed` starts a temporary paired loopback daemon with an explicit origin allowlist and bounded request sizes so real VST3/AU/LV2 create/state/MIDI/render/layout checks can be repeated without weakening the production security model. |
 | Example render argument hardening | Fixed | Example render entry points reject unknown example plugin ids before numeric argument parsing. |
 | VST3/AU opaque state | Fixed | Native state is bounded, opaque, plugin-id bound, and restored through worker processes. |
@@ -27,6 +27,7 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | Brokered VST3 factory metadata | Fixed | Installed VST3 listings can refine public `name`, `vendor`, `category`, `kind`, and `version` through a short-lived factory probe that returns bounded path-free metadata and keeps launch paths in internal diagnostics. |
 | Bounded parameter automation events | Fixed | The protocol and daemon reject oversized automation batches, validate parameter ids/values/sample offsets, enforce instance ownership, and forward bounded events to native workers. |
 | Bounded parameter automation curves | Fixed | `setParameterCurve` accepts bounded step/linear per-block curves, rejects oversized or ambiguous point lists, expands them under the existing worker event cap, and preserves instance ownership. |
+| Read-only parameter write protection | Fixed | `setParameter`, `setParameterEvents`, and `setParameterCurve` reject read-only parameters before worker dispatch, while `setPreset` and daemon-managed `setState` snapshots skip read-only live parameters. |
 | Generic editor broker sessions | Fixed | `openEditor` / `closeEditor` now provide bounded generic parameter editor sessions with per-session/global caps, TTLs, instance ownership checks, path-free plugin snapshots, and cleanup on instance/session teardown. |
 | Bounded VST3 program metadata | Fixed | VST3 program-change parameters are marked, and associated program-list names are exposed only as capped parameter metadata that selects programs through `setParameter`. |
 | Bounded preset snapshot application | Fixed | `setPreset` applies only daemon-listed bounded parameter snapshots by preset id, skips unknown live parameters, enforces instance ownership, and does not accept browser-supplied preset files or arbitrary parameter maps. |

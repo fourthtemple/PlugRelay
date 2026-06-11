@@ -337,6 +337,7 @@ export function renderParameterControls(options) {
 
     const programs = parameter.programList?.programs ?? [];
     const control = programs.length > 0 ? document.createElement("select") : document.createElement("input");
+    const disabled = parameter.readOnly === true || !parameter.automatable;
     if (control instanceof HTMLSelectElement) {
       for (const program of programs) {
         const option = document.createElement("option");
@@ -345,7 +346,7 @@ export function renderParameterControls(options) {
         option.selected = Math.abs(program.normalizedValue - parameter.normalizedValue) < 0.000001;
         control.append(option);
       }
-      control.disabled = !parameter.automatable;
+      control.disabled = disabled;
       control.addEventListener("change", () => {
         const normalizedValue = Number(control.value);
         const selectedProgram = programs.find((program) => Math.abs(program.normalizedValue - normalizedValue) < 0.000001);
@@ -360,7 +361,7 @@ export function renderParameterControls(options) {
       control.max = "1";
       control.step = "0.001";
       control.value = String(parameter.normalizedValue);
-      control.disabled = !parameter.automatable;
+      control.disabled = disabled;
       control.addEventListener("input", () => {
         const normalizedValue = Number(control.value);
         value.value = formatParameterValue({ ...parameter, normalizedValue });
