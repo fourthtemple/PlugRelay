@@ -225,12 +225,27 @@ if (nativeLv2Effect) {
       instanceId: nativeLv2Instance.instanceId,
       blockId: 12,
       sampleRate: 48000,
-      channels: [new Array(4).fill(0.4), new Array(4).fill(0.4)]
+      channels: [new Array(4).fill(0.4), new Array(4).fill(0.4)],
+      transport: {
+        playing: true,
+        tempo: 118,
+        timeSignatureNumerator: 4,
+        timeSignatureDenominator: 4,
+        projectTimeMusic: 32,
+        barPositionMusic: 32,
+        samplePosition: 960000
+      }
     },
     true,
     pair.sessionToken
   );
   assert(nativeLv2MidiBlock.renderEngine === "native-lv2", "installed LV2 effect rendered through the native LV2 host worker");
+  assert(
+    nativeLv2MidiBlock.transport?.playing === true &&
+      nativeLv2MidiBlock.transport?.tempo === 118 &&
+      nativeLv2MidiBlock.transport?.samplePosition === 960000,
+    "installed LV2 render accepts bounded host transport position"
+  );
   assert(
     nativeLv2MidiBlock.channels?.[0]?.[0] > 0.06 && nativeLv2MidiBlock.channels[0][0] < 0.16,
     "installed LV2 effect received atom MIDI CC"
@@ -925,6 +940,11 @@ async function runNativeLv2WorkerSmoke() {
     const rendered = await requestWorker("render 4 48000 0.1,0.2,0.3,0.4|0.1,0.1,0.1,0.1");
     assert(rendered.channels?.length === 2, "native LV2 worker rendered stereo output");
     assert(Math.abs(rendered.channels[0][0] - 0.15) < 0.00001, "native LV2 worker processed audio through the plugin");
+
+    const transported = await requestWorker(
+      "render 4 48000 0.1,0.1,0.1,0.1|0.1,0.1,0.1,0.1 - playing=1,tempo=118,num=4,den=4,ppq=32,bar=32,sample=960000"
+    );
+    assert(transported.channels?.length === 2, "native LV2 worker accepts bounded host transport position");
 
     const offsetSet = await requestWorker("setParameter gain 0.25 2");
     assert(

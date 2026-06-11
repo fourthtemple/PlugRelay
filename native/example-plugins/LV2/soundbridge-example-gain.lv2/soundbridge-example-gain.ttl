@@ -3,6 +3,7 @@
 @prefix lv2: <http://lv2plug.in/ns/lv2core#> .
 @prefix midi: <http://lv2plug.in/ns/ext/midi#> .
 @prefix state: <http://lv2plug.in/ns/ext/state#> .
+@prefix time: <http://lv2plug.in/ns/ext/time#> .
 
 <urn:soundbridge:example:lv2-gain>
   a lv2:Plugin ;
@@ -39,7 +40,7 @@
   ], [
     a lv2:InputPort, atom:AtomPort ;
     atom:bufferType atom:Sequence ;
-    atom:supports midi:MidiEvent ;
+    atom:supports midi:MidiEvent, time:Position ;
     lv2:index 5 ;
     lv2:symbol "midi_in" ;
     lv2:name "MIDI In"

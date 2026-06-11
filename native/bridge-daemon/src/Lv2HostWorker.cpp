@@ -9,6 +9,7 @@
 #endif
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -148,6 +149,37 @@ struct LV2_Atom_Event {
   LV2_Atom body;
 };
 
+struct LV2_Atom_Int {
+  LV2_Atom atom;
+  std::int32_t body;
+};
+
+struct LV2_Atom_Long {
+  LV2_Atom atom;
+  std::int64_t body;
+};
+
+struct LV2_Atom_Float {
+  LV2_Atom atom;
+  float body;
+};
+
+struct LV2_Atom_Double {
+  LV2_Atom atom;
+  double body;
+};
+
+struct LV2_Atom_Object_Body {
+  std::uint32_t id;
+  std::uint32_t otype;
+};
+
+struct LV2_Atom_Property_Body {
+  LV2_URID key;
+  LV2_URID context;
+  LV2_Atom value;
+};
+
 constexpr std::uint32_t kMaxWorkerFrames = 8192;
 constexpr std::uint32_t kMaxWorkerAudioPorts = 32;
 constexpr std::uint32_t kMaxWorkerPortIndex = 4096;
@@ -168,24 +200,51 @@ constexpr std::size_t kMaxWorkerStateBytes = 384 * 1024;
 constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
 constexpr double kMaxWorkerSampleRate = 384000.0;
+constexpr double kMaxWorkerTransportTempoBpm = 960.0;
+constexpr double kMaxWorkerTransportPositionMusic = 1'000'000'000.0;
+constexpr long long kMaxWorkerTransportSamplePosition = 9'007'199'254'740'991LL;
 constexpr const char* kLv2ControlStateMagic = "soundbridge-lv2-control-state-v1";
 constexpr const char* kLv2StateMagic = "soundbridge-lv2-state-v2";
 constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
 constexpr const char* kLv2UridUnmapUri = "http://lv2plug.in/ns/ext/urid#unmap";
 constexpr const char* kLv2AtomSequenceUri = "http://lv2plug.in/ns/ext/atom#Sequence";
 constexpr const char* kLv2AtomFrameTimeUri = "http://lv2plug.in/ns/ext/atom#frameTime";
+constexpr const char* kLv2AtomIntUri = "http://lv2plug.in/ns/ext/atom#Int";
+constexpr const char* kLv2AtomLongUri = "http://lv2plug.in/ns/ext/atom#Long";
 constexpr const char* kLv2AtomFloatUri = "http://lv2plug.in/ns/ext/atom#Float";
+constexpr const char* kLv2AtomDoubleUri = "http://lv2plug.in/ns/ext/atom#Double";
+constexpr const char* kLv2AtomObjectUri = "http://lv2plug.in/ns/ext/atom#Object";
 constexpr const char* kLv2AtomPathUri = "http://lv2plug.in/ns/ext/atom#Path";
 constexpr const char* kLv2MidiEventUri = "http://lv2plug.in/ns/ext/midi#MidiEvent";
 constexpr const char* kLv2StateInterfaceUri = "http://lv2plug.in/ns/ext/state#interface";
 constexpr const char* kLv2StateFreePathUri = "http://lv2plug.in/ns/ext/state#freePath";
 constexpr const char* kLv2StateMakePathUri = "http://lv2plug.in/ns/ext/state#makePath";
 constexpr const char* kLv2StateMapPathUri = "http://lv2plug.in/ns/ext/state#mapPath";
+constexpr const char* kLv2TimePositionUri = "http://lv2plug.in/ns/ext/time#Position";
+constexpr const char* kLv2TimeFrameUri = "http://lv2plug.in/ns/ext/time#frame";
+constexpr const char* kLv2TimeSpeedUri = "http://lv2plug.in/ns/ext/time#speed";
+constexpr const char* kLv2TimeBeatUri = "http://lv2plug.in/ns/ext/time#beat";
+constexpr const char* kLv2TimeBarBeatUri = "http://lv2plug.in/ns/ext/time#barBeat";
+constexpr const char* kLv2TimeBeatUnitUri = "http://lv2plug.in/ns/ext/time#beatUnit";
+constexpr const char* kLv2TimeBeatsPerBarUri = "http://lv2plug.in/ns/ext/time#beatsPerBar";
+constexpr const char* kLv2TimeBeatsPerMinuteUri = "http://lv2plug.in/ns/ext/time#beatsPerMinute";
 constexpr LV2_URID kUridAtomSequence = 1;
 constexpr LV2_URID kUridAtomFrameTime = 2;
 constexpr LV2_URID kUridMidiEvent = 3;
 constexpr LV2_URID kUridAtomFloat = 4;
 constexpr LV2_URID kUridAtomPath = 5;
+constexpr LV2_URID kUridAtomInt = 6;
+constexpr LV2_URID kUridAtomLong = 7;
+constexpr LV2_URID kUridAtomDouble = 8;
+constexpr LV2_URID kUridAtomObject = 9;
+constexpr LV2_URID kUridTimePosition = 10;
+constexpr LV2_URID kUridTimeFrame = 11;
+constexpr LV2_URID kUridTimeSpeed = 12;
+constexpr LV2_URID kUridTimeBeat = 13;
+constexpr LV2_URID kUridTimeBarBeat = 14;
+constexpr LV2_URID kUridTimeBeatUnit = 15;
+constexpr LV2_URID kUridTimeBeatsPerBar = 16;
+constexpr LV2_URID kUridTimeBeatsPerMinute = 17;
 constexpr std::uint32_t kLv2StateSuccess = 0;
 constexpr std::uint32_t kLv2StateErrUnknown = 1;
 constexpr std::uint32_t kLv2StateErrBadType = 2;
@@ -216,6 +275,8 @@ struct Lv2Port {
   float minimum = 0.0F;
   float maximum = 1.0F;
   float value = 0.0F;
+  bool acceptsMidi = false;
+  bool acceptsTimePosition = false;
 };
 
 struct Lv2BundleMetadata {
@@ -235,6 +296,26 @@ struct PendingMidiMessage {
   std::uint8_t data1 = 60;
   std::uint8_t data2 = 100;
   std::uint32_t sampleOffset = 0;
+};
+
+struct HostTransportContext {
+  bool explicitTransport = false;
+  bool playing = false;
+  bool recording = false;
+  bool loopActive = false;
+  bool hasTempo = false;
+  double tempo = 120.0;
+  bool hasTimeSignature = false;
+  std::uint32_t timeSignatureNumerator = 4;
+  std::uint32_t timeSignatureDenominator = 4;
+  bool hasProjectTimeMusic = false;
+  double projectTimeMusic = 0.0;
+  bool hasBarPositionMusic = false;
+  double barPositionMusic = 0.0;
+  bool hasCycle = false;
+  double cycleStartMusic = 0.0;
+  double cycleEndMusic = 0.0;
+  std::int64_t samplePosition = 0;
 };
 
 struct Lv2StateProperty {
@@ -270,7 +351,19 @@ public:
     addKnown(kUridMidiEvent, kLv2MidiEventUri);
     addKnown(kUridAtomFloat, kLv2AtomFloatUri);
     addKnown(kUridAtomPath, kLv2AtomPathUri);
-    nextUrid_ = kUridAtomPath + 1;
+    addKnown(kUridAtomInt, kLv2AtomIntUri);
+    addKnown(kUridAtomLong, kLv2AtomLongUri);
+    addKnown(kUridAtomDouble, kLv2AtomDoubleUri);
+    addKnown(kUridAtomObject, kLv2AtomObjectUri);
+    addKnown(kUridTimePosition, kLv2TimePositionUri);
+    addKnown(kUridTimeFrame, kLv2TimeFrameUri);
+    addKnown(kUridTimeSpeed, kLv2TimeSpeedUri);
+    addKnown(kUridTimeBeat, kLv2TimeBeatUri);
+    addKnown(kUridTimeBarBeat, kLv2TimeBarBeatUri);
+    addKnown(kUridTimeBeatUnit, kLv2TimeBeatUnitUri);
+    addKnown(kUridTimeBeatsPerBar, kLv2TimeBeatsPerBarUri);
+    addKnown(kUridTimeBeatsPerMinute, kLv2TimeBeatsPerMinuteUri);
+    nextUrid_ = kUridTimeBeatsPerMinute + 1;
   }
 
   LV2_URID map(const char* uri) {
@@ -314,7 +407,7 @@ private:
   }
 
   std::vector<Lv2MappedUri> mappings_;
-  LV2_URID nextUrid_ = kUridAtomPath + 1;
+  LV2_URID nextUrid_ = kUridTimeBeatsPerMinute + 1;
 };
 
 class Lv2StateFileBroker;
@@ -396,6 +489,137 @@ bool parseStateValue(const std::string& text, double& out) {
 
 bool parseSampleRateArg(const char* text, double& out) {
   return parseDoubleArg(text, kMinWorkerSampleRate, kMaxWorkerSampleRate, out);
+}
+
+bool parseTransportBool(const std::string& text, bool& out) {
+  if (text == "1") {
+    out = true;
+    return true;
+  }
+  if (text == "0") {
+    out = false;
+    return true;
+  }
+  return false;
+}
+
+bool parseTransportSamplePosition(const std::string& text, std::int64_t& out) {
+  if (text.empty()) {
+    return false;
+  }
+  errno = 0;
+  char* end = nullptr;
+  const long long value = std::strtoll(text.c_str(), &end, 10);
+  if (end == text.c_str() || *end != '\0' || errno == ERANGE ||
+      value < 0 || value > kMaxWorkerTransportSamplePosition) {
+    return false;
+  }
+  out = static_cast<std::int64_t>(value);
+  return true;
+}
+
+bool isPowerOfTwo(std::uint32_t value) {
+  return value > 0 && (value & (value - 1U)) == 0;
+}
+
+bool parseTransportContext(
+    const std::string& encoded,
+    double fallbackSampleTime,
+    HostTransportContext& out) {
+  out = HostTransportContext {};
+  out.samplePosition = static_cast<std::int64_t>(std::clamp(
+      fallbackSampleTime,
+      0.0,
+      static_cast<double>(kMaxWorkerTransportSamplePosition)));
+  if (encoded.empty() || encoded == "-") {
+    return true;
+  }
+  out.explicitTransport = true;
+
+  bool sawNumerator = false;
+  bool sawDenominator = false;
+  bool sawCycleStart = false;
+  bool sawCycleEnd = false;
+
+  std::stringstream stream(encoded);
+  std::string token;
+  while (std::getline(stream, token, ',')) {
+    if (token.empty()) {
+      continue;
+    }
+    const auto separator = token.find('=');
+    if (separator == std::string::npos) {
+      return false;
+    }
+    const auto key = token.substr(0, separator);
+    const auto value = token.substr(separator + 1);
+
+    if (key == "playing") {
+      if (!parseTransportBool(value, out.playing)) {
+        return false;
+      }
+    } else if (key == "recording") {
+      if (!parseTransportBool(value, out.recording)) {
+        return false;
+      }
+    } else if (key == "loop") {
+      if (!parseTransportBool(value, out.loopActive)) {
+        return false;
+      }
+    } else if (key == "tempo") {
+      if (!parseDoubleArg(value.c_str(), 1.0, kMaxWorkerTransportTempoBpm, out.tempo)) {
+        return false;
+      }
+      out.hasTempo = true;
+    } else if (key == "num") {
+      if (!parseUint32Arg(value.c_str(), 1, 64, out.timeSignatureNumerator)) {
+        return false;
+      }
+      sawNumerator = true;
+    } else if (key == "den") {
+      if (!parseUint32Arg(value.c_str(), 1, 64, out.timeSignatureDenominator) ||
+          !isPowerOfTwo(out.timeSignatureDenominator)) {
+        return false;
+      }
+      sawDenominator = true;
+    } else if (key == "ppq") {
+      if (!parseDoubleArg(value.c_str(), 0.0, kMaxWorkerTransportPositionMusic, out.projectTimeMusic)) {
+        return false;
+      }
+      out.hasProjectTimeMusic = true;
+    } else if (key == "bar") {
+      if (!parseDoubleArg(value.c_str(), 0.0, kMaxWorkerTransportPositionMusic, out.barPositionMusic)) {
+        return false;
+      }
+      out.hasBarPositionMusic = true;
+    } else if (key == "cycleStart") {
+      if (!parseDoubleArg(value.c_str(), 0.0, kMaxWorkerTransportPositionMusic, out.cycleStartMusic)) {
+        return false;
+      }
+      sawCycleStart = true;
+    } else if (key == "cycleEnd") {
+      if (!parseDoubleArg(value.c_str(), 0.0, kMaxWorkerTransportPositionMusic, out.cycleEndMusic)) {
+        return false;
+      }
+      sawCycleEnd = true;
+    } else if (key == "sample") {
+      if (!parseTransportSamplePosition(value, out.samplePosition)) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+
+  if (sawNumerator != sawDenominator) {
+    return false;
+  }
+  out.hasTimeSignature = sawNumerator && sawDenominator;
+  if (sawCycleStart != sawCycleEnd || (sawCycleStart && out.cycleEndMusic < out.cycleStartMusic)) {
+    return false;
+  }
+  out.hasCycle = sawCycleStart && sawCycleEnd;
+  return true;
 }
 
 std::uint8_t scaled7Bit(double value) {
@@ -882,6 +1106,10 @@ std::string cappedString(std::string value, std::size_t maxBytes = kMaxWorkerPar
   return value;
 }
 
+bool blockContainsUri(const std::string& block, const char* prefixedName, const char* uri) {
+  return block.find(prefixedName) != std::string::npos || block.find(uri) != std::string::npos;
+}
+
 std::string readTextFile(const std::filesystem::path& path) {
   std::ifstream input(path);
   if (!input) {
@@ -1191,9 +1419,12 @@ std::optional<Lv2Port> parsePortBlock(const std::string& block) {
     port.type = Lv2PortType::Audio;
   } else if (block.find("lv2:ControlPort") != std::string::npos) {
     port.type = Lv2PortType::Control;
-  } else if (
-      (block.find("atom:AtomPort") != std::string::npos || block.find("ev:EventPort") != std::string::npos) &&
-      block.find("midi:MidiEvent") != std::string::npos) {
+  } else if (block.find("atom:AtomPort") != std::string::npos || block.find("ev:EventPort") != std::string::npos) {
+    port.acceptsMidi = blockContainsUri(block, "midi:MidiEvent", kLv2MidiEventUri);
+    port.acceptsTimePosition = blockContainsUri(block, "time:Position", kLv2TimePositionUri);
+    if (!port.acceptsMidi && !port.acceptsTimePosition) {
+      return std::nullopt;
+    }
     port.type = Lv2PortType::Midi;
   } else {
     return std::nullopt;
@@ -1352,7 +1583,8 @@ public:
   std::vector<std::vector<float>> render(
       std::uint32_t frames,
       double sampleRate,
-      std::vector<std::vector<float>> inputChannels) {
+      std::vector<std::vector<float>> inputChannels,
+      HostTransportContext transport) {
     if (std::abs(sampleRate - sampleRate_) > 0.01) {
       throw std::runtime_error("LV2 worker cannot change sample rate after initialization.");
     }
@@ -1373,14 +1605,21 @@ public:
     for (auto& output : outputBuffers_) {
       output.assign(frames, 0.0F);
     }
-    renderSegments(frames);
+    renderSegments(frames, transport);
     pendingMidiMessages_.clear();
     for (auto& channel : outputBuffers_) {
       for (auto& sample : channel) {
         sample = sanitizeSample(sample);
       }
     }
+    sampleTime_ = std::min(
+        static_cast<double>(kMaxWorkerTransportSamplePosition),
+        static_cast<double>(transport.samplePosition) + frames);
     return outputBuffers_;
+  }
+
+  double sampleTime() const {
+    return sampleTime_;
   }
 
   void enqueueMidiEvents(std::vector<PendingMidiMessage> messages) {
@@ -1842,9 +2081,9 @@ private:
     }
   }
 
-  void renderSegments(std::uint32_t frames) {
+  void renderSegments(std::uint32_t frames, const HostTransportContext& transport) {
     if (pendingParameterChanges_.empty()) {
-      runSegment(0, frames, frames);
+      runSegment(0, frames, frames, transport);
       return;
     }
 
@@ -1867,16 +2106,20 @@ private:
       if (eventIndex < parameterEvents.size()) {
         nextOffset = std::clamp<std::uint32_t>(parameterEvents[eventIndex].sampleOffset, 0, frames - 1);
       }
-      runSegment(frameOffset, nextOffset - frameOffset, frames);
+      runSegment(frameOffset, nextOffset - frameOffset, frames, transport);
       frameOffset = nextOffset;
     }
   }
 
-  void runSegment(std::uint32_t frameOffset, std::uint32_t frames, std::uint32_t totalFrames) {
+  void runSegment(
+      std::uint32_t frameOffset,
+      std::uint32_t frames,
+      std::uint32_t totalFrames,
+      const HostTransportContext& transport) {
     if (frames == 0) {
       return;
     }
-    prepareMidiBuffers(frameOffset, frames, totalFrames);
+    prepareMidiBuffers(frameOffset, frames, totalFrames, transport);
     connectPorts(frameOffset);
     descriptor_->run(handle_, frames);
   }
@@ -1923,33 +2166,209 @@ private:
   }
 
   std::vector<std::uint64_t> emptyMidiSequenceBuffer() const {
-    return midiSequenceBuffer({}, 0, maxBlockSize_, maxBlockSize_);
+    Lv2Port emptyPort;
+    emptyPort.acceptsMidi = true;
+    return midiSequenceBuffer(emptyPort, {}, 0, maxBlockSize_, maxBlockSize_, HostTransportContext {});
   }
 
-  void prepareMidiBuffers(std::uint32_t frameOffset, std::uint32_t frames, std::uint32_t totalFrames) {
+  void prepareMidiBuffers(
+      std::uint32_t frameOffset,
+      std::uint32_t frames,
+      std::uint32_t totalFrames,
+      const HostTransportContext& transport) {
     midiBuffers_.resize(inputMidiPortIndexes_.size());
-    for (auto& buffer : midiBuffers_) {
-      buffer = midiSequenceBuffer(pendingMidiMessages_, frameOffset, frames, totalFrames);
+    for (std::size_t index = 0; index < inputMidiPortIndexes_.size(); ++index) {
+      const auto& port = ports_[inputMidiPortIndexes_[index]];
+      midiBuffers_[index] = midiSequenceBuffer(port, pendingMidiMessages_, frameOffset, frames, totalFrames, transport);
     }
+  }
+
+  enum class Lv2AtomScalarKind {
+    Int,
+    Long,
+    Float,
+    Double,
+  };
+
+  struct Lv2AtomScalarProperty {
+    LV2_URID key = 0;
+    Lv2AtomScalarKind kind = Lv2AtomScalarKind::Float;
+    double value = 0.0;
+  };
+
+  static LV2_URID atomTypeForScalar(Lv2AtomScalarKind kind) {
+    switch (kind) {
+      case Lv2AtomScalarKind::Int:
+        return kUridAtomInt;
+      case Lv2AtomScalarKind::Long:
+        return kUridAtomLong;
+      case Lv2AtomScalarKind::Float:
+        return kUridAtomFloat;
+      case Lv2AtomScalarKind::Double:
+        return kUridAtomDouble;
+    }
+    return kUridAtomFloat;
+  }
+
+  static std::size_t atomScalarBodySize(Lv2AtomScalarKind kind) {
+    switch (kind) {
+      case Lv2AtomScalarKind::Int:
+        return sizeof(std::int32_t);
+      case Lv2AtomScalarKind::Long:
+        return sizeof(std::int64_t);
+      case Lv2AtomScalarKind::Float:
+        return sizeof(float);
+      case Lv2AtomScalarKind::Double:
+        return sizeof(double);
+    }
+    return sizeof(float);
+  }
+
+  static std::size_t atomScalarPropertyBytes(Lv2AtomScalarKind kind) {
+    return alignAtomSize(sizeof(LV2_Atom_Property_Body) + atomScalarBodySize(kind));
+  }
+
+  static void writeAtomScalarBody(std::uint8_t* body, const Lv2AtomScalarProperty& property) {
+    switch (property.kind) {
+      case Lv2AtomScalarKind::Int: {
+        const auto value = static_cast<std::int32_t>(std::clamp(property.value, -2147483648.0, 2147483647.0));
+        std::memcpy(body, &value, sizeof(value));
+        return;
+      }
+      case Lv2AtomScalarKind::Long: {
+        const auto value = static_cast<std::int64_t>(std::clamp(
+            property.value,
+            static_cast<double>(-kMaxWorkerTransportSamplePosition),
+            static_cast<double>(kMaxWorkerTransportSamplePosition)));
+        std::memcpy(body, &value, sizeof(value));
+        return;
+      }
+      case Lv2AtomScalarKind::Float: {
+        const auto value = static_cast<float>(property.value);
+        std::memcpy(body, &value, sizeof(value));
+        return;
+      }
+      case Lv2AtomScalarKind::Double: {
+        const auto value = property.value;
+        std::memcpy(body, &value, sizeof(value));
+        return;
+      }
+    }
+  }
+
+  static std::vector<Lv2AtomScalarProperty> transportScalarProperties(const HostTransportContext& transport) {
+    std::vector<Lv2AtomScalarProperty> properties;
+    properties.reserve(8);
+    properties.push_back(Lv2AtomScalarProperty{
+        kUridTimeFrame,
+        Lv2AtomScalarKind::Long,
+        static_cast<double>(transport.samplePosition)});
+    properties.push_back(Lv2AtomScalarProperty{
+        kUridTimeSpeed,
+        Lv2AtomScalarKind::Float,
+        transport.playing ? 1.0 : 0.0});
+
+    const auto beatFactor = transport.hasTimeSignature
+        ? static_cast<double>(transport.timeSignatureDenominator) / 4.0
+        : 1.0;
+    if (transport.hasProjectTimeMusic) {
+      properties.push_back(Lv2AtomScalarProperty{
+          kUridTimeBeat,
+          Lv2AtomScalarKind::Double,
+          transport.projectTimeMusic * beatFactor});
+    }
+    if (transport.hasProjectTimeMusic && transport.hasBarPositionMusic) {
+      auto barBeat = (transport.projectTimeMusic - transport.barPositionMusic) * beatFactor;
+      if (transport.hasTimeSignature) {
+        barBeat = std::clamp(barBeat, 0.0, static_cast<double>(transport.timeSignatureNumerator));
+      }
+      properties.push_back(Lv2AtomScalarProperty{
+          kUridTimeBarBeat,
+          Lv2AtomScalarKind::Float,
+          std::max(0.0, barBeat)});
+    }
+    if (transport.hasTimeSignature) {
+      properties.push_back(Lv2AtomScalarProperty{
+          kUridTimeBeatUnit,
+          Lv2AtomScalarKind::Int,
+          static_cast<double>(transport.timeSignatureDenominator)});
+      properties.push_back(Lv2AtomScalarProperty{
+          kUridTimeBeatsPerBar,
+          Lv2AtomScalarKind::Float,
+          static_cast<double>(transport.timeSignatureNumerator)});
+    }
+    if (transport.hasTempo) {
+      properties.push_back(Lv2AtomScalarProperty{
+          kUridTimeBeatsPerMinute,
+          Lv2AtomScalarKind::Float,
+          transport.tempo});
+    }
+    return properties;
+  }
+
+  static std::size_t transportObjectBodyBytes(const std::vector<Lv2AtomScalarProperty>& properties) {
+    std::size_t bytes = sizeof(LV2_Atom_Object_Body);
+    for (const auto& property : properties) {
+      bytes += atomScalarPropertyBytes(property.kind);
+    }
+    return bytes;
+  }
+
+  static std::size_t writeTransportEvent(
+      std::uint8_t* bytes,
+      std::size_t offset,
+      const std::vector<Lv2AtomScalarProperty>& properties) {
+    const auto objectBodyBytes = transportObjectBodyBytes(properties);
+    auto* event = reinterpret_cast<LV2_Atom_Event*>(bytes + offset);
+    event->time.frames = 0;
+    event->body.type = kUridAtomObject;
+    event->body.size = static_cast<std::uint32_t>(objectBodyBytes);
+
+    auto* objectBody = reinterpret_cast<LV2_Atom_Object_Body*>(bytes + offset + sizeof(LV2_Atom_Event));
+    objectBody->id = 0;
+    objectBody->otype = kUridTimePosition;
+
+    std::size_t propertyOffset = offset + sizeof(LV2_Atom_Event) + sizeof(LV2_Atom_Object_Body);
+    for (const auto& property : properties) {
+      auto* propertyBody = reinterpret_cast<LV2_Atom_Property_Body*>(bytes + propertyOffset);
+      propertyBody->key = property.key;
+      propertyBody->context = 0;
+      propertyBody->value.type = atomTypeForScalar(property.kind);
+      propertyBody->value.size = static_cast<std::uint32_t>(atomScalarBodySize(property.kind));
+      writeAtomScalarBody(bytes + propertyOffset + sizeof(LV2_Atom_Property_Body), property);
+      propertyOffset += atomScalarPropertyBytes(property.kind);
+    }
+    return offset + alignAtomSize(sizeof(LV2_Atom_Event) + objectBodyBytes);
   }
 
   std::vector<std::uint64_t> midiSequenceBuffer(
+      const Lv2Port& port,
       const std::vector<PendingMidiMessage>& messages,
       std::uint32_t frameOffset,
       std::uint32_t frames,
-      std::uint32_t totalFrames) const {
+      std::uint32_t totalFrames,
+      const HostTransportContext& transport) const {
     const auto eventBytes = alignAtomSize(sizeof(LV2_Atom_Event) + 3);
+    const auto includeTransport = port.acceptsTimePosition && transport.explicitTransport && frameOffset == 0;
+    const auto transportProperties = includeTransport
+        ? transportScalarProperties(transport)
+        : std::vector<Lv2AtomScalarProperty> {};
+    const auto transportEventBytes = includeTransport
+        ? alignAtomSize(sizeof(LV2_Atom_Event) + transportObjectBodyBytes(transportProperties))
+        : std::size_t {0};
     const auto segmentEnd = static_cast<std::uint64_t>(frameOffset) + frames;
     const auto lastFrame = totalFrames > 0 ? totalFrames - 1 : 0;
     std::size_t boundedCount = 0;
-    for (const auto& message : messages) {
-      const auto effectiveOffset = std::min<std::uint32_t>(message.sampleOffset, lastFrame);
-      if (effectiveOffset >= frameOffset && effectiveOffset < segmentEnd) {
-        ++boundedCount;
+    if (port.acceptsMidi) {
+      for (const auto& message : messages) {
+        const auto effectiveOffset = std::min<std::uint32_t>(message.sampleOffset, lastFrame);
+        if (effectiveOffset >= frameOffset && effectiveOffset < segmentEnd) {
+          ++boundedCount;
+        }
       }
     }
     boundedCount = std::min<std::size_t>(boundedCount, kMaxWorkerMidiEvents);
-    const auto totalBytes = sizeof(LV2_Atom_Sequence) + eventBytes * boundedCount;
+    const auto totalBytes = sizeof(LV2_Atom_Sequence) + transportEventBytes + eventBytes * boundedCount;
     std::vector<std::uint64_t> storage((alignAtomSize(totalBytes) + sizeof(std::uint64_t) - 1) / sizeof(std::uint64_t), 0);
     auto* sequence = reinterpret_cast<LV2_Atom_Sequence*>(storage.data());
     sequence->atom.type = kUridAtomSequence;
@@ -1959,7 +2378,13 @@ private:
 
     auto* bytes = reinterpret_cast<std::uint8_t*>(storage.data());
     std::size_t offset = sizeof(LV2_Atom_Sequence);
+    if (includeTransport) {
+      offset = writeTransportEvent(bytes, offset, transportProperties);
+    }
     std::size_t emitted = 0;
+    if (!port.acceptsMidi) {
+      return storage;
+    }
     for (const auto& message : messages) {
       if (emitted >= boundedCount) {
         break;
@@ -2037,6 +2462,7 @@ private:
   LV2_Handle handle_ = nullptr;
   Lv2UridMapper uridMapper_;
   double sampleRate_ = 48000.0;
+  double sampleTime_ = 0.0;
   std::uint32_t maxBlockSize_ = 128;
   std::uint32_t requestedInputChannels_ = 2;
   std::uint32_t requestedOutputChannels_ = 2;
@@ -2181,17 +2607,24 @@ int runLv2HostWorkerNative(int argc, char** argv) {
           std::uint32_t frames = 128;
           double renderSampleRate = sampleRate;
           std::string encodedChannels;
+          std::string encodedInputBuses;
+          std::string encodedTransport;
           std::string framesText;
           std::string sampleRateText;
           stream >> framesText;
           stream >> sampleRateText;
           stream >> encodedChannels;
+          stream >> encodedInputBuses;
+          stream >> encodedTransport;
+          (void)encodedInputBuses;
+          HostTransportContext transport;
           if (!parseUint32Arg(framesText.c_str(), 1, kMaxWorkerFrames, frames) ||
-              !parseSampleRateArg(sampleRateText.c_str(), renderSampleRate)) {
+              !parseSampleRateArg(sampleRateText.c_str(), renderSampleRate) ||
+              !parseTransportContext(encodedTransport, host.sampleTime(), transport)) {
             std::cout << "{\"error\":\"invalid_render_arguments\"}" << std::endl;
             continue;
           }
-          const auto channels = host.render(frames, renderSampleRate, parseChannels(encodedChannels, frames));
+          const auto channels = host.render(frames, renderSampleRate, parseChannels(encodedChannels, frames), transport);
           std::cout << exampleInstrumentBlockToJson(channels) << std::endl;
           continue;
         }
