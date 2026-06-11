@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 
 namespace {
 
@@ -26,12 +27,49 @@ struct LV2_Descriptor {
   const void* (*extension_data)(const char* uri);
 };
 
+using LV2_URID = std::uint32_t;
+using LV2_URID_Map_Handle = void*;
+
+struct LV2_URID_Map {
+  LV2_URID_Map_Handle handle;
+  LV2_URID (*map)(LV2_URID_Map_Handle handle, const char* uri);
+};
+
+struct LV2_Atom {
+  std::uint32_t size;
+  LV2_URID type;
+};
+
+struct LV2_Atom_Sequence_Body {
+  LV2_URID unit;
+  std::uint32_t pad;
+};
+
+struct LV2_Atom_Sequence {
+  LV2_Atom atom;
+  LV2_Atom_Sequence_Body body;
+};
+
+union LV2_Atom_Event_Time {
+  std::int64_t frames;
+  double beats;
+};
+
+struct LV2_Atom_Event {
+  LV2_Atom_Event_Time time;
+  LV2_Atom body;
+};
+
+constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
+constexpr const char* kLv2MidiEventUri = "http://lv2plug.in/ns/ext/midi#MidiEvent";
+
 enum PortIndex : std::uint32_t {
   kGain = 0,
   kInputLeft = 1,
   kInputRight = 2,
   kOutputLeft = 3,
   kOutputRight = 4,
+  kMidiIn = 5,
 };
 
 struct GainPlugin {
@@ -40,14 +78,34 @@ struct GainPlugin {
   const float* inputRight = nullptr;
   float* outputLeft = nullptr;
   float* outputRight = nullptr;
+  const LV2_Atom_Sequence* midiIn = nullptr;
+  LV2_URID midiEventUrid = 0;
+  float midiGain = 1.0F;
 };
+
+std::size_t alignAtomSize(std::size_t size) {
+  return (size + 7U) & ~std::size_t(7U);
+}
 
 LV2_Handle instantiate(
     const LV2_Descriptor* /* descriptor */,
     double /* sampleRate */,
     const char* /* bundlePath */,
-    const LV2_Feature* const* /* features */) {
-  return new GainPlugin();
+    const LV2_Feature* const* features) {
+  auto* plugin = new GainPlugin();
+  if (features != nullptr) {
+    for (const LV2_Feature* const* feature = features; *feature != nullptr; ++feature) {
+      if ((*feature)->URI == nullptr || (*feature)->data == nullptr ||
+          std::strcmp((*feature)->URI, kLv2UridMapUri) != 0) {
+        continue;
+      }
+      auto* uridMap = static_cast<const LV2_URID_Map*>((*feature)->data);
+      if (uridMap->map != nullptr) {
+        plugin->midiEventUrid = uridMap->map(uridMap->handle, kLv2MidiEventUri);
+      }
+    }
+  }
+  return plugin;
 }
 
 void connectPort(LV2_Handle instance, std::uint32_t port, void* dataLocation) {
@@ -68,14 +126,45 @@ void connectPort(LV2_Handle instance, std::uint32_t port, void* dataLocation) {
     case kOutputRight:
       plugin->outputRight = static_cast<float*>(dataLocation);
       break;
+    case kMidiIn:
+      plugin->midiIn = static_cast<const LV2_Atom_Sequence*>(dataLocation);
+      break;
     default:
       break;
   }
 }
 
+void applyMidi(GainPlugin& plugin) {
+  if (plugin.midiIn == nullptr || plugin.midiEventUrid == 0 ||
+      plugin.midiIn->atom.size < sizeof(LV2_Atom_Sequence_Body)) {
+    return;
+  }
+
+  const auto sequenceBytes = static_cast<std::size_t>(plugin.midiIn->atom.size) + sizeof(LV2_Atom);
+  const auto* bytes = reinterpret_cast<const std::uint8_t*>(plugin.midiIn);
+  std::size_t offset = sizeof(LV2_Atom_Sequence);
+  while (offset + sizeof(LV2_Atom_Event) <= sequenceBytes) {
+    const auto* event = reinterpret_cast<const LV2_Atom_Event*>(bytes + offset);
+    const auto bodyOffset = offset + sizeof(LV2_Atom_Event);
+    const auto nextOffset = bodyOffset + alignAtomSize(event->body.size);
+    if (bodyOffset + event->body.size > sequenceBytes || nextOffset <= offset) {
+      break;
+    }
+
+    if (event->body.type == plugin.midiEventUrid && event->body.size >= 3) {
+      const auto* midi = bytes + bodyOffset;
+      if ((midi[0] & 0xF0U) == 0xB0U && midi[1] == 7U) {
+        plugin.midiGain = std::clamp(static_cast<float>(midi[2]) / 127.0F, 0.0F, 1.0F);
+      }
+    }
+    offset = nextOffset;
+  }
+}
+
 void run(LV2_Handle instance, std::uint32_t sampleCount) {
   auto* plugin = static_cast<GainPlugin*>(instance);
-  const float gain = std::clamp(plugin->gain == nullptr ? 1.0F : *plugin->gain, 0.0F, 2.0F);
+  applyMidi(*plugin);
+  const float gain = std::clamp(plugin->gain == nullptr ? 1.0F : *plugin->gain, 0.0F, 2.0F) * plugin->midiGain;
   for (std::uint32_t frame = 0; frame < sampleCount; ++frame) {
     if (plugin->outputLeft != nullptr) {
       plugin->outputLeft[frame] = (plugin->inputLeft == nullptr ? 0.0F : plugin->inputLeft[frame]) * gain;

@@ -193,6 +193,48 @@ if (nativeLv2Effect) {
       Math.abs(restoredLv2Gain.normalizedValue - 0.8) < 0.000001,
     "setState restores installed LV2 native control state"
   );
+  await request(
+    socket,
+    "setParameter",
+    {
+      instanceId: nativeLv2Instance.instanceId,
+      parameterId: "gain",
+      normalizedValue: 0.5
+    },
+    true,
+    pair.sessionToken
+  );
+  const nativeLv2Midi = await request(
+    socket,
+    "sendMidiEvents",
+    {
+      instanceId: nativeLv2Instance.instanceId,
+      events: [{ type: "controlChange", controller: 7, value: 0.25, channel: 0, time: 0 }]
+    },
+    true,
+    pair.sessionToken
+  );
+  assert(
+    nativeLv2Midi.accepted === true && nativeLv2Midi.eventCount === 1,
+    "installed LV2 effect accepts bounded MIDI for atom ports"
+  );
+  const nativeLv2MidiBlock = await request(
+    socket,
+    "processAudioBlock",
+    {
+      instanceId: nativeLv2Instance.instanceId,
+      blockId: 12,
+      sampleRate: 48000,
+      channels: [new Array(4).fill(0.4), new Array(4).fill(0.4)]
+    },
+    true,
+    pair.sessionToken
+  );
+  assert(nativeLv2MidiBlock.renderEngine === "native-lv2", "installed LV2 effect rendered through the native LV2 host worker");
+  assert(
+    nativeLv2MidiBlock.channels?.[0]?.[0] > 0.06 && nativeLv2MidiBlock.channels[0][0] < 0.16,
+    "installed LV2 effect received atom MIDI CC"
+  );
   await request(socket, "destroyInstance", { instanceId: nativeLv2Instance.instanceId }, true, pair.sessionToken);
 }
 
@@ -819,7 +861,16 @@ async function runNativeLv2WorkerSmoke() {
     assert(tail.tailSamples === 0 && tail.infiniteTail === false, "native LV2 worker reports conservative tail time");
 
     const midi = await requestWorker("midi on:60:0.8:0:0;cc:1:0.5:0:1;bend:0.1:0:2;pressure:0.4:0:3;poly:60:0.2:0:3;program:2:0:3");
-    assert(midi.eventCount === 6, "native LV2 worker validates richer MIDI batches before acknowledging them");
+    assert(midi.eventCount === 6, "native LV2 worker queues richer bounded MIDI batches");
+
+    await requestWorker("setParameter gain 0.5 0");
+    const midiVolume = await requestWorker("midi cc:7:0.25:0:0");
+    assert(midiVolume.eventCount === 1, "native LV2 worker queues MIDI for atom ports");
+    const midiRendered = await requestWorker("render 4 48000 0.4,0.4,0.4,0.4|0.4,0.4,0.4,0.4");
+    assert(
+      Math.abs(midiRendered.channels[0][0] - 0.4 * (32 / 127)) < 0.02,
+      "native LV2 worker delivers MIDI CC to atom MIDI ports"
+    );
 
     worker.stdin.write("midi cc:200:0.5:0:0\n", "utf8");
     const invalidMidi = await readJsonLine();

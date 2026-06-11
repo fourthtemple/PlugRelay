@@ -1560,6 +1560,20 @@ function decorateExamplePlugin(plugin) {
   const manifest = readExampleManifest(plugin);
   const defaults = normalizeExampleDefaults(plugin.pluginId, manifest);
   const presets = normalizeExamplePresets(plugin.pluginId, manifest, defaults);
+  const diagnostics = plugin.diagnostics ?? {};
+  const nativeHost =
+    plugin.format === "lv2" &&
+    plugin.kind !== "instrument" &&
+    NATIVE_HOST_STATUS.get("lv2")?.host === true &&
+    typeof diagnostics.bundlePath === "string" &&
+    diagnostics.bundlePath.length > 0 &&
+    diagnostics.hasExecutable === true
+      ? {
+          format: "lv2",
+          renderEngine: "native-lv2",
+          bundlePath: diagnostics.bundlePath
+        }
+      : undefined;
   return {
     pluginId: plugin.pluginId,
     format: plugin.format,
@@ -1572,10 +1586,11 @@ function decorateExamplePlugin(plugin) {
     inputs: plugin.inputs ?? 0,
     outputs: plugin.outputs ?? 2,
     metadata: normalizePluginClassMetadata(plugin.metadata, plugin.format),
-    executablePath: plugin.diagnostics?.executablePath,
+    executablePath: nativeHost ? undefined : diagnostics.executablePath,
     engine: defaults.engine,
     parameters: makeInstrumentParameters(defaults),
-    presets
+    presets,
+    nativeHost
   };
 }
 

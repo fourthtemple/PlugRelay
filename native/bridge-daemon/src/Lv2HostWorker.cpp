@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -57,6 +58,38 @@ struct LV2_Descriptor {
 };
 
 using Lv2DescriptorFunction = const LV2_Descriptor* (*)(std::uint32_t index);
+using LV2_URID = std::uint32_t;
+using LV2_URID_Map_Handle = void*;
+
+struct LV2_URID_Map {
+  LV2_URID_Map_Handle handle;
+  LV2_URID (*map)(LV2_URID_Map_Handle handle, const char* uri);
+};
+
+struct LV2_Atom {
+  std::uint32_t size;
+  LV2_URID type;
+};
+
+struct LV2_Atom_Sequence_Body {
+  LV2_URID unit;
+  std::uint32_t pad;
+};
+
+struct LV2_Atom_Sequence {
+  LV2_Atom atom;
+  LV2_Atom_Sequence_Body body;
+};
+
+union LV2_Atom_Event_Time {
+  std::int64_t frames;
+  double beats;
+};
+
+struct LV2_Atom_Event {
+  LV2_Atom_Event_Time time;
+  LV2_Atom body;
+};
 
 constexpr std::uint32_t kMaxWorkerFrames = 8192;
 constexpr std::uint32_t kMaxWorkerAudioPorts = 32;
@@ -71,6 +104,13 @@ constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
 constexpr double kMaxWorkerSampleRate = 384000.0;
 constexpr const char* kLv2ControlStateMagic = "soundbridge-lv2-control-state-v1";
+constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
+constexpr const char* kLv2AtomSequenceUri = "http://lv2plug.in/ns/ext/atom#Sequence";
+constexpr const char* kLv2AtomFrameTimeUri = "http://lv2plug.in/ns/ext/atom#frameTime";
+constexpr const char* kLv2MidiEventUri = "http://lv2plug.in/ns/ext/midi#MidiEvent";
+constexpr LV2_URID kUridAtomSequence = 1;
+constexpr LV2_URID kUridAtomFrameTime = 2;
+constexpr LV2_URID kUridMidiEvent = 3;
 
 enum class Lv2PortDirection {
   Input,
@@ -80,6 +120,7 @@ enum class Lv2PortDirection {
 enum class Lv2PortType {
   Audio,
   Control,
+  Midi,
 };
 
 struct Lv2Port {
@@ -103,6 +144,13 @@ struct Lv2BundleMetadata {
 struct PendingParameterChange {
   std::string parameterId;
   double normalizedValue = 0.0;
+  std::uint32_t sampleOffset = 0;
+};
+
+struct PendingMidiMessage {
+  std::uint8_t status = 0x90;
+  std::uint8_t data1 = 60;
+  std::uint8_t data2 = 100;
   std::uint32_t sampleOffset = 0;
 };
 
@@ -172,7 +220,11 @@ bool parseSampleRateArg(const char* text, double& out) {
   return parseDoubleArg(text, kMinWorkerSampleRate, kMaxWorkerSampleRate, out);
 }
 
-bool validateMidiEventToken(const std::string& token) {
+std::uint8_t scaled7Bit(double value) {
+  return static_cast<std::uint8_t>(std::clamp(std::lround(std::clamp(value, 0.0, 1.0) * 127.0), 0L, 127L));
+}
+
+bool parseMidiEventToken(const std::string& token, PendingMidiMessage& message) {
   std::vector<std::string> parts;
   std::stringstream stream(token);
   std::string part;
@@ -183,52 +235,97 @@ bool validateMidiEventToken(const std::string& token) {
     return false;
   }
 
-  auto parseChannelAndOffset = [&](std::size_t channelIndex, std::size_t offsetIndex) -> bool {
-    std::uint32_t channel = 0;
-    std::uint32_t sampleOffset = 0;
+  auto parseChannelAndOffset = [&](std::size_t channelIndex, std::size_t offsetIndex, std::uint32_t& channel, std::uint32_t& sampleOffset) -> bool {
     return parseUint32Arg(parts[channelIndex].c_str(), 0, 15, channel) &&
         parseUint32Arg(parts[offsetIndex].c_str(), 0, kMaxWorkerFrames - 1, sampleOffset);
   };
 
   if (parts[0] == "on" || parts[0] == "off" || parts[0] == "poly") {
     std::uint32_t note = 0;
+    std::uint32_t channel = 0;
+    std::uint32_t sampleOffset = 0;
     double value = 0.0;
-    return parts.size() == 5 &&
-        parseUint32Arg(parts[1].c_str(), 0, 127, note) &&
-        parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) &&
-        parseChannelAndOffset(3, 4);
+    if (parts.size() != 5 ||
+        !parseUint32Arg(parts[1].c_str(), 0, 127, note) ||
+        !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) ||
+        !parseChannelAndOffset(3, 4, channel, sampleOffset)) {
+      return false;
+    }
+    message.status = static_cast<std::uint8_t>((parts[0] == "on" ? 0x90 : parts[0] == "off" ? 0x80 : 0xA0) | channel);
+    message.data1 = static_cast<std::uint8_t>(note);
+    message.data2 = scaled7Bit(value);
+    message.sampleOffset = sampleOffset;
+    return true;
   }
   if (parts[0] == "cc") {
     std::uint32_t controller = 0;
+    std::uint32_t channel = 0;
+    std::uint32_t sampleOffset = 0;
     double value = 0.0;
-    return parts.size() == 5 &&
-        parseUint32Arg(parts[1].c_str(), 0, 127, controller) &&
-        parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) &&
-        parseChannelAndOffset(3, 4);
+    if (parts.size() != 5 ||
+        !parseUint32Arg(parts[1].c_str(), 0, 127, controller) ||
+        !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) ||
+        !parseChannelAndOffset(3, 4, channel, sampleOffset)) {
+      return false;
+    }
+    message.status = static_cast<std::uint8_t>(0xB0 | channel);
+    message.data1 = static_cast<std::uint8_t>(controller);
+    message.data2 = scaled7Bit(value);
+    message.sampleOffset = sampleOffset;
+    return true;
   }
   if (parts[0] == "bend") {
+    std::uint32_t channel = 0;
+    std::uint32_t sampleOffset = 0;
     double value = 0.0;
-    return parts.size() == 4 &&
-        parseDoubleArg(parts[1].c_str(), -1.0, 1.0, value) &&
-        parseChannelAndOffset(2, 3);
+    if (parts.size() != 4 ||
+        !parseDoubleArg(parts[1].c_str(), -1.0, 1.0, value) ||
+        !parseChannelAndOffset(2, 3, channel, sampleOffset)) {
+      return false;
+    }
+    const auto bend = static_cast<std::uint32_t>(
+        std::clamp(std::lround(((std::clamp(value, -1.0, 1.0) + 1.0) / 2.0) * 16383.0), 0L, 16383L));
+    message.status = static_cast<std::uint8_t>(0xE0 | channel);
+    message.data1 = static_cast<std::uint8_t>(bend & 0x7F);
+    message.data2 = static_cast<std::uint8_t>((bend >> 7) & 0x7F);
+    message.sampleOffset = sampleOffset;
+    return true;
   }
   if (parts[0] == "pressure") {
+    std::uint32_t channel = 0;
+    std::uint32_t sampleOffset = 0;
     double pressure = 0.0;
-    return parts.size() == 4 &&
-        parseDoubleArg(parts[1].c_str(), 0.0, 1.0, pressure) &&
-        parseChannelAndOffset(2, 3);
+    if (parts.size() != 4 ||
+        !parseDoubleArg(parts[1].c_str(), 0.0, 1.0, pressure) ||
+        !parseChannelAndOffset(2, 3, channel, sampleOffset)) {
+      return false;
+    }
+    message.status = static_cast<std::uint8_t>(0xD0 | channel);
+    message.data1 = scaled7Bit(pressure);
+    message.data2 = 0;
+    message.sampleOffset = sampleOffset;
+    return true;
   }
   if (parts[0] == "program") {
     std::uint32_t program = 0;
-    return parts.size() == 4 &&
-        parseUint32Arg(parts[1].c_str(), 0, 127, program) &&
-        parseChannelAndOffset(2, 3);
+    std::uint32_t channel = 0;
+    std::uint32_t sampleOffset = 0;
+    if (parts.size() != 4 ||
+        !parseUint32Arg(parts[1].c_str(), 0, 127, program) ||
+        !parseChannelAndOffset(2, 3, channel, sampleOffset)) {
+      return false;
+    }
+    message.status = static_cast<std::uint8_t>(0xC0 | channel);
+    message.data1 = static_cast<std::uint8_t>(program);
+    message.data2 = 0;
+    message.sampleOffset = sampleOffset;
+    return true;
   }
   return false;
 }
 
-bool validateMidiEvents(const std::string& encoded, std::size_t& eventCount) {
-  eventCount = 0;
+bool parseMidiEvents(const std::string& encoded, std::vector<PendingMidiMessage>& messages) {
+  messages.clear();
   if (encoded.empty() || encoded == "-") {
     return true;
   }
@@ -239,12 +336,36 @@ bool validateMidiEvents(const std::string& encoded, std::size_t& eventCount) {
     if (token.empty()) {
       continue;
     }
-    if (eventCount >= kMaxWorkerMidiEvents || !validateMidiEventToken(token)) {
+    if (messages.size() >= kMaxWorkerMidiEvents) {
       return false;
     }
-    ++eventCount;
+    PendingMidiMessage message;
+    if (!parseMidiEventToken(token, message)) {
+      return false;
+    }
+    messages.push_back(message);
   }
   return true;
+}
+
+std::size_t alignAtomSize(std::size_t size) {
+  return (size + 7U) & ~std::size_t(7U);
+}
+
+LV2_URID mapLv2Urid(LV2_URID_Map_Handle /* handle */, const char* uri) {
+  if (uri == nullptr) {
+    return 0;
+  }
+  if (std::strcmp(uri, kLv2AtomSequenceUri) == 0) {
+    return kUridAtomSequence;
+  }
+  if (std::strcmp(uri, kLv2AtomFrameTimeUri) == 0) {
+    return kUridAtomFrameTime;
+  }
+  if (std::strcmp(uri, kLv2MidiEventUri) == 0) {
+    return kUridMidiEvent;
+  }
+  return 0;
 }
 
 std::string cappedString(std::string value, std::size_t maxBytes = kMaxWorkerParameterStringBytes) {
@@ -563,6 +684,10 @@ std::optional<Lv2Port> parsePortBlock(const std::string& block) {
     port.type = Lv2PortType::Audio;
   } else if (block.find("lv2:ControlPort") != std::string::npos) {
     port.type = Lv2PortType::Control;
+  } else if (
+      (block.find("atom:AtomPort") != std::string::npos || block.find("ev:EventPort") != std::string::npos) &&
+      block.find("midi:MidiEvent") != std::string::npos) {
+    port.type = Lv2PortType::Midi;
   } else {
     return std::nullopt;
   }
@@ -741,14 +866,25 @@ public:
     for (auto& output : outputBuffers_) {
       output.assign(frames, 0.0F);
     }
-
     renderSegments(frames);
+    pendingMidiMessages_.clear();
     for (auto& channel : outputBuffers_) {
       for (auto& sample : channel) {
         sample = sanitizeSample(sample);
       }
     }
     return outputBuffers_;
+  }
+
+  void enqueueMidiEvents(std::vector<PendingMidiMessage> messages) {
+    if (messages.empty()) {
+      return;
+    }
+    const auto capacity = kMaxWorkerMidiEvents - std::min<std::size_t>(pendingMidiMessages_.size(), kMaxWorkerMidiEvents);
+    if (messages.size() > capacity) {
+      throw std::runtime_error("too_many_queued_midi_events");
+    }
+    pendingMidiMessages_.insert(pendingMidiMessages_.end(), messages.begin(), messages.end());
   }
 
   std::string parametersToJson() const {
@@ -925,6 +1061,8 @@ private:
         inputControlPortIndexes_.push_back(index);
       } else if (port.type == Lv2PortType::Control && port.direction == Lv2PortDirection::Output) {
         outputControlPortIndexes_.push_back(index);
+      } else if (port.type == Lv2PortType::Midi && port.direction == Lv2PortDirection::Input) {
+        inputMidiPortIndexes_.push_back(index);
       }
     }
   }
@@ -962,7 +1100,9 @@ private:
   }
 
   void instantiate() {
-    const LV2_Feature* const features[] = {nullptr};
+    LV2_URID_Map uridMap {nullptr, &mapLv2Urid};
+    LV2_Feature uridMapFeature {kLv2UridMapUri, &uridMap};
+    const LV2_Feature* const features[] = {&uridMapFeature, nullptr};
     auto bundlePath = bundlePath_;
     if (!bundlePath.empty() && bundlePath.back() != '/') {
       bundlePath.push_back('/');
@@ -973,6 +1113,7 @@ private:
     }
     inputBuffers_.assign(inputPortIndexes_.size(), std::vector<float>(1, 0.0F));
     outputBuffers_.assign(outputPortIndexes_.size(), std::vector<float>(1, 0.0F));
+    midiBuffers_.assign(inputMidiPortIndexes_.size(), emptyMidiSequenceBuffer());
     connectPorts(0);
     if (descriptor_->activate != nullptr) {
       descriptor_->activate(handle_);
@@ -982,7 +1123,7 @@ private:
 
   void renderSegments(std::uint32_t frames) {
     if (pendingParameterChanges_.empty()) {
-      runSegment(0, frames);
+      runSegment(0, frames, frames);
       return;
     }
 
@@ -1005,15 +1146,16 @@ private:
       if (eventIndex < parameterEvents.size()) {
         nextOffset = std::clamp<std::uint32_t>(parameterEvents[eventIndex].sampleOffset, 0, frames - 1);
       }
-      runSegment(frameOffset, nextOffset - frameOffset);
+      runSegment(frameOffset, nextOffset - frameOffset, frames);
       frameOffset = nextOffset;
     }
   }
 
-  void runSegment(std::uint32_t frameOffset, std::uint32_t frames) {
+  void runSegment(std::uint32_t frameOffset, std::uint32_t frames, std::uint32_t totalFrames) {
     if (frames == 0) {
       return;
     }
+    prepareMidiBuffers(frameOffset, frames, totalFrames);
     connectPorts(frameOffset);
     descriptor_->run(handle_, frames);
   }
@@ -1051,6 +1193,72 @@ private:
     for (const auto portIndex : outputControlPortIndexes_) {
       descriptor_->connect_port(handle_, ports_[portIndex].index, &ports_[portIndex].value);
     }
+    for (std::size_t index = 0; index < inputMidiPortIndexes_.size(); ++index) {
+      descriptor_->connect_port(
+          handle_,
+          ports_[inputMidiPortIndexes_[index]].index,
+          index < midiBuffers_.size() ? midiBuffers_[index].data() : nullptr);
+    }
+  }
+
+  std::vector<std::uint64_t> emptyMidiSequenceBuffer() const {
+    return midiSequenceBuffer({}, 0, maxBlockSize_, maxBlockSize_);
+  }
+
+  void prepareMidiBuffers(std::uint32_t frameOffset, std::uint32_t frames, std::uint32_t totalFrames) {
+    midiBuffers_.resize(inputMidiPortIndexes_.size());
+    for (auto& buffer : midiBuffers_) {
+      buffer = midiSequenceBuffer(pendingMidiMessages_, frameOffset, frames, totalFrames);
+    }
+  }
+
+  std::vector<std::uint64_t> midiSequenceBuffer(
+      const std::vector<PendingMidiMessage>& messages,
+      std::uint32_t frameOffset,
+      std::uint32_t frames,
+      std::uint32_t totalFrames) const {
+    const auto eventBytes = alignAtomSize(sizeof(LV2_Atom_Event) + 3);
+    const auto segmentEnd = static_cast<std::uint64_t>(frameOffset) + frames;
+    const auto lastFrame = totalFrames > 0 ? totalFrames - 1 : 0;
+    std::size_t boundedCount = 0;
+    for (const auto& message : messages) {
+      const auto effectiveOffset = std::min<std::uint32_t>(message.sampleOffset, lastFrame);
+      if (effectiveOffset >= frameOffset && effectiveOffset < segmentEnd) {
+        ++boundedCount;
+      }
+    }
+    boundedCount = std::min<std::size_t>(boundedCount, kMaxWorkerMidiEvents);
+    const auto totalBytes = sizeof(LV2_Atom_Sequence) + eventBytes * boundedCount;
+    std::vector<std::uint64_t> storage((alignAtomSize(totalBytes) + sizeof(std::uint64_t) - 1) / sizeof(std::uint64_t), 0);
+    auto* sequence = reinterpret_cast<LV2_Atom_Sequence*>(storage.data());
+    sequence->atom.type = kUridAtomSequence;
+    sequence->atom.size = static_cast<std::uint32_t>(totalBytes - sizeof(LV2_Atom));
+    sequence->body.unit = kUridAtomFrameTime;
+    sequence->body.pad = 0;
+
+    auto* bytes = reinterpret_cast<std::uint8_t*>(storage.data());
+    std::size_t offset = sizeof(LV2_Atom_Sequence);
+    std::size_t emitted = 0;
+    for (const auto& message : messages) {
+      if (emitted >= boundedCount) {
+        break;
+      }
+      const auto effectiveOffset = std::min<std::uint32_t>(message.sampleOffset, lastFrame);
+      if (effectiveOffset < frameOffset || effectiveOffset >= segmentEnd) {
+        continue;
+      }
+      auto* event = reinterpret_cast<LV2_Atom_Event*>(bytes + offset);
+      event->time.frames = effectiveOffset - frameOffset;
+      event->body.type = kUridMidiEvent;
+      event->body.size = 3;
+      auto* body = bytes + offset + sizeof(LV2_Atom_Event);
+      body[0] = message.status;
+      body[1] = message.data1;
+      body[2] = message.data2;
+      offset += eventBytes;
+      ++emitted;
+    }
+    return storage;
   }
 
   std::string parameterIdForPort(const Lv2Port& port) const {
@@ -1116,9 +1324,12 @@ private:
   std::vector<std::size_t> outputPortIndexes_;
   std::vector<std::size_t> inputControlPortIndexes_;
   std::vector<std::size_t> outputControlPortIndexes_;
+  std::vector<std::size_t> inputMidiPortIndexes_;
   std::vector<std::vector<float>> inputBuffers_;
   std::vector<std::vector<float>> outputBuffers_;
+  std::vector<std::vector<std::uint64_t>> midiBuffers_;
   std::vector<PendingParameterChange> pendingParameterChanges_;
+  std::vector<PendingMidiMessage> pendingMidiMessages_;
   bool activated_ = false;
 };
 
@@ -1160,6 +1371,17 @@ int runLv2HostWorkerNative(int argc, char** argv) {
 
       try {
         if (command == "noteOn" || command == "noteOff") {
+          int note = 60;
+          double velocity = command == "noteOn" ? 0.8 : 0.0;
+          int channel = 0;
+          int sampleOffset = 0;
+          stream >> note >> velocity >> channel >> sampleOffset;
+          PendingMidiMessage message;
+          message.status = static_cast<std::uint8_t>((command == "noteOn" ? 0x90 : 0x80) | std::clamp(channel, 0, 15));
+          message.data1 = static_cast<std::uint8_t>(std::clamp(note, 0, 127));
+          message.data2 = command == "noteOn" ? scaled7Bit(std::clamp(velocity, 0.0, 1.0)) : 0;
+          message.sampleOffset = static_cast<std::uint32_t>(std::clamp(sampleOffset, 0, static_cast<int>(kMaxWorkerFrames - 1)));
+          host.enqueueMidiEvents({message});
           std::cout << "{\"ok\":true}" << std::endl;
           continue;
         }
@@ -1167,12 +1389,13 @@ int runLv2HostWorkerNative(int argc, char** argv) {
         if (command == "midi") {
           std::string encodedEvents;
           stream >> encodedEvents;
-          std::size_t eventCount = 0;
-          if (!validateMidiEvents(encodedEvents, eventCount)) {
+          std::vector<PendingMidiMessage> messages;
+          if (!parseMidiEvents(encodedEvents, messages)) {
             std::cout << "{\"error\":\"invalid_midi_events\"}" << std::endl;
             continue;
           }
-          std::cout << "{\"ok\":true,\"eventCount\":" << eventCount << "}" << std::endl;
+          host.enqueueMidiEvents(messages);
+          std::cout << "{\"ok\":true,\"eventCount\":" << messages.size() << "}" << std::endl;
           continue;
         }
 
@@ -1276,7 +1499,7 @@ bool lv2HostWorkerAvailable() {
 
 std::string lv2HostWorkerStatus() {
 #ifndef _WIN32
-  return "Basic LV2 audio/control host worker is available; LV2 atom MIDI, extension state, worker, and UI extensions remain disabled.";
+  return "Basic LV2 audio/control host worker is available with bounded atom MIDI delivery; LV2 extension state, worker, and UI extensions remain disabled.";
 #else
   return "LV2 host worker is not available on this platform build.";
 #endif

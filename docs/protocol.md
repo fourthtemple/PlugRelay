@@ -81,7 +81,7 @@ Example paired capability payload:
         "scan": true,
         "host": true,
         "exampleHost": true,
-        "notes": "Basic LV2 audio/control host worker is available; LV2 atom MIDI, extension state, worker, and UI extensions remain disabled."
+        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI delivery; LV2 extension state, worker, and UI extensions remain disabled."
       }
     },
     "security": {
@@ -99,7 +99,7 @@ Example paired capability payload:
 }
 ```
 
-`host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. The reference LV2 host currently means compatible basic audio/control LV2 plugins, not every LV2 extension profile. `notes` is optional human-readable status text from the native backend.
+`host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. The reference LV2 host currently means compatible basic audio/control LV2 plugins with optional atom/event MIDI input ports, not every LV2 extension profile. `notes` is optional human-readable status text from the native backend.
 
 `capabilities.security` describes local multi-host protections and is safe to expose before pairing. Production hosts should require `sessionBoundToOrigin` and `instanceOwnership` before exposing installed plugins to arbitrary web origins.
 
@@ -369,7 +369,7 @@ Block size is bounded: the daemon clamps the frame count to the instance's `maxB
 
 ### `sendMidiEvents`
 
-Sends MIDI-like events to an instrument, MIDI effect, or native plugin worker that accepts MIDI. The reference daemon validates bounded note, control-change, pitch-bend, channel-pressure, poly-pressure, and program-change events before worker dispatch. VST3 workers deliver note and poly-pressure through `IEventList`; control-change, pitch-bend, and channel-pressure use VST3 `IMidiMapping` when the plugin exposes a parameter mapping. Audio Units receive short MIDI messages through `MusicDeviceMIDIEvent` where the CoreAudio unit supports them. LV2 atom/event MIDI ports are not implemented yet, so the basic LV2 audio/control worker validates MIDI batches but does not deliver MIDI to LV2 plugins.
+Sends MIDI-like events to an instrument, MIDI effect, or native plugin worker that accepts MIDI. The reference daemon validates bounded note, control-change, pitch-bend, channel-pressure, poly-pressure, and program-change events before worker dispatch. VST3 workers deliver note and poly-pressure through `IEventList`; control-change, pitch-bend, and channel-pressure use VST3 `IMidiMapping` when the plugin exposes a parameter mapping. Audio Units receive short MIDI messages through `MusicDeviceMIDIEvent` where the CoreAudio unit supports them. Compatible LV2 atom/event MIDI input ports receive bounded MIDI events as LV2 atom sequences on the next render block; if an LV2 plugin has no compatible MIDI input port, the worker validates and acknowledges the bounded batch without delivery.
 
 Request:
 

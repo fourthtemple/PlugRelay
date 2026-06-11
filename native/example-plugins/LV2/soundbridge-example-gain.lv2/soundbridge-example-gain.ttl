@@ -1,5 +1,7 @@
+@prefix atom: <http://lv2plug.in/ns/ext/atom#> .
 @prefix doap: <http://usefulinc.com/ns/doap#> .
 @prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix midi: <http://lv2plug.in/ns/ext/midi#> .
 
 <urn:soundbridge:example:lv2-gain>
   a lv2:Plugin ;
@@ -32,4 +34,11 @@
     lv2:index 4 ;
     lv2:symbol "out_r" ;
     lv2:name "Output R"
+  ], [
+    a lv2:InputPort, atom:AtomPort ;
+    atom:bufferType atom:Sequence ;
+    atom:supports midi:MidiEvent ;
+    lv2:index 5 ;
+    lv2:symbol "midi_in" ;
+    lv2:name "MIDI In"
   ] .
