@@ -1,13 +1,11 @@
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createDaemonControlEvents } from "./daemon-control-events.mjs";
+import { createDaemonLifecycle } from "./daemon-lifecycle.mjs";
 import { createMockInstrumentSupport } from "./daemon-mock-instruments.mjs";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
-import {
-  createPluginCatalogSupport,
-  loadNativeHostStatus,
-  resolveNativeRenderer
-} from "./daemon-plugin-catalog.mjs";
+import { createPluginCatalogSupport, loadNativeHostStatus, resolveNativeRenderer } from "./daemon-plugin-catalog.mjs";
+import { createDaemonRuntimePayloads } from "./daemon-runtime-payloads.mjs";
 import {
   assertLoopbackHost,
   createDaemonValidators,
@@ -75,15 +73,7 @@ const validators = createDaemonValidators({
   maxSampleRate: MAX_SAMPLE_RATE,
   makeProtocolError: protocolError
 });
-const {
-  boundedFrames,
-  isPowerOfTwo,
-  requireBoolean,
-  requireIntInRange,
-  requireIntegerInRange,
-  requireNumberInRange,
-  requireSampleRate
-} = validators;
+const { boundedFrames, requireIntInRange, requireNumberInRange, requireSampleRate } = validators;
 
 assertLoopbackHost(HOST, "SOUNDBRIDGE_HOST", "SOUNDBRIDGE_ALLOW_NON_LOOPBACK");
 
@@ -108,8 +98,6 @@ const {
   clampSampleRate,
   clonePluginLayout,
   finiteNumber,
-  isBase64Text,
-  normalizeInt,
   normalizeLatencySamples,
   normalizeNativeState,
   normalizePluginLayout,
@@ -169,6 +157,28 @@ const {
   validators
 });
 const {
+  decodeStateEnvelope,
+  encodeStateEnvelope,
+  firstAudioFrameCount,
+  getNativeState,
+  normalizeAudioBusBlocks,
+  normalizeAudioChannels,
+  normalizeOutputBusBlocks,
+  normalizeTransportState
+} = createDaemonRuntimePayloads({
+  limits: {
+    maxAudioChannels: MAX_AUDIO_CHANNELS,
+    maxPluginBuses: MAX_PLUGIN_BUSES,
+    maxPluginStateEnvelopeBytes: MAX_PLUGIN_STATE_ENVELOPE_BYTES,
+    maxTransportPositionMusic: MAX_TRANSPORT_POSITION_MUSIC,
+    maxTransportSamplePosition: MAX_TRANSPORT_SAMPLE_POSITION,
+    maxTransportTempoBpm: MAX_TRANSPORT_TEMPO_BPM
+  },
+  makeProtocolError: protocolError,
+  normalizers,
+  validators
+});
+const {
   ExampleInstrumentWorker,
   NativeHostWorker,
   formatNativeHostName
@@ -180,6 +190,20 @@ const {
 const sessions = new Map();
 const instances = new Map();
 const editors = new Map();
+const {
+  assertPaired,
+  cleanupConnection,
+  cleanupExpiredEditors,
+  cleanupExpiredSessions,
+  destroyEditorRecord,
+  destroyInstanceRecord,
+  sessionsForOrigin
+} = createDaemonLifecycle({
+  sessions,
+  instances,
+  editors,
+  makeProtocolError: protocolError
+});
 
 const server = createDaemonWebSocketServer({
   host: HOST,
@@ -896,45 +920,6 @@ function closeEditor(editorId, session) {
   };
 }
 
-async function getNativeState(instance) {
-  if (!instance.worker || typeof instance.worker.getState !== "function") {
-    return undefined;
-  }
-  return instance.worker.getState();
-}
-
-function encodeStateEnvelope(envelope) {
-  const json = JSON.stringify(envelope);
-  const encoded = Buffer.from(json, "utf8").toString("base64");
-  if (Buffer.byteLength(encoded, "utf8") > MAX_PLUGIN_STATE_ENVELOPE_BYTES) {
-    throw protocolError("state_too_large", "Plugin state exceeded the configured state envelope limit.", {
-      maxStateEnvelopeBytes: MAX_PLUGIN_STATE_ENVELOPE_BYTES
-    });
-  }
-  return encoded;
-}
-
-function decodeStateEnvelope(state) {
-  const text = String(state ?? "");
-  if (
-    text.length === 0 ||
-    Buffer.byteLength(text, "utf8") > MAX_PLUGIN_STATE_ENVELOPE_BYTES ||
-    !isBase64Text(text)
-  ) {
-    throw protocolError("bad_state", "State was not valid SoundBridge state.");
-  }
-
-  try {
-    const decoded = Buffer.from(text, "base64");
-    return JSON.parse(decoded.toString("utf8"));
-  } catch (error) {
-    if (error?.code) {
-      throw error;
-    }
-    throw protocolError("bad_state", "State was not valid SoundBridge state.");
-  }
-}
-
 async function processAudioBlock(payload, session) {
   const instance = getInstance(payload.instanceId, session);
   const frames = boundedFrames(firstAudioFrameCount(payload, instance.maxBlockSize), instance.maxBlockSize);
@@ -1011,175 +996,6 @@ async function processAudioBlock(payload, session) {
     tailSamples: normalizeTailSamples(instance.pluginTailSamples),
     infiniteTail: Boolean(instance.pluginInfiniteTail)
   };
-}
-
-function firstAudioFrameCount(payload, fallback) {
-  if (payload.frames != null) {
-    return payload.frames;
-  }
-  if (Array.isArray(payload.channels) && Array.isArray(payload.channels[0])) {
-    return payload.channels[0].length;
-  }
-  if (Array.isArray(payload.inputBuses)) {
-    for (const bus of payload.inputBuses) {
-      if (Array.isArray(bus?.channels) && Array.isArray(bus.channels[0])) {
-        return bus.channels[0].length;
-      }
-    }
-  }
-  return fallback;
-}
-
-function normalizeAudioChannels(channels, maxChannels, frames) {
-  if (!Array.isArray(channels) || maxChannels <= 0) {
-    return [];
-  }
-  return channels.slice(0, Math.min(MAX_AUDIO_CHANNELS, maxChannels)).map((channel) =>
-    Array.from({ length: frames }, (_, frame) => {
-      const value = Number(Array.isArray(channel) ? channel[frame] : 0);
-      return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
-    })
-  );
-}
-
-function normalizeAudioBusBlocks(value, mainChannels, busLayouts = [], frames, options = {}) {
-  const byIndex = new Map();
-  if (Array.isArray(mainChannels) && mainChannels.length > 0) {
-    byIndex.set(0, { index: 0, channels: mainChannels });
-  }
-  if (value != null && !Array.isArray(value)) {
-    if (options.strictRequest) {
-      throw protocolError("invalid_argument", `${options.label ?? "audioBuses"} must be an array.`);
-    }
-    return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
-  }
-  if (Array.isArray(value)) {
-    if (options.strictRequest && value.length > MAX_PLUGIN_BUSES) {
-      throw protocolError("invalid_argument", `${options.label ?? "audioBuses"} must contain at most ${MAX_PLUGIN_BUSES} bus blocks.`, {
-        maxPluginBuses: MAX_PLUGIN_BUSES
-      });
-    }
-    const seenExplicitIndexes = new Set();
-    for (const [position, bus] of value.slice(0, MAX_PLUGIN_BUSES).entries()) {
-      if ((!bus || typeof bus !== "object" || Array.isArray(bus)) && options.strictRequest) {
-        throw protocolError("invalid_argument", `${options.label ?? "audioBuses"}[${position}] must be an object.`);
-      }
-      const index = options.strictRequest
-        ? requireIntegerInRange(bus?.index, 0, MAX_PLUGIN_BUSES - 1, `${options.label ?? "audioBuses"}[${position}].index`)
-        : normalizeInt(bus?.index, 0, MAX_PLUGIN_BUSES - 1, 0);
-      if (options.strictRequest && seenExplicitIndexes.has(index)) {
-        throw protocolError("invalid_argument", `${options.label ?? "audioBuses"} must not contain duplicate bus index ${index}.`, {
-          index
-        });
-      }
-      seenExplicitIndexes.add(index);
-      const layoutChannels = busLayouts.find((layout) => layout.index === index)?.channels ?? MAX_AUDIO_CHANNELS;
-      byIndex.set(index, {
-        index,
-        channels: normalizeAudioChannels(bus?.channels, layoutChannels, frames)
-      });
-    }
-  }
-  return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
-}
-
-function normalizeOutputBusBlocks(value, mainChannels, layout, frames) {
-  const outputLayouts = layout?.outputBusLayouts ?? [];
-  const buses = normalizeAudioBusBlocks(value, normalizeAudioChannels(mainChannels, layout?.outputChannels ?? MAX_AUDIO_CHANNELS, frames), outputLayouts, frames);
-  if (buses.length > 0) {
-    return buses;
-  }
-  return [{
-    index: 0,
-    channels: normalizeAudioChannels(mainChannels, layout?.outputChannels ?? MAX_AUDIO_CHANNELS, frames)
-  }];
-}
-
-function normalizeTransportState(value) {
-  if (value == null) {
-    return undefined;
-  }
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw protocolError("invalid_argument", "transport must be an object.");
-  }
-
-  const allowedFields = new Set([
-    "playing",
-    "recording",
-    "loopActive",
-    "tempo",
-    "timeSignatureNumerator",
-    "timeSignatureDenominator",
-    "projectTimeMusic",
-    "barPositionMusic",
-    "cycleStartMusic",
-    "cycleEndMusic",
-    "samplePosition"
-  ]);
-  for (const key of Object.keys(value)) {
-    if (!allowedFields.has(key)) {
-      throw protocolError("invalid_argument", `Unknown transport field: ${key}.`);
-    }
-  }
-
-  const transport = {};
-  const assignBoolean = (property) => {
-    if (Object.hasOwn(value, property)) {
-      transport[property] = requireBoolean(value[property], `transport.${property}`);
-    }
-  };
-  const assignNumber = (property, min, max) => {
-    if (Object.hasOwn(value, property)) {
-      transport[property] = requireNumberInRange(value[property], min, max, `transport.${property}`);
-    }
-  };
-  const assignInteger = (property, min, max) => {
-    if (Object.hasOwn(value, property)) {
-      transport[property] = requireIntegerInRange(value[property], min, max, `transport.${property}`);
-    }
-  };
-
-  assignBoolean("playing");
-  assignBoolean("recording");
-  assignBoolean("loopActive");
-  assignNumber("tempo", 1, MAX_TRANSPORT_TEMPO_BPM);
-  assignInteger("timeSignatureNumerator", 1, 64);
-  assignInteger("timeSignatureDenominator", 1, 64);
-  assignNumber("projectTimeMusic", 0, MAX_TRANSPORT_POSITION_MUSIC);
-  assignNumber("barPositionMusic", 0, MAX_TRANSPORT_POSITION_MUSIC);
-  assignNumber("cycleStartMusic", 0, MAX_TRANSPORT_POSITION_MUSIC);
-  assignNumber("cycleEndMusic", 0, MAX_TRANSPORT_POSITION_MUSIC);
-  assignInteger("samplePosition", 0, MAX_TRANSPORT_SAMPLE_POSITION);
-
-  if (
-    Object.hasOwn(transport, "timeSignatureNumerator") !==
-    Object.hasOwn(transport, "timeSignatureDenominator")
-  ) {
-    throw protocolError("invalid_argument", "transport time signature numerator and denominator must be supplied together.");
-  }
-  if (
-    Object.hasOwn(transport, "timeSignatureDenominator") &&
-    !isPowerOfTwo(transport.timeSignatureDenominator)
-  ) {
-    throw protocolError("invalid_argument", "transport.timeSignatureDenominator must be a power of two in 1..64.", {
-      value: value.timeSignatureDenominator
-    });
-  }
-  if (Object.hasOwn(transport, "cycleStartMusic") !== Object.hasOwn(transport, "cycleEndMusic")) {
-    throw protocolError("invalid_argument", "transport cycle start and end must be supplied together.");
-  }
-  if (
-    Object.hasOwn(transport, "cycleStartMusic") &&
-    Object.hasOwn(transport, "cycleEndMusic") &&
-    transport.cycleEndMusic < transport.cycleStartMusic
-  ) {
-    throw protocolError("invalid_argument", "transport.cycleEndMusic must be greater than or equal to transport.cycleStartMusic.", {
-      cycleStartMusic: transport.cycleStartMusic,
-      cycleEndMusic: transport.cycleEndMusic
-    });
-  }
-
-  return transport;
 }
 
 function getInstance(instanceId, session) {
@@ -1375,95 +1191,4 @@ function renderNativeExampleBlock(rendererExecutable, instance, frames, sampleRa
 
 function voicesToNativeArgument(voices) {
   return Array.from(voices.values(), (voice) => `${voice.note}:${voice.velocity}`).join(",");
-}
-
-function assertPaired(sessionToken, command, context) {
-  const session = sessions.get(sessionToken);
-  if (!session) {
-    throw protocolError("not_paired", `Pair before calling ${command}.`);
-  }
-  if (session.expiresAt <= Date.now()) {
-    destroySession(sessionToken);
-    throw protocolError("session_expired", "Pairing session expired.");
-  }
-  if (session.connectionId !== context.connectionId) {
-    throw protocolError("session_connection_mismatch", "This session token is bound to a different browser connection.");
-  }
-  if (session.origin !== context.requestOrigin) {
-    throw protocolError("origin_mismatch", "This session token is bound to a different browser origin.");
-  }
-  session.lastSeenAt = Date.now();
-  return session;
-}
-
-function cleanupConnection(context) {
-  for (const sessionToken of context.sessionTokens) {
-    destroySession(sessionToken);
-  }
-  context.sessionTokens.clear();
-}
-
-function cleanupExpiredSessions() {
-  const now = Date.now();
-  for (const [sessionToken, session] of sessions) {
-    if (session.expiresAt <= now) {
-      destroySession(sessionToken);
-    }
-  }
-}
-
-function destroySession(sessionToken) {
-  const session = sessions.get(sessionToken);
-  if (!session) {
-    return;
-  }
-  for (const editorId of Array.from(session.editors)) {
-    const editor = editors.get(editorId);
-    if (editor) {
-      destroyEditorRecord(editor);
-    }
-  }
-  for (const instanceId of Array.from(session.instances)) {
-    const instance = instances.get(instanceId);
-    if (instance) {
-      destroyInstanceRecord(instance);
-    }
-  }
-  sessions.delete(sessionToken);
-}
-
-function destroyInstanceRecord(instance) {
-  destroyEditorsForInstance(instance.instanceId);
-  instance.worker?.destroy();
-  instances.delete(instance.instanceId);
-  const owner = sessions.get(instance.ownerSessionToken);
-  owner?.instances.delete(instance.instanceId);
-}
-
-function cleanupExpiredEditors() {
-  const now = Date.now();
-  for (const editor of Array.from(editors.values())) {
-    if (editor.expiresAt <= now || !instances.has(editor.instanceId)) {
-      destroyEditorRecord(editor);
-    }
-  }
-}
-
-function destroyEditorsForInstance(instanceId) {
-  for (const editor of Array.from(editors.values())) {
-    if (editor.instanceId === instanceId) {
-      destroyEditorRecord(editor);
-    }
-  }
-}
-
-function destroyEditorRecord(editor) {
-  editors.delete(editor.editorId);
-  const owner = sessions.get(editor.ownerSessionToken);
-  owner?.editors.delete(editor.editorId);
-}
-
-function sessionsForOrigin(origin) {
-  cleanupExpiredSessions();
-  return Array.from(sessions.values()).filter((session) => session.origin === origin);
 }

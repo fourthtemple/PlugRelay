@@ -4,9 +4,7 @@ import path from "node:path";
 const ROOT = process.cwd();
 const MAX_SOURCE_LINES = 1200;
 
-const OVERSIZED_BASELINE = new Map([
-  ["scripts/mock-daemon.mjs", 1469]
-]);
+const OVERSIZED_BASELINE = new Map();
 
 const SOURCE_EXTENSIONS = new Set([
   ".c",
