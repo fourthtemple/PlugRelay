@@ -1,0 +1,415 @@
+export function createDaemonNormalizers(options = {}) {
+  const limits = {
+    maxAudioChannels: positiveInteger(options.maxAudioChannels, 32),
+    maxBlockSize: positiveInteger(options.maxBlockSize, 8192),
+    maxPluginBuses: positiveInteger(options.maxPluginBuses, 32),
+    maxPluginLatencySamples: positiveInteger(options.maxPluginLatencySamples, 1_048_576),
+    maxPluginParameters: positiveInteger(options.maxPluginParameters, 1024),
+    maxPluginParameterTextBytes: positiveInteger(options.maxPluginParameterTextBytes, 160),
+    maxPluginPrograms: positiveInteger(options.maxPluginPrograms, 256),
+    maxPluginStateBytes: positiveInteger(options.maxPluginStateBytes, 384 * 1024),
+    maxPluginTailSamples: positiveInteger(options.maxPluginTailSamples, 1_048_576),
+    minSampleRate: positiveInteger(options.minSampleRate, 8000),
+    maxSampleRate: positiveInteger(options.maxSampleRate, 384000)
+  };
+  const protocolError = options.makeProtocolError ?? defaultProtocolError;
+
+  function encodeMidiEvents(events) {
+    if (!Array.isArray(events) || events.length === 0) {
+      return "-";
+    }
+
+    return events
+      .map((event) => {
+        if (event.type === "noteOn") {
+          return ["on", event.note, event.velocity, event.channel, event.time].join(":");
+        }
+        if (event.type === "noteOff") {
+          return ["off", event.note, event.velocity, event.channel, event.time].join(":");
+        }
+        if (event.type === "controlChange") {
+          return ["cc", event.controller, event.value, event.channel, event.time].join(":");
+        }
+        if (event.type === "pitchBend") {
+          return ["bend", event.value, event.channel, event.time].join(":");
+        }
+        if (event.type === "channelPressure") {
+          return ["pressure", event.pressure, event.channel, event.time].join(":");
+        }
+        if (event.type === "polyPressure") {
+          return ["poly", event.note, event.pressure, event.channel, event.time].join(":");
+        }
+        if (event.type === "programChange") {
+          return ["program", event.program, event.channel, event.time].join(":");
+        }
+        throw protocolError("invalid_argument", `Unsupported MIDI event type: ${event.type}`);
+      })
+      .join(";");
+  }
+
+  function normalizeWorkerParameters(parameters) {
+    if (!Array.isArray(parameters)) {
+      return [];
+    }
+    return parameters
+      .slice(0, limits.maxPluginParameters)
+      .map((parameter) => normalizeWorkerParameter(parameter))
+      .filter(Boolean);
+  }
+
+  function normalizeWorkerParameter(parameter) {
+    if (!parameter || typeof parameter !== "object") {
+      return undefined;
+    }
+    const id = truncateText(parameter.id, 64);
+    if (!id) {
+      return undefined;
+    }
+    const normalizedValue = clamp01(Number(parameter.normalizedValue));
+    const defaultNormalizedValue = clamp01(Number(parameter.defaultNormalizedValue ?? normalizedValue));
+    const minPlain = finiteNumber(parameter.minPlain, 0);
+    const maxPlain = finiteNumber(parameter.maxPlain, 1);
+    const plainValue = finiteNumber(parameter.plainValue, minPlain + (maxPlain - minPlain) * normalizedValue);
+
+    const normalized = {
+      id,
+      name: truncateText(parameter.name, limits.maxPluginParameterTextBytes) || id,
+      normalizedValue,
+      defaultNormalizedValue,
+      unit: truncateText(parameter.unit, 64) || undefined,
+      minPlain,
+      maxPlain,
+      plainValue,
+      automatable: parameter.automatable !== false,
+      stepCount: Math.max(0, Math.min(1_000_000, Math.floor(Number(parameter.stepCount ?? 0)))),
+      readOnly: Boolean(parameter.readOnly)
+    };
+    if (parameter.programChange === true) {
+      normalized.programChange = true;
+      const programList = normalizeProgramList(parameter.programList);
+      if (programList) {
+        normalized.programList = programList;
+      }
+    }
+    return normalized;
+  }
+
+  function normalizeProgramList(programList) {
+    if (!programList || typeof programList !== "object" || !Array.isArray(programList.programs)) {
+      return undefined;
+    }
+    const programs = programList.programs
+      .slice(0, limits.maxPluginPrograms)
+      .map((program, fallbackIndex) => {
+        if (!program || typeof program !== "object") {
+          return undefined;
+        }
+        const index = normalizeInt(program.index, 0, limits.maxPluginPrograms - 1, fallbackIndex);
+        const name = truncateText(program.name ?? `Program ${index + 1}`, limits.maxPluginParameterTextBytes) || `Program ${index + 1}`;
+        return {
+          index,
+          name,
+          normalizedValue: clamp01(Number(program.normalizedValue))
+        };
+      })
+      .filter(Boolean);
+    if (programs.length === 0) {
+      return undefined;
+    }
+    return {
+      id: normalizeInt(programList.id, -2147483648, 2147483647, 0),
+      name: truncateText(programList.name ?? "Programs", limits.maxPluginParameterTextBytes) || "Programs",
+      programs
+    };
+  }
+
+  function normalizeNativeState(nativeState, format) {
+    if (nativeState == null) {
+      return undefined;
+    }
+    if (!nativeState || typeof nativeState !== "object" || nativeState.format !== format) {
+      throw protocolError("bad_state", "State belongs to a different native plugin format.");
+    }
+
+    if (format === "au" || format === "lv2") {
+      return {
+        format,
+        state: normalizeStatePart(nativeState.state, "nativeState.state")
+      };
+    }
+
+    if (format === "vst3") {
+      const component = normalizeStatePart(nativeState.component, "nativeState.component");
+      const controller = normalizeStatePart(nativeState.controller, "nativeState.controller");
+      const totalBytes = decodedBase64Length(component) + decodedBase64Length(controller);
+      if (totalBytes > limits.maxPluginStateBytes) {
+        throw protocolError("state_too_large", "Native plugin state exceeded the configured state limit.", {
+          maxStateBytes: limits.maxPluginStateBytes
+        });
+      }
+      return {
+        format,
+        component,
+        controller
+      };
+    }
+
+    return undefined;
+  }
+
+  function normalizeWorkerState(format, state) {
+    if (format === "au" || format === "lv2") {
+      return {
+        format,
+        state: normalizeStatePart(state, "worker.state")
+      };
+    }
+
+    if (format === "vst3") {
+      if (!state || typeof state !== "object") {
+        return {
+          format,
+          component: "",
+          controller: ""
+        };
+      }
+      const component = normalizeStatePart(state.component, "worker.state.component");
+      const controller = normalizeStatePart(state.controller, "worker.state.controller");
+      const totalBytes = decodedBase64Length(component) + decodedBase64Length(controller);
+      if (totalBytes > limits.maxPluginStateBytes) {
+        throw protocolError("state_too_large", "Native plugin state exceeded the configured state limit.", {
+          maxStateBytes: limits.maxPluginStateBytes
+        });
+      }
+      return {
+        format,
+        component,
+        controller
+      };
+    }
+
+    return undefined;
+  }
+
+  function normalizeStatePart(value, label) {
+    const text = String(value ?? "");
+    if (text.length === 0) {
+      return "";
+    }
+    if (!isBase64Text(text)) {
+      throw protocolError("bad_state", `${label} was not valid base64.`);
+    }
+    const decodedLength = decodedBase64Length(text);
+    if (decodedLength > limits.maxPluginStateBytes) {
+      throw protocolError("state_too_large", `${label} exceeded the configured state limit.`, {
+        maxStateBytes: limits.maxPluginStateBytes
+      });
+    }
+    return text;
+  }
+
+  function normalizeLatencySamples(value) {
+    const number = Math.floor(Number(value));
+    if (!Number.isFinite(number) || number < 0) {
+      return 0;
+    }
+    return Math.min(number, limits.maxPluginLatencySamples);
+  }
+
+  function normalizeTailSamples(value) {
+    const number = Math.floor(Number(value));
+    if (!Number.isFinite(number) || number < 0) {
+      return 0;
+    }
+    return Math.min(number, limits.maxPluginTailSamples);
+  }
+
+  function normalizeTailReport(value) {
+    return {
+      tailSamples: normalizeTailSamples(value?.tailSamples),
+      infiniteTail: Boolean(value?.infiniteTail)
+    };
+  }
+
+  function normalizePluginLayout(value, fallback = {}) {
+    const requestedInputChannels = normalizeInt(
+      value?.requestedInputChannels,
+      0,
+      limits.maxAudioChannels,
+      fallback.requestedInputChannels ?? fallback.inputChannels ?? 0
+    );
+    const requestedOutputChannels = normalizeInt(
+      value?.requestedOutputChannels,
+      1,
+      limits.maxAudioChannels,
+      fallback.requestedOutputChannels ?? fallback.outputChannels ?? 2
+    );
+    const inputChannels = normalizeInt(
+      value?.inputChannels,
+      0,
+      limits.maxAudioChannels,
+      fallback.inputChannels ?? requestedInputChannels
+    );
+    const outputChannels = normalizeInt(
+      value?.outputChannels,
+      1,
+      limits.maxAudioChannels,
+      fallback.outputChannels ?? requestedOutputChannels
+    );
+    const inputBuses = normalizeInt(value?.inputBuses, 0, limits.maxPluginBuses, fallback.inputBuses ?? (inputChannels > 0 ? 1 : 0));
+    const outputBuses = normalizeInt(value?.outputBuses, 1, limits.maxPluginBuses, fallback.outputBuses ?? 1);
+    const inputBusLayouts = normalizeBusLayouts(
+      value?.inputBusLayouts,
+      fallback.inputBusLayouts,
+      "input",
+      inputBuses,
+      inputChannels
+    );
+    const outputBusLayouts = normalizeBusLayouts(
+      value?.outputBusLayouts,
+      fallback.outputBusLayouts,
+      "output",
+      outputBuses,
+      outputChannels
+    );
+    return {
+      requestedInputChannels,
+      requestedOutputChannels,
+      inputChannels,
+      outputChannels,
+      inputBuses: inputBusLayouts.length,
+      outputBuses: Math.max(1, outputBusLayouts.length),
+      inputBusLayouts,
+      outputBusLayouts,
+      sampleRate: clampSampleRate(value?.sampleRate, fallback.sampleRate ?? 48000),
+      maxBlockSize: normalizeInt(value?.maxBlockSize, 1, limits.maxBlockSize, fallback.maxBlockSize ?? 128)
+    };
+  }
+
+  function normalizeBusLayouts(value, fallback, direction, busCount, totalChannels) {
+    const source = Array.isArray(value) ? value : Array.isArray(fallback) ? fallback : undefined;
+    const normalized = [];
+    if (source) {
+      for (const bus of source.slice(0, limits.maxPluginBuses)) {
+        normalized.push(normalizeBusLayout(bus, direction, normalized.length));
+      }
+    }
+    if (normalized.length > 0) {
+      return normalized;
+    }
+    return defaultBusLayouts(direction, busCount, totalChannels);
+  }
+
+  function defaultBusLayouts(direction, busCount, totalChannels) {
+    const count = normalizeInt(busCount, direction === "input" ? 0 : 1, limits.maxPluginBuses, direction === "input" ? 0 : 1);
+    return Array.from({ length: count }, (_, index) => ({
+      index,
+      direction,
+      mediaType: "audio",
+      name: index === 0 ? (direction === "input" ? "Main Input" : "Main Output") : `${direction === "input" ? "Aux Input" : "Aux Output"} ${index}`,
+      type: index === 0 ? "main" : "aux",
+      channels: index === 0 ? normalizeInt(totalChannels, 0, limits.maxAudioChannels, direction === "input" ? 0 : 2) : 0,
+      active: index === 0
+    }));
+  }
+
+  function normalizeBusLayout(bus, direction, fallbackIndex) {
+    const type = bus?.type === "main" || bus?.type === "aux" ? bus.type : "unknown";
+    return {
+      index: normalizeInt(bus?.index, 0, limits.maxPluginBuses - 1, fallbackIndex),
+      direction,
+      mediaType: "audio",
+      name: truncateText(bus?.name ?? `${direction === "input" ? "Input" : "Output"} ${fallbackIndex + 1}`, limits.maxPluginParameterTextBytes),
+      type,
+      channels: normalizeInt(bus?.channels, 0, limits.maxAudioChannels, 0),
+      active: Boolean(bus?.active)
+    };
+  }
+
+  function clonePluginLayout(layout) {
+    return { ...normalizePluginLayout(layout) };
+  }
+
+  function clampSampleRate(value, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return fallback;
+    }
+    return Math.max(limits.minSampleRate, Math.min(limits.maxSampleRate, number));
+  }
+
+  function normalizeInt(value, min, max, fallback) {
+    const fallbackNumber = Math.floor(Number(fallback));
+    const number = Math.floor(Number(value));
+    const candidate = Number.isFinite(number) ? number : fallbackNumber;
+    if (!Number.isFinite(candidate)) {
+      return min;
+    }
+    return Math.max(min, Math.min(max, candidate));
+  }
+
+  function truncateText(value, maxBytes) {
+    const text = String(value ?? "");
+    if (Buffer.byteLength(text, "utf8") <= maxBytes) {
+      return text;
+    }
+    return Buffer.from(text, "utf8").subarray(0, maxBytes).toString("utf8").replace(/\uFFFD+$/u, "");
+  }
+
+  return {
+    clamp01,
+    clampSampleRate,
+    clonePluginLayout,
+    decodedBase64Length,
+    encodeMidiEvents,
+    finiteNumber,
+    isBase64Text,
+    limits,
+    normalizeInt,
+    normalizeLatencySamples,
+    normalizeNativeState,
+    normalizePluginLayout,
+    normalizeTailReport,
+    normalizeTailSamples,
+    normalizeWorkerParameter,
+    normalizeWorkerParameters,
+    normalizeWorkerState,
+    truncateText
+  };
+}
+
+function clamp01(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, value));
+}
+
+function decodedBase64Length(text) {
+  if (!text) {
+    return 0;
+  }
+  const padding = text.endsWith("==") ? 2 : text.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((text.length / 4) * 3) - padding);
+}
+
+function defaultProtocolError(code, message, details) {
+  const error = new Error(message);
+  error.code = code;
+  error.details = details;
+  return error;
+}
+
+function finiteNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function isBase64Text(text) {
+  return typeof text === "string" && text.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/u.test(text);
+}
+
+function positiveInteger(value, fallback) {
+  const number = Math.floor(Number(value));
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
