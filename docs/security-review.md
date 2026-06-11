@@ -21,12 +21,13 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | LV2 atom MIDI delivery | Fixed | Compatible LV2 atom/event MIDI input ports receive bounded note, CC, pitch-bend, pressure, and program events through worker-owned LV2 atom sequence buffers. |
 | Public plugin class metadata | Fixed | Scanners expose bounded path-free metadata such as bundle identifiers, AudioComponent tuples, versions, and LV2 URIs while keeping launch paths in internal diagnostics. |
 | Scanner manifest integer parsing | Fixed | VST3/AU/LV2 example-manifest numeric fields use bounded non-throwing parsing so oversized bundle-provided values cannot terminate scanning. |
+| Brokered VST3 factory metadata | Fixed | Installed VST3 listings can refine public `name`, `vendor`, `category`, `kind`, and `version` through a short-lived factory probe that returns bounded path-free metadata and keeps launch paths in internal diagnostics. |
 | Bounded parameter automation events | Fixed | The protocol and daemon reject oversized automation batches, validate parameter ids/values/sample offsets, enforce instance ownership, and forward bounded events to native workers. |
 | Bounded parameter automation curves | Fixed | `setParameterCurve` accepts bounded step/linear per-block curves, rejects oversized or ambiguous point lists, expands them under the existing worker event cap, and preserves instance ownership. |
 | Bounded VST3 program metadata | Fixed | VST3 program-change parameters are marked, and associated program-list names are exposed only as capped parameter metadata that selects programs through `setParameter`. |
 | Bounded richer MIDI events | Fixed | The protocol and daemon reject oversized MIDI batches and validate note, CC, pitch-bend, pressure, program, channel, and timing fields before worker dispatch; native workers keep per-format MIDI behavior bounded. |
 | VST3 bus-aware audio blocks | Fixed | The protocol accepts bounded indexed input bus buffers, the VST3 worker routes them into active SDK buses, and responses include bounded indexed output bus buffers. |
-| Full plugin-hosting surface | Open roadmap | High-density automation lanes, AU/LV2 sidechain and multi-output routing, deeper VST3 bus negotiation and factory metadata, LV2 worker/UI support, plugin UI, and broader file access need feature-specific controls as they are implemented. |
+| Full plugin-hosting surface | Open roadmap | High-density automation lanes, AU/LV2 sidechain and multi-output routing, deeper VST3 bus negotiation, LV2 worker/UI support, plugin UI, and broader file access need feature-specific controls as they are implemented. |
 | Third-party worker sandboxing | Last-stage hardening | Worker processes isolate crashes today, but OS-level sandboxing for malicious third-party plugin code is intentionally tracked after the core host features. |
 
 ## Open Roadmap Items

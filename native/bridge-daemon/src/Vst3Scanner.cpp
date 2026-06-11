@@ -4,6 +4,11 @@
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
+#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#include "pluginterfaces/vst/ivstaudioprocessor.h"
+#include "public.sdk/source/vst/hosting/module.h"
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -11,10 +16,14 @@
 #include <fstream>
 #include <iterator>
 #include <optional>
+#include <sstream>
+#include <utility>
 
 namespace soundbridge {
 
 namespace {
+
+constexpr std::size_t kMaxVst3MetadataTextBytes = 256;
 
 std::filesystem::path homeLibraryVst3Path() {
   const char* home = std::getenv("HOME");
@@ -48,6 +57,18 @@ std::string trim(std::string value) {
         return !std::isspace(character);
       }).base(),
       value.end());
+  return value;
+}
+
+std::string capText(std::string value, std::size_t maxBytes = kMaxVst3MetadataTextBytes) {
+  value = trim(std::move(value));
+  if (value.size() <= maxBytes) {
+    return value;
+  }
+  value.resize(maxBytes);
+  while (!value.empty() && (static_cast<unsigned char>(value.back()) & 0xC0U) == 0x80U) {
+    value.pop_back();
+  }
   return value;
 }
 
@@ -299,6 +320,72 @@ void applyInfoPlistMetadata(NativePluginInfo& info, const std::filesystem::path&
 }
 #endif
 
+#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+std::string kindFromVst3SubCategories(const VST3::Hosting::ClassInfo& classInfo) {
+  const auto& subCategories = classInfo.subCategories();
+  const auto hasPrefix = [&](const std::string& prefix) {
+    return std::any_of(subCategories.begin(), subCategories.end(), [&](const std::string& value) {
+      return value == prefix || value.rfind(prefix + "|", 0) == 0;
+    });
+  };
+
+  if (hasPrefix("Instrument")) {
+    return "instrument";
+  }
+  if (hasPrefix("Fx")) {
+    return "effect";
+  }
+  return "unknown";
+}
+
+bool applyVst3FactoryMetadata(NativePluginInfo& info) {
+  if (!info.hasExecutable || info.bundlePath.empty()) {
+    return false;
+  }
+
+  std::string loadError;
+  auto module = VST3::Hosting::Module::create(info.bundlePath, loadError);
+  if (!module) {
+    return false;
+  }
+
+  const auto classes = module->getFactory().classInfos();
+  const auto audioClass = std::find_if(classes.begin(), classes.end(), [](const auto& classInfo) {
+    return classInfo.category() == kVstAudioEffectClass;
+  });
+  if (audioClass == classes.end()) {
+    return false;
+  }
+
+  if (const auto name = capText(audioClass->name()); !name.empty()) {
+    info.name = name;
+  }
+  if (const auto vendor = capText(audioClass->vendor()); !vendor.empty()) {
+    info.vendor = vendor;
+  }
+  if (const auto version = capText(audioClass->version(), 80); !version.empty()) {
+    info.version = version;
+  }
+  if (const auto category = capText(audioClass->subCategoriesString()); !category.empty()) {
+    info.category = category;
+  }
+  if (const auto kind = kindFromVst3SubCategories(*audioClass); kind != "unknown") {
+    info.kind = kind;
+  }
+  return true;
+}
+#endif
+
+std::string factoryMetadataErrorToJson(const std::string& code, const std::string& message) {
+  std::ostringstream output;
+  output << "{";
+  output << "\"ok\":false,";
+  output << "\"error\":\"" << jsonEscape(code) << "\",";
+  output << "\"message\":\"" << jsonEscape(message) << "\"";
+  output << "}";
+  return output.str();
+}
+
 } // namespace
 
 Vst3Scanner::Vst3Scanner()
@@ -377,6 +464,56 @@ std::vector<NativePluginInfo> Vst3Scanner::scan() const {
 
 std::string vst3BundleListToJson(const std::vector<NativePluginInfo>& plugins) {
   return nativePluginListToJson(plugins);
+}
+
+std::string vst3FactoryMetadataToJson(const std::filesystem::path& bundlePath) {
+#ifndef SOUNDBRIDGE_ENABLE_VST3_SDK
+  (void)bundlePath;
+  return factoryMetadataErrorToJson("vst3_sdk_unavailable", "The VST3 SDK host adapter is not available in this build.");
+#else
+  std::error_code error;
+  if (bundlePath.empty() || bundlePath.extension() != ".vst3" || !std::filesystem::is_directory(bundlePath, error)) {
+    return factoryMetadataErrorToJson("invalid_bundle", "Expected a readable .vst3 bundle directory.");
+  }
+  if (error) {
+    return factoryMetadataErrorToJson("invalid_bundle", "Could not inspect the requested .vst3 bundle.");
+  }
+
+  NativePluginInfo info;
+  info.pluginId = "vst3:" + bundlePath.filename().string();
+  info.format = PluginFormat::Vst3;
+  info.name = bundleNameFromPath(bundlePath);
+  info.vendor = "Unknown";
+  info.category = "VST3";
+  info.kind = "unknown";
+  info.bundlePath = std::filesystem::weakly_canonical(bundlePath, error).string();
+  if (error) {
+    info.bundlePath = bundlePath.string();
+    error.clear();
+  }
+  const auto executablePath = macBinaryPath(bundlePath);
+  info.hasExecutable = !executablePath.empty();
+  if (!applyVst3FactoryMetadata(info)) {
+    return factoryMetadataErrorToJson("factory_metadata_unavailable", "VST3 factory metadata was not available.");
+  }
+
+  std::ostringstream output;
+  output << "{";
+  output << "\"ok\":true,";
+  output << "\"plugin\":{";
+  output << "\"name\":\"" << jsonEscape(info.name) << "\",";
+  output << "\"vendor\":\"" << jsonEscape(info.vendor) << "\",";
+  output << "\"category\":\"" << jsonEscape(info.category) << "\",";
+  output << "\"kind\":\"" << jsonEscape(info.kind) << "\",";
+  output << "\"metadata\":{";
+  if (!info.version.empty()) {
+    output << "\"version\":\"" << jsonEscape(info.version) << "\"";
+  }
+  output << "}";
+  output << "}";
+  output << "}";
+  return output.str();
+#endif
 }
 
 } // namespace soundbridge

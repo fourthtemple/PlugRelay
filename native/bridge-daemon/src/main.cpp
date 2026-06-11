@@ -24,6 +24,7 @@ void printUsage() {
   std::cout << "  soundbridge-daemon --scan-vst3\n";
   std::cout << "  soundbridge-daemon --scan-au\n";
   std::cout << "  soundbridge-daemon --scan-lv2\n";
+  std::cout << "  soundbridge-daemon --inspect-vst3-factory <bundle-path>\n";
   std::cout << "  soundbridge-daemon --host-status\n";
   std::cout << "  soundbridge-daemon --host-au-worker <type> <subtype> <manufacturer> <sample-rate> <max-block> <inputs> <outputs> <kind>\n";
   std::cout << "  soundbridge-daemon --host-lv2-worker <bundle-path> <sample-rate> <max-block> <inputs> <outputs> <kind>\n";
@@ -124,6 +125,15 @@ int main(int argc, char** argv) {
   if (command == "--scan-lv2") {
     const soundbridge::Lv2Scanner scanner;
     std::cout << soundbridge::nativePluginListToJson(scanner.scan()) << "\n";
+    return 0;
+  }
+
+  if (command == "--inspect-vst3-factory") {
+    if (argc < 3) {
+      std::cerr << "--inspect-vst3-factory requires a VST3 bundle path.\n";
+      return 2;
+    }
+    std::cout << soundbridge::vst3FactoryMetadataToJson(argv[2]) << "\n";
     return 0;
   }
 

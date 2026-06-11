@@ -1509,10 +1509,45 @@ function loadNativeInstalledPlugins() {
     if (!parsed || !Array.isArray(parsed.plugins)) {
       return [];
     }
-    return parsed.plugins.map((plugin) => decorateInstalledPlugin(plugin));
+    return parsed.plugins.map((plugin) => decorateInstalledPlugin(enrichInstalledPluginMetadata(plugin)));
   } catch (error) {
     console.warn(`Native installed plugin scan failed: ${error.message}`);
     return [];
+  }
+}
+
+function enrichInstalledPluginMetadata(plugin) {
+  if (plugin?.format !== "vst3") {
+    return plugin;
+  }
+  const bundlePath = plugin.diagnostics?.bundlePath;
+  if (typeof bundlePath !== "string" || bundlePath.length === 0 || plugin.diagnostics?.hasExecutable !== true) {
+    return plugin;
+  }
+
+  try {
+    const output = execFileSync(NATIVE_RENDERER, ["--inspect-vst3-factory", bundlePath], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024,
+      timeout: 5000
+    });
+    const parsed = JSON.parse(output);
+    if (parsed?.ok !== true || !parsed.plugin || typeof parsed.plugin !== "object") {
+      return plugin;
+    }
+    const metadata = parsed.plugin.metadata && typeof parsed.plugin.metadata === "object"
+      ? { ...(plugin.metadata ?? {}), ...parsed.plugin.metadata }
+      : plugin.metadata;
+    return {
+      ...plugin,
+      name: typeof parsed.plugin.name === "string" && parsed.plugin.name ? parsed.plugin.name : plugin.name,
+      vendor: typeof parsed.plugin.vendor === "string" && parsed.plugin.vendor ? parsed.plugin.vendor : plugin.vendor,
+      category: typeof parsed.plugin.category === "string" && parsed.plugin.category ? parsed.plugin.category : plugin.category,
+      kind: typeof parsed.plugin.kind === "string" && parsed.plugin.kind ? parsed.plugin.kind : plugin.kind,
+      metadata
+    };
+  } catch {
+    return plugin;
   }
 }
 

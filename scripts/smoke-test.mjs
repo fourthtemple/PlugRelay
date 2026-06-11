@@ -409,6 +409,10 @@ const nativeVst3Effect =
   plugins.find((plugin) => plugin.format === "vst3" && plugin.source === "scan" && plugin.hostable === true);
 assert(nativeVst3Effect?.hostable === true, "listPlugins exposes an installed VST3 effect as hostable");
 assert(!("diagnostics" in nativeVst3Effect), "hostable VST3 metadata does not expose scanner diagnostics");
+if (nativeVst3Effect.pluginId === "vst3:Cymatics Deja vu.vst3") {
+  assert(nativeVst3Effect.kind === "effect", "listPlugins exposes brokered VST3 factory kind metadata");
+  assert(nativeVst3Effect.category === "Fx|Pitch Shift", "listPlugins exposes brokered VST3 factory category metadata");
+}
 const nativeVst3Instance = await request(
   socket,
   "createInstance",

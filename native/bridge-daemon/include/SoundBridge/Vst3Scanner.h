@@ -19,5 +19,6 @@ private:
 };
 
 std::string vst3BundleListToJson(const std::vector<NativePluginInfo>& plugins);
+std::string vst3FactoryMetadataToJson(const std::filesystem::path& bundlePath);
 
 } // namespace soundbridge
