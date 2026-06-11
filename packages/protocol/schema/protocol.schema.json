@@ -449,6 +449,28 @@
             "maxItems": 8192,
             "items": { "type": "number" }
           }
+        },
+        "inputBuses": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/audioBusBlock" }
+        }
+      }
+    },
+    "audioBusBlock": {
+      "type": "object",
+      "required": ["index", "channels"],
+      "additionalProperties": true,
+      "properties": {
+        "index": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "channels": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "array",
+            "maxItems": 8192,
+            "items": { "type": "number" }
+          }
         }
       }
     },

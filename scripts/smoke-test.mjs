@@ -225,6 +225,7 @@ const nativeAuBlock = await request(
 assert(nativeAuBlock.renderEngine === "native-au", "installed AU effect rendered through the native AU host worker");
 assert(blockHasSignal(nativeAuBlock.channels), "installed AU effect produced processed audio");
 assert(nativeAuBlock.channels.length === nativeAuLayout.outputChannels, "installed AU render uses negotiated output channels");
+assertOutputBuses(nativeAuBlock, nativeAuLayout, "installed AU render reports bounded output buses");
 const nativeAuLatency = await request(
   socket,
   "getLatency",
@@ -358,6 +359,7 @@ const nativeVst3Block = await request(
 assert(nativeVst3Block.renderEngine === "native-vst3", "installed VST3 effect rendered through the native VST3 host worker");
 assert(blockHasSignal(nativeVst3Block.channels), "installed VST3 effect produced processed audio");
 assert(nativeVst3Block.channels.length === nativeVst3Layout.outputChannels, "installed VST3 render uses negotiated output channels");
+assertOutputBuses(nativeVst3Block, nativeVst3Layout, "installed VST3 render reports bounded output buses");
 const nativeVst3Latency = await request(
   socket,
   "getLatency",
@@ -487,6 +489,34 @@ const processed = await request(
 );
 assert(processed.channels[0][1] > 0.25, "processAudioBlock applied gain");
 assert(processed.channels.length === mockLayout.outputChannels, "mock render uses negotiated output channels");
+assertOutputBuses(processed, mockLayout, "mock render reports bounded output buses");
+
+const busProcessed = await request(
+  socket,
+  "processAudioBlock",
+  {
+    instanceId: created.instanceId,
+    blockId: 8,
+    sampleRate: 48000,
+    inputBuses: [
+      {
+        index: 0,
+        channels: [
+          [0.1, 0.1, 0.1, 0.1],
+          [0.1, 0.1, 0.1, 0.1]
+        ]
+      },
+      {
+        index: 1,
+        channels: [[0.5, 0.5, 0.5, 0.5]]
+      }
+    ]
+  },
+  true,
+  pair.sessionToken
+);
+assert(busProcessed.channels.length === mockLayout.outputChannels, "processAudioBlock accepts explicit input bus buffers");
+assertOutputBuses(busProcessed, mockLayout, "bus-aware mock render reports bounded output buses");
 
 const state = await request(socket, "getState", { instanceId: created.instanceId }, true, pair.sessionToken);
 assert(typeof state.state === "string" && state.state.length > 0, "getState returned opaque state");
@@ -551,6 +581,7 @@ for (const format of exampleFormats) {
     pair.sessionToken
   );
   assert(blockHasSignal(synthBlock.channels), `${format} instrument produced audio after noteOn`);
+  assertOutputBuses(synthBlock, instrumentInstance.layout, `${format} instrument reports bounded output buses`);
   if (nativeExampleRendererAvailable) {
     const expectedRenderEngine = instrument.source === "example-bundle" ? "bundle-worker" : "native-example";
     assert(synthBlock.renderEngine === expectedRenderEngine, `${format} instrument used ${expectedRenderEngine}`);
@@ -958,6 +989,25 @@ function assertBusLayouts(buses, direction, expectedCount, message) {
       `${message}: bus ${index} channels are bounded`
     );
     assert(typeof bus.active === "boolean", `${message}: bus ${index} active flag is explicit`);
+  }
+}
+
+function assertOutputBuses(block, layout, message) {
+  assert(Array.isArray(block.outputBuses), `${message}: output bus array exists`);
+  assert(block.outputBuses.length === layout.outputBuses, `${message}: output bus count matches layout`);
+  const mainBus = block.outputBuses.find((bus) => bus.index === 0);
+  assert(mainBus, `${message}: main output bus exists`);
+  assert(
+    JSON.stringify(mainBus.channels) === JSON.stringify(block.channels),
+    `${message}: main output bus mirrors legacy channels`
+  );
+  for (const bus of block.outputBuses) {
+    assert(Number.isInteger(bus.index) && bus.index >= 0 && bus.index < MAX_PLUGIN_BUSES, `${message}: output bus index is bounded`);
+    assert(Array.isArray(bus.channels), `${message}: output bus channels are arrays`);
+    assert(bus.channels.length <= MAX_AUDIO_CHANNELS, `${message}: output bus channel count is bounded`);
+    for (const channel of bus.channels) {
+      assert(Array.isArray(channel) && channel.length <= 8192, `${message}: output bus frame count is bounded`);
+    }
   }
 }
 

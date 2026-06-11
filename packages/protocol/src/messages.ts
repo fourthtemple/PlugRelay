@@ -173,17 +173,24 @@ export interface CreateInstanceResponse {
   infiniteTail?: boolean;
 }
 
+export interface AudioBusBlock {
+  index: number;
+  channels: number[][];
+}
+
 export interface AudioBlockRequest {
   instanceId: string;
   blockId: number;
   sampleRate: number;
-  channels: number[][];
+  channels?: number[][];
+  inputBuses?: AudioBusBlock[];
   timestamp?: number;
 }
 
 export interface AudioBlockResponse {
   blockId: number;
   channels: number[][];
+  outputBuses?: AudioBusBlock[];
   latencySamples: number;
   tailSamples?: number;
   infiniteTail?: boolean;

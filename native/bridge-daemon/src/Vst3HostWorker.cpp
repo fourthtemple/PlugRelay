@@ -80,6 +80,16 @@ struct PendingParameterChange {
   std::uint32_t sampleOffset = 0;
 };
 
+struct IndexedAudioBus {
+  std::uint32_t index = 0;
+  std::vector<std::vector<float>> channels;
+};
+
+struct RenderedAudio {
+  std::vector<std::vector<float>> channels;
+  std::vector<IndexedAudioBus> outputBuses;
+};
+
 float sanitizeSample(const std::string& text) {
   char* end = nullptr;
   const double value = std::strtod(text.c_str(), &end);
@@ -175,6 +185,42 @@ std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::u
     channels.push_back(std::move(channel));
   }
   return channels;
+}
+
+std::vector<IndexedAudioBus> parseAudioBuses(const std::string& encoded, std::uint32_t frames) {
+  std::vector<IndexedAudioBus> buses;
+  if (encoded.empty() || encoded == "-") {
+    return buses;
+  }
+
+  std::stringstream stream(encoded);
+  std::string token;
+  while (buses.size() < kMaxWorkerChannels && std::getline(stream, token, ';')) {
+    if (token.empty()) {
+      continue;
+    }
+    const auto separator = token.find('=');
+    if (separator == std::string::npos) {
+      continue;
+    }
+    std::uint32_t index = 0;
+    if (!parseUint32Arg(token.substr(0, separator).c_str(), 0, kMaxWorkerChannels - 1, index)) {
+      continue;
+    }
+    buses.push_back(IndexedAudioBus{
+        index,
+        parseChannels(token.substr(separator + 1), frames)});
+  }
+  return buses;
+}
+
+const std::vector<std::vector<float>>* findBusChannels(const std::vector<IndexedAudioBus>& buses, std::uint32_t index) {
+  for (const auto& bus : buses) {
+    if (bus.index == index) {
+      return &bus.channels;
+    }
+  }
+  return nullptr;
 }
 
 bool parseMidiEventToken(const std::string& token, PendingMidiEvent& event) {
@@ -343,6 +389,43 @@ bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinb
   return false;
 }
 
+std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels) {
+  std::ostringstream output;
+  output << "[";
+  for (std::size_t channelIndex = 0; channelIndex < channels.size(); ++channelIndex) {
+    if (channelIndex > 0) {
+      output << ",";
+    }
+    output << "[";
+    for (std::size_t frame = 0; frame < channels[channelIndex].size(); ++frame) {
+      if (frame > 0) {
+        output << ",";
+      }
+      const auto sample = channels[channelIndex][frame];
+      output << (std::isfinite(sample) ? sample : 0.0F);
+    }
+    output << "]";
+  }
+  output << "]";
+  return output.str();
+}
+
+std::string renderedAudioToJson(const RenderedAudio& rendered) {
+  std::ostringstream output;
+  output << "{\"channels\":" << audioChannelsToJson(rendered.channels)
+         << ",\"outputBuses\":[";
+  for (std::size_t index = 0; index < rendered.outputBuses.size(); ++index) {
+    if (index > 0) {
+      output << ",";
+    }
+    output << "{\"index\":" << rendered.outputBuses[index].index
+           << ",\"channels\":" << audioChannelsToJson(rendered.outputBuses[index].channels)
+           << "}";
+  }
+  output << "]}";
+  return output.str();
+}
+
 bool parameterIsAutomatable(const Steinberg::Vst::ParameterInfo& info) {
   return (info.flags & Steinberg::Vst::ParameterInfo::kCanAutomate) != 0 &&
       (info.flags & Steinberg::Vst::ParameterInfo::kIsReadOnly) == 0;
@@ -453,52 +536,69 @@ public:
     }
   }
 
-  std::vector<std::vector<float>> render(
+  RenderedAudio render(
       std::uint32_t frames,
       double sampleRate,
-      std::vector<std::vector<float>> inputChannels) {
+      std::vector<std::vector<float>> inputChannels,
+      std::vector<IndexedAudioBus> inputBuses) {
     if (std::abs(sampleRate - sampleRate_) > 0.01) {
       throw std::runtime_error("VST3 worker cannot change sample rate after initialization.");
     }
 
     frames = std::clamp<std::uint32_t>(frames, 1, maxBlockSize_);
-    inputChannels.resize(inputChannels_);
-    for (auto& channel : inputChannels) {
-      channel.resize(frames, 0.0F);
+    if (inputBuses.empty() && !inputChannels.empty()) {
+      inputBuses.push_back(IndexedAudioBus{0, std::move(inputChannels)});
     }
 
-    std::vector<std::vector<float>> outputChannels(outputChannels_);
-    for (auto& channel : outputChannels) {
-      channel.resize(frames, 0.0F);
+    std::vector<std::vector<std::vector<float>>> inputStorage(inputBusChannels_.size());
+    std::vector<std::vector<Steinberg::Vst::Sample32*>> inputPointers(inputBusChannels_.size());
+    std::vector<Steinberg::Vst::AudioBusBuffers> inputBusBuffers(inputBusChannels_.size());
+    for (std::size_t busIndex = 0; busIndex < inputBusChannels_.size(); ++busIndex) {
+      const auto channelCount = inputBusChannels_[busIndex];
+      inputStorage[busIndex].resize(channelCount);
+      const auto* requestedBus = findBusChannels(inputBuses, static_cast<std::uint32_t>(busIndex));
+      for (std::uint32_t channelIndex = 0; channelIndex < channelCount; ++channelIndex) {
+        inputStorage[busIndex][channelIndex].assign(frames, 0.0F);
+        if (requestedBus != nullptr && channelIndex < requestedBus->size()) {
+          const auto copyFrames = std::min<std::size_t>(frames, (*requestedBus)[channelIndex].size());
+          for (std::size_t frame = 0; frame < copyFrames; ++frame) {
+            inputStorage[busIndex][channelIndex][frame] = std::clamp((*requestedBus)[channelIndex][frame], -1.0F, 1.0F);
+          }
+        }
+      }
+      inputPointers[busIndex].resize(channelCount);
+      for (std::uint32_t channelIndex = 0; channelIndex < channelCount; ++channelIndex) {
+        inputPointers[busIndex][channelIndex] = inputStorage[busIndex][channelIndex].data();
+      }
+      inputBusBuffers[busIndex].numChannels = static_cast<Steinberg::int32>(channelCount);
+      inputBusBuffers[busIndex].silenceFlags = 0;
+      inputBusBuffers[busIndex].channelBuffers32 = inputPointers[busIndex].empty() ? nullptr : inputPointers[busIndex].data();
     }
 
-    std::vector<Steinberg::Vst::Sample32*> inputPointers(inputChannels_);
-    std::vector<Steinberg::Vst::Sample32*> outputPointers(outputChannels_);
-    for (std::uint32_t index = 0; index < inputChannels_; ++index) {
-      inputPointers[index] = inputChannels[index].data();
+    std::vector<std::vector<std::vector<float>>> outputStorage(outputBusChannels_.size());
+    std::vector<std::vector<Steinberg::Vst::Sample32*>> outputPointers(outputBusChannels_.size());
+    std::vector<Steinberg::Vst::AudioBusBuffers> outputBusBuffers(outputBusChannels_.size());
+    for (std::size_t busIndex = 0; busIndex < outputBusChannels_.size(); ++busIndex) {
+      const auto channelCount = outputBusChannels_[busIndex];
+      outputStorage[busIndex].resize(channelCount);
+      outputPointers[busIndex].resize(channelCount);
+      for (std::uint32_t channelIndex = 0; channelIndex < channelCount; ++channelIndex) {
+        outputStorage[busIndex][channelIndex].assign(frames, 0.0F);
+        outputPointers[busIndex][channelIndex] = outputStorage[busIndex][channelIndex].data();
+      }
+      outputBusBuffers[busIndex].numChannels = static_cast<Steinberg::int32>(channelCount);
+      outputBusBuffers[busIndex].silenceFlags = 0;
+      outputBusBuffers[busIndex].channelBuffers32 = outputPointers[busIndex].empty() ? nullptr : outputPointers[busIndex].data();
     }
-    for (std::uint32_t index = 0; index < outputChannels_; ++index) {
-      outputPointers[index] = outputChannels[index].data();
-    }
-
-    Steinberg::Vst::AudioBusBuffers inputBus;
-    inputBus.numChannels = static_cast<Steinberg::int32>(inputChannels_);
-    inputBus.silenceFlags = 0;
-    inputBus.channelBuffers32 = inputPointers.empty() ? nullptr : inputPointers.data();
-
-    Steinberg::Vst::AudioBusBuffers outputBus;
-    outputBus.numChannels = static_cast<Steinberg::int32>(outputChannels_);
-    outputBus.silenceFlags = 0;
-    outputBus.channelBuffers32 = outputPointers.empty() ? nullptr : outputPointers.data();
 
     Steinberg::Vst::ProcessData processData {};
     processData.processMode = Steinberg::Vst::kRealtime;
     processData.symbolicSampleSize = Steinberg::Vst::kSample32;
     processData.numSamples = static_cast<Steinberg::int32>(frames);
-    processData.numInputs = inputChannels_ > 0 ? 1 : 0;
-    processData.numOutputs = outputChannels_ > 0 ? 1 : 0;
-    processData.inputs = inputChannels_ > 0 ? &inputBus : nullptr;
-    processData.outputs = outputChannels_ > 0 ? &outputBus : nullptr;
+    processData.numInputs = static_cast<Steinberg::int32>(inputBusBuffers.size());
+    processData.numOutputs = static_cast<Steinberg::int32>(outputBusBuffers.size());
+    processData.inputs = inputBusBuffers.empty() ? nullptr : inputBusBuffers.data();
+    processData.outputs = outputBusBuffers.empty() ? nullptr : outputBusBuffers.data();
 
     auto midiEvents = std::move(pendingMidiEvents_);
     pendingMidiEvents_.clear();
@@ -547,7 +647,14 @@ public:
 
     checkResult(processor_->process(processData), "IAudioProcessor::process");
     sampleTime_ += frames;
-    return outputChannels;
+    RenderedAudio rendered;
+    rendered.channels = outputStorage.empty() ? std::vector<std::vector<float>>{} : outputStorage[0];
+    for (std::size_t busIndex = 0; busIndex < outputStorage.size(); ++busIndex) {
+      rendered.outputBuses.push_back(IndexedAudioBus{
+          static_cast<std::uint32_t>(busIndex),
+          outputStorage[busIndex]});
+    }
+    return rendered;
   }
 
   void enqueueMidiEvents(std::vector<PendingMidiEvent> events) {
@@ -707,13 +814,11 @@ private:
         info.busType = index == 0 ? Steinberg::Vst::kMain : Steinberg::Vst::kAux;
       }
 
-      const auto active = index == 0 && (direction == Steinberg::Vst::kOutput || inputChannels_ > 0);
-      std::uint32_t channels = 0;
-      if (active) {
-        channels = direction == Steinberg::Vst::kInput ? inputChannels_ : outputChannels_;
-      } else {
-        channels = static_cast<std::uint32_t>(std::clamp<Steinberg::int32>(info.channelCount, 0, static_cast<Steinberg::int32>(kMaxWorkerChannels)));
-      }
+      const auto& activeChannels = direction == Steinberg::Vst::kInput ? inputBusChannels_ : outputBusChannels_;
+      const auto active = static_cast<std::size_t>(index) < activeChannels.size() && activeChannels[static_cast<std::size_t>(index)] > 0;
+      const auto channels = active
+          ? activeChannels[static_cast<std::size_t>(index)]
+          : static_cast<std::uint32_t>(std::clamp<Steinberg::int32>(info.channelCount, 0, static_cast<Steinberg::int32>(kMaxWorkerChannels)));
       const auto name = cappedString(VST3::StringConvert::convert(info.name));
       output << "{\"index\":" << index
              << ",\"direction\":\"" << (direction == Steinberg::Vst::kInput ? "input" : "output") << "\""
@@ -884,9 +989,26 @@ private:
     return output.str();
   }
 
+  std::uint32_t defaultBusChannels(Steinberg::Vst::BusDirection direction, Steinberg::int32 index, std::uint32_t fallback) const {
+    Steinberg::Vst::BusInfo info {};
+    if (component_->getBusInfo(Steinberg::Vst::kAudio, direction, index, info) == Steinberg::kResultOk) {
+      return static_cast<std::uint32_t>(std::clamp<Steinberg::int32>(
+          info.channelCount,
+          0,
+          static_cast<Steinberg::int32>(kMaxWorkerChannels)));
+    }
+    return std::min<std::uint32_t>(fallback, kMaxWorkerChannels);
+  }
+
   void configure() {
-    inputBusCount_ = std::max<Steinberg::int32>(0, component_->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput));
-    outputBusCount_ = std::max<Steinberg::int32>(0, component_->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput));
+    inputBusCount_ = std::clamp<Steinberg::int32>(
+        component_->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput),
+        0,
+        static_cast<Steinberg::int32>(kMaxWorkerChannels));
+    outputBusCount_ = std::clamp<Steinberg::int32>(
+        component_->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput),
+        0,
+        static_cast<Steinberg::int32>(kMaxWorkerChannels));
     if (outputBusCount_ <= 0) {
       throw std::runtime_error("VST3 component has no audio output bus.");
     }
@@ -935,10 +1057,51 @@ private:
       }
     }
 
-    if (inputBusCount_ > 0) {
-      checkResult(component_->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, 0, true), "IComponent::activateBus input");
+    inputBusChannels_.assign(static_cast<std::size_t>(inputBusCount_), 0);
+    outputBusChannels_.assign(static_cast<std::size_t>(outputBusCount_), 0);
+    if (!inputBusChannels_.empty()) {
+      inputBusChannels_[0] = inputChannels_;
+      for (std::size_t index = 1; index < inputBusChannels_.size(); ++index) {
+        inputBusChannels_[index] = defaultBusChannels(Steinberg::Vst::kInput, static_cast<Steinberg::int32>(index), 0);
+      }
     }
-    checkResult(component_->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, 0, true), "IComponent::activateBus output");
+    if (!outputBusChannels_.empty()) {
+      outputBusChannels_[0] = outputChannels_;
+      for (std::size_t index = 1; index < outputBusChannels_.size(); ++index) {
+        outputBusChannels_[index] = defaultBusChannels(Steinberg::Vst::kOutput, static_cast<Steinberg::int32>(index), 0);
+      }
+    }
+
+    for (std::size_t index = 0; index < inputBusChannels_.size(); ++index) {
+      if (inputBusChannels_[index] == 0) {
+        continue;
+      }
+      const auto result = component_->activateBus(
+          Steinberg::Vst::kAudio,
+          Steinberg::Vst::kInput,
+          static_cast<Steinberg::int32>(index),
+          true);
+      if (index == 0) {
+        checkResult(result, "IComponent::activateBus input");
+      } else if (result != Steinberg::kResultOk) {
+        inputBusChannels_[index] = 0;
+      }
+    }
+    for (std::size_t index = 0; index < outputBusChannels_.size(); ++index) {
+      if (outputBusChannels_[index] == 0) {
+        continue;
+      }
+      const auto result = component_->activateBus(
+          Steinberg::Vst::kAudio,
+          Steinberg::Vst::kOutput,
+          static_cast<Steinberg::int32>(index),
+          true);
+      if (index == 0) {
+        checkResult(result, "IComponent::activateBus output");
+      } else if (result != Steinberg::kResultOk) {
+        outputBusChannels_[index] = 0;
+      }
+    }
 
     Steinberg::Vst::ProcessSetup setup {};
     setup.processMode = Steinberg::Vst::kRealtime;
@@ -967,6 +1130,8 @@ private:
   std::uint32_t outputChannels_ = 2;
   Steinberg::int32 inputBusCount_ = 0;
   Steinberg::int32 outputBusCount_ = 0;
+  std::vector<std::uint32_t> inputBusChannels_;
+  std::vector<std::uint32_t> outputBusChannels_;
   std::vector<PendingMidiEvent> pendingMidiEvents_;
   std::vector<PendingParameterChange> pendingParameterChanges_;
   double sampleTime_ = 0.0;
@@ -1114,18 +1279,24 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
           std::uint32_t frames = 128;
           double renderSampleRate = sampleRate;
           std::string encodedChannels;
+          std::string encodedInputBuses;
           std::string framesText;
           std::string sampleRateText;
           stream >> framesText;
           stream >> sampleRateText;
           stream >> encodedChannels;
+          stream >> encodedInputBuses;
           if (!parseUint32Arg(framesText.c_str(), 1, kMaxWorkerFrames, frames) ||
               !parseSampleRateArg(sampleRateText.c_str(), renderSampleRate)) {
             std::cout << "{\"error\":\"invalid_render_arguments\"}" << std::endl;
             continue;
           }
-          const auto channels = host.render(frames, renderSampleRate, parseChannels(encodedChannels, frames));
-          std::cout << exampleInstrumentBlockToJson(channels) << std::endl;
+          const auto rendered = host.render(
+              frames,
+              renderSampleRate,
+              parseChannels(encodedChannels, frames),
+              parseAudioBuses(encodedInputBuses, frames));
+          std::cout << renderedAudioToJson(rendered) << std::endl;
           continue;
         }
 

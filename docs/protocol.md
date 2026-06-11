@@ -221,7 +221,7 @@ Parameter metadata is plugin-controlled and must be bounded before it reaches a 
 
 Returns the negotiated channel and bus layout for an instance. `requestedInputChannels` and `requestedOutputChannels` record the bounded host request; `inputChannels` and `outputChannels` are the effective worker layout. All channel and bus counts are clamped to `0..32` for inputs and `1..32` for outputs before they reach the host.
 
-`inputBusLayouts` and `outputBusLayouts` expose bounded per-bus metadata for routing UIs and future sidechain/multi-output scheduling. Each bus has an `index`, `direction`, `mediaType`, display `name`, `type` (`main`, `aux`, or `unknown`), `channels`, and `active`. VST3 reports SDK bus info, including aux input buses that commonly represent sidechains. AU, LV2, and mock workers currently report conservative main-bus layouts that match their render paths.
+`inputBusLayouts` and `outputBusLayouts` expose bounded per-bus metadata for routing UIs and sidechain/multi-output scheduling. Each bus has an `index`, `direction`, `mediaType`, display `name`, `type` (`main`, `aux`, or `unknown`), `channels`, and `active`. VST3 reports SDK bus info, including aux input buses that commonly represent sidechains. AU, LV2, and mock workers currently report conservative main-bus layouts that match their render paths.
 
 ```json
 {
@@ -296,7 +296,7 @@ Installed VST3 state stores the component and edit-controller state streams. Ins
 
 ### `processAudioBlock`
 
-MVP request:
+Request:
 
 ```json
 {
@@ -307,11 +307,29 @@ MVP request:
     [0.0, 0.1],
     [0.0, 0.1]
   ],
+  "inputBuses": [
+    {
+      "index": 0,
+      "channels": [
+        [0.0, 0.1],
+        [0.0, 0.1]
+      ]
+    },
+    {
+      "index": 1,
+      "channels": [
+        [0.2, 0.2],
+        [0.2, 0.2]
+      ]
+    }
+  ],
   "timestamp": 1781126400000
 }
 ```
 
-MVP response:
+`channels` is the backwards-compatible main input bus. `inputBuses` is optional and carries explicit indexed input bus buffers for sidechain-style routing. When both are present, bus index `0` is the main input bus. All bus indices are clamped to `0..31`; all channel counts are capped to 32; all frame counts are capped to the instance `maxBlockSize`.
+
+Response:
 
 ```json
 {
@@ -320,6 +338,15 @@ MVP response:
     [0.0, 0.08],
     [0.0, 0.08]
   ],
+  "outputBuses": [
+    {
+      "index": 0,
+      "channels": [
+        [0.0, 0.08],
+        [0.0, 0.08]
+      ]
+    }
+  ],
   "latencySamples": 0,
   "tailSamples": 0,
   "infiniteTail": false,
@@ -327,7 +354,9 @@ MVP response:
 }
 ```
 
-`renderEngine` is optional diagnostics. Current values include `bundle-worker`, `bundle-executable`, `native-example`, `native-au`, `native-vst3`, `native-lv2`, and `js-fallback`. JSON arrays are intentionally only for the mock daemon and early validation. Production transports should use binary Float32 frames or shared memory.
+`channels` is the backwards-compatible main output bus. `outputBuses` carries indexed output bus buffers and bus index `0` mirrors `channels`. The VST3 worker can route bounded indexed input buffers into active VST3 buses and return indexed output bus buffers. AU, LV2, mock, and example workers currently route the main audio bus and return a conservative bus-0 response.
+
+`renderEngine` is optional diagnostics. Current values include `bundle-worker`, `bundle-executable`, `native-example`, `native-au`, `native-vst3`, `native-lv2`, and `js-fallback`. JSON arrays are intentionally only for the mock daemon and early validation. Production transports should use binary Float32 frames or shared memory/shared ring buffers for bus-indexed audio.
 
 Block size is bounded: the daemon clamps the frame count to the instance's `maxBlockSize`, accepts at most 32 channels, and clamps `sampleRate` to 8000–384000 Hz. Native host workers re-clamp these values before allocating.
 

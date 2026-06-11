@@ -732,14 +732,18 @@ function normalizeNativeState(nativeState, format) {
 
 async function processAudioBlock(payload, session) {
   const instance = getInstance(payload.instanceId, session);
-  const channels = Array.isArray(payload.channels) ? payload.channels.slice(0, MAX_AUDIO_CHANNELS) : [];
-  const frames = boundedFrames(channels[0]?.length ?? payload.frames ?? instance.maxBlockSize, instance.maxBlockSize);
+  const frames = boundedFrames(firstAudioFrameCount(payload, instance.maxBlockSize), instance.maxBlockSize);
   const blockSampleRate = clampSampleRate(payload.sampleRate, instance.sampleRate);
+  const mainInputChannels = normalizeAudioChannels(payload.channels, MAX_AUDIO_CHANNELS, frames);
+  const inputBuses = normalizeAudioBusBlocks(payload.inputBuses, mainInputChannels, instance.layout?.inputBusLayouts, frames);
+  const channels = inputBuses.find((bus) => bus.index === 0)?.channels ?? mainInputChannels;
 
   if (instance.kind === "instrument") {
+    const processed = await processInstrumentBlock(instance, frames, blockSampleRate);
     return {
       blockId: payload.blockId,
-      ...(await processInstrumentBlock(instance, frames, blockSampleRate)),
+      ...processed,
+      outputBuses: normalizeOutputBusBlocks(processed.outputBuses, processed.channels, instance.layout, frames),
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
       infiniteTail: Boolean(instance.pluginInfiniteTail)
@@ -747,13 +751,17 @@ async function processAudioBlock(payload, session) {
   }
 
   if (instance.worker) {
+    const rendered = await instance.worker.render({
+      frames,
+      sampleRate: blockSampleRate,
+      channels,
+      inputBuses
+    });
+    const renderedChannels = Array.isArray(rendered) ? rendered : rendered.channels;
     return {
       blockId: payload.blockId,
-      channels: await instance.worker.render({
-        frames,
-        sampleRate: blockSampleRate,
-        channels
-      }),
+      channels: normalizeAudioChannels(renderedChannels, instance.outputChannels, frames),
+      outputBuses: normalizeOutputBusBlocks(rendered.outputBuses, renderedChannels, instance.layout, frames),
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
       infiniteTail: Boolean(instance.pluginInfiniteTail),
@@ -782,10 +790,70 @@ async function processAudioBlock(payload, session) {
   return {
     blockId: payload.blockId,
     channels: output,
+    outputBuses: normalizeOutputBusBlocks(undefined, output, instance.layout, frames),
     latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
     tailSamples: normalizeTailSamples(instance.pluginTailSamples),
     infiniteTail: Boolean(instance.pluginInfiniteTail)
   };
+}
+
+function firstAudioFrameCount(payload, fallback) {
+  if (payload.frames != null) {
+    return payload.frames;
+  }
+  if (Array.isArray(payload.channels) && Array.isArray(payload.channels[0])) {
+    return payload.channels[0].length;
+  }
+  if (Array.isArray(payload.inputBuses)) {
+    for (const bus of payload.inputBuses) {
+      if (Array.isArray(bus?.channels) && Array.isArray(bus.channels[0])) {
+        return bus.channels[0].length;
+      }
+    }
+  }
+  return fallback;
+}
+
+function normalizeAudioChannels(channels, maxChannels, frames) {
+  if (!Array.isArray(channels) || maxChannels <= 0) {
+    return [];
+  }
+  return channels.slice(0, Math.min(MAX_AUDIO_CHANNELS, maxChannels)).map((channel) =>
+    Array.from({ length: frames }, (_, frame) => {
+      const value = Number(Array.isArray(channel) ? channel[frame] : 0);
+      return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+    })
+  );
+}
+
+function normalizeAudioBusBlocks(value, mainChannels, busLayouts = [], frames) {
+  const byIndex = new Map();
+  if (Array.isArray(mainChannels) && mainChannels.length > 0) {
+    byIndex.set(0, { index: 0, channels: mainChannels });
+  }
+  if (Array.isArray(value)) {
+    for (const bus of value.slice(0, MAX_PLUGIN_BUSES)) {
+      const index = normalizeInt(bus?.index, 0, MAX_PLUGIN_BUSES - 1, 0);
+      const layoutChannels = busLayouts.find((layout) => layout.index === index)?.channels ?? MAX_AUDIO_CHANNELS;
+      byIndex.set(index, {
+        index,
+        channels: normalizeAudioChannels(bus?.channels, layoutChannels, frames)
+      });
+    }
+  }
+  return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
+}
+
+function normalizeOutputBusBlocks(value, mainChannels, layout, frames) {
+  const outputLayouts = layout?.outputBusLayouts ?? [];
+  const buses = normalizeAudioBusBlocks(value, normalizeAudioChannels(mainChannels, layout?.outputChannels ?? MAX_AUDIO_CHANNELS, frames), outputLayouts, frames);
+  if (buses.length > 0) {
+    return buses;
+  }
+  return [{
+    index: 0,
+    channels: normalizeAudioChannels(mainChannels, layout?.outputChannels ?? MAX_AUDIO_CHANNELS, frames)
+  }];
 }
 
 function getInstance(instanceId, session) {
@@ -1108,14 +1176,18 @@ class NativeHostWorker {
       "render",
       request.frames,
       request.sampleRate,
-      encodeAudioChannels(request.channels, request.frames)
+      encodeAudioChannels(request.channels, request.frames),
+      encodeAudioBuses(request.inputBuses, request.frames)
     ].join(" ");
 
     return this.request(command).then((parsed) => {
       if (!Array.isArray(parsed.channels)) {
         throw new Error("worker returned invalid channels");
       }
-      return parsed.channels;
+      return {
+        channels: parsed.channels,
+        outputBuses: Array.isArray(parsed.outputBuses) ? parsed.outputBuses : undefined
+      };
     });
   }
 
@@ -2054,6 +2126,17 @@ function encodeAudioChannels(channels, frames) {
       return samples.join(",");
     })
     .join("|");
+}
+
+function encodeAudioBuses(buses, frames) {
+  if (!Array.isArray(buses) || buses.length === 0) {
+    return "-";
+  }
+  const encoded = buses
+    .slice(0, MAX_PLUGIN_BUSES)
+    .map((bus) => `${normalizeInt(bus?.index, 0, MAX_PLUGIN_BUSES - 1, 0)}=${encodeAudioChannels(bus?.channels, frames)}`)
+    .join(";");
+  return encoded || "-";
 }
 
 function encodeMidiEvents(events) {
