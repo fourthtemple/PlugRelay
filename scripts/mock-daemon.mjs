@@ -2362,13 +2362,13 @@ function makeUpdatedParameter(parameter, normalizedValue) {
 }
 
 function makeNativeUpdatedParameter(parameter, normalizedValue) {
-  const value = clamp01(normalizedValue);
+  const value = clamp01(Number(parameter.normalizedValue ?? normalizedValue));
   const minPlain = finiteNumber(parameter.minPlain, 0);
   const maxPlain = finiteNumber(parameter.maxPlain, 1);
   return {
     ...parameter,
     normalizedValue: value,
-    plainValue: minPlain + (maxPlain - minPlain) * value
+    plainValue: finiteNumber(parameter.plainValue, minPlain + (maxPlain - minPlain) * value)
   };
 }
 

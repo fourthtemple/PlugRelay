@@ -199,6 +199,7 @@ constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
 constexpr std::size_t kMaxWorkerStateBytes = 384 * 1024;
 constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr std::uint32_t kMaxWorkerLatencySamples = 1'048'576;
+constexpr std::uint32_t kMaxWorkerParameterStepCount = 4096;
 constexpr double kMinWorkerSampleRate = 8000.0;
 constexpr double kMaxWorkerSampleRate = 384000.0;
 constexpr double kMaxWorkerTransportTempoBpm = 960.0;
@@ -208,6 +209,9 @@ constexpr const char* kLv2ControlStateMagic = "soundbridge-lv2-control-state-v1"
 constexpr const char* kLv2StateMagic = "soundbridge-lv2-state-v2";
 constexpr const char* kLv2LatencyUri = "http://lv2plug.in/ns/lv2core#latency";
 constexpr const char* kLv2ReportsLatencyUri = "http://lv2plug.in/ns/lv2core#reportsLatency";
+constexpr const char* kLv2ToggledUri = "http://lv2plug.in/ns/lv2core#toggled";
+constexpr const char* kLv2IntegerUri = "http://lv2plug.in/ns/lv2core#integer";
+constexpr const char* kLv2EnumerationUri = "http://lv2plug.in/ns/lv2core#enumeration";
 constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
 constexpr const char* kLv2UridUnmapUri = "http://lv2plug.in/ns/ext/urid#unmap";
 constexpr const char* kLv2AtomSequenceUri = "http://lv2plug.in/ns/ext/atom#Sequence";
@@ -281,6 +285,9 @@ struct Lv2Port {
   bool acceptsMidi = false;
   bool acceptsTimePosition = false;
   bool reportsLatency = false;
+  bool isToggled = false;
+  bool isInteger = false;
+  bool isEnumeration = false;
 };
 
 struct Lv2BundleMetadata {
@@ -1434,6 +1441,9 @@ std::optional<Lv2Port> parsePortBlock(const std::string& block) {
     port.reportsLatency =
         blockContainsUri(block, "lv2:reportsLatency", kLv2ReportsLatencyUri) ||
         blockContainsUri(block, "lv2:latency", kLv2LatencyUri);
+    port.isToggled = blockContainsUri(block, "lv2:toggled", kLv2ToggledUri);
+    port.isInteger = blockContainsUri(block, "lv2:integer", kLv2IntegerUri);
+    port.isEnumeration = blockContainsUri(block, "lv2:enumeration", kLv2EnumerationUri);
   } else if (block.find("atom:AtomPort") != std::string::npos || block.find("ev:EventPort") != std::string::npos) {
     port.acceptsMidi = blockContainsUri(block, "midi:MidiEvent", kLv2MidiEventUri);
     port.acceptsTimePosition = blockContainsUri(block, "time:Position", kLv2TimePositionUri);
@@ -2454,10 +2464,10 @@ private:
 
   float plainValueForPort(const Lv2Port& port, double normalizedValue) const {
     const auto range = static_cast<double>(port.maximum) - static_cast<double>(port.minimum);
-    return static_cast<float>(std::clamp(
+    return quantizedPlainValueForPort(
+        port,
         static_cast<double>(port.minimum) + range * std::clamp(normalizedValue, 0.0, 1.0),
-        static_cast<double>(port.minimum),
-        static_cast<double>(port.maximum)));
+        normalizedValue);
   }
 
   double normalizedValueForPort(const Lv2Port& port, float plainValue) const {
@@ -2470,12 +2480,44 @@ private:
   }
 
   double defaultNormalizedValueForPort(const Lv2Port& port) const {
+    return normalizedValueForPort(port, quantizedPlainValueForPort(port, port.defaultValue, defaultNormalizedHint(port)));
+  }
+
+  float quantizedPlainValueForPort(const Lv2Port& port, double plainValue, double normalizedHint) const {
+    const auto minValue = static_cast<double>(port.minimum);
+    const auto maxValue = static_cast<double>(port.maximum);
+    double value = std::clamp(plainValue, minValue, maxValue);
+    if (port.isToggled) {
+      value = std::clamp(normalizedHint, 0.0, 1.0) >= 0.5 ? maxValue : minValue;
+    } else if (port.isInteger || port.isEnumeration) {
+      value = std::round(value);
+    }
+    return static_cast<float>(std::clamp(value, minValue, maxValue));
+  }
+
+  double defaultNormalizedHint(const Lv2Port& port) const {
     const auto minValue = static_cast<double>(port.minimum);
     const auto maxValue = static_cast<double>(port.maximum);
     if (std::abs(maxValue - minValue) < 0.000001) {
       return 0.0;
     }
     return std::clamp((static_cast<double>(port.defaultValue) - minValue) / (maxValue - minValue), 0.0, 1.0);
+  }
+
+  std::uint32_t stepCountForPort(const Lv2Port& port) const {
+    if (port.isToggled) {
+      return 1;
+    }
+    if (!port.isInteger && !port.isEnumeration) {
+      return 0;
+    }
+    const auto minStep = static_cast<long long>(std::ceil(static_cast<double>(port.minimum)));
+    const auto maxStep = static_cast<long long>(std::floor(static_cast<double>(port.maximum)));
+    if (maxStep <= minStep) {
+      return 0;
+    }
+    return static_cast<std::uint32_t>(
+        std::min<long long>(maxStep - minStep, static_cast<long long>(kMaxWorkerParameterStepCount)));
   }
 
   std::string parameterInfoToJson(const Lv2Port& port, float plainValue) const {
@@ -2488,7 +2530,7 @@ private:
            << ",\"minPlain\":" << port.minimum
            << ",\"maxPlain\":" << port.maximum
            << ",\"automatable\":true"
-           << ",\"stepCount\":0"
+           << ",\"stepCount\":" << stepCountForPort(port)
            << ",\"readOnly\":false"
            << "}";
     return output.str();

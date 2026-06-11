@@ -190,6 +190,14 @@ if (nativeLv2Effect) {
   );
   const nativeLv2Gain = nativeLv2Instance.plugin?.parameters?.find((parameter) => parameter.id === "gain");
   assert(nativeLv2Gain?.automatable === true, "installed LV2 effect exposes control ports through the daemon");
+  const nativeLv2Mode = nativeLv2Instance.plugin?.parameters?.find((parameter) => parameter.id === "mode");
+  assert(
+    nativeLv2Mode?.stepCount === 3 &&
+      nativeLv2Mode.automatable === true &&
+      nativeLv2Mode.readOnly === false &&
+      Math.abs(nativeLv2Mode.defaultNormalizedValue) < 0.000001,
+    "installed LV2 effect exposes bounded discrete control metadata"
+  );
   await request(
     socket,
     "setParameter",
@@ -200,6 +208,24 @@ if (nativeLv2Effect) {
     },
     true,
     pair.sessionToken
+  );
+  const nativeLv2ModeSet = await request(
+    socket,
+    "setParameter",
+    {
+      instanceId: nativeLv2Instance.instanceId,
+      parameterId: "mode",
+      normalizedValue: 0.6
+    },
+    true,
+    pair.sessionToken
+  );
+  assert(
+    nativeLv2ModeSet.parameter?.id === "mode" &&
+      nativeLv2ModeSet.parameter.stepCount === 3 &&
+      nativeLv2ModeSet.parameter.plainValue === 2 &&
+      Math.abs(nativeLv2ModeSet.parameter.normalizedValue - 2 / 3) < 0.000001,
+    "setParameter rounds installed LV2 discrete controls to bounded steps"
   );
   const nativeLv2SavedState = await request(socket, "getState", { instanceId: nativeLv2Instance.instanceId }, true, pair.sessionToken);
   assert(typeof nativeLv2SavedState.state === "string" && nativeLv2SavedState.state.length > 0, "getState returns installed LV2 native control state");
@@ -214,6 +240,17 @@ if (nativeLv2Effect) {
     true,
     pair.sessionToken
   );
+  await request(
+    socket,
+    "setParameter",
+    {
+      instanceId: nativeLv2Instance.instanceId,
+      parameterId: "mode",
+      normalizedValue: 0
+    },
+    true,
+    pair.sessionToken
+  );
   const nativeLv2Restored = await request(
     socket,
     "setState",
@@ -222,10 +259,14 @@ if (nativeLv2Effect) {
     pair.sessionToken
   );
   const restoredLv2Gain = nativeLv2Restored.parameters?.find((parameter) => parameter.id === "gain");
+  const restoredLv2Mode = nativeLv2Restored.parameters?.find((parameter) => parameter.id === "mode");
   assert(
     nativeLv2Restored.restored === true &&
       restoredLv2Gain &&
-      Math.abs(restoredLv2Gain.normalizedValue - 0.8) < 0.000001,
+      Math.abs(restoredLv2Gain.normalizedValue - 0.8) < 0.000001 &&
+      restoredLv2Mode &&
+      restoredLv2Mode.plainValue === 2 &&
+      Math.abs(restoredLv2Mode.normalizedValue - 2 / 3) < 0.000001,
     "setState restores installed LV2 native control state"
   );
   await request(
@@ -960,6 +1001,11 @@ async function runNativeLv2WorkerSmoke() {
     const parameters = await requestWorker("parameters");
     const gain = parameters.parameters?.find((parameter) => parameter.id === "gain");
     assert(gain?.automatable === true, "native LV2 worker exposes control ports as bounded parameters");
+    const mode = parameters.parameters?.find((parameter) => parameter.id === "mode");
+    assert(
+      mode?.stepCount === 3 && mode.plainValue === 0 && Math.abs(mode.defaultNormalizedValue) < 0.000001,
+      "native LV2 worker exposes integer/enumeration control metadata"
+    );
 
     const layout = await requestWorker("layout");
     assertLayoutReport(layout, 2, 2, 48000, 128, "native LV2 worker reports layout");
@@ -969,15 +1015,28 @@ async function runNativeLv2WorkerSmoke() {
       set.parameter?.id === "gain" && Math.abs(set.parameter.normalizedValue - 0.75) < 0.000001,
       "native LV2 worker updates a control port"
     );
+    const modeSet = await requestWorker("setParameter mode 0.6 0");
+    assert(
+      modeSet.parameter?.id === "mode" &&
+        modeSet.parameter.stepCount === 3 &&
+        modeSet.parameter.plainValue === 2 &&
+        Math.abs(modeSet.parameter.normalizedValue - 2 / 3) < 0.000001,
+      "native LV2 worker rounds integer/enumeration control writes"
+    );
 
     const savedState = await requestWorker("getState");
     assert(typeof savedState.state === "string" && savedState.state.length > 0, "native LV2 worker returns bounded control state");
     await requestWorker("setParameter gain 0.1 0");
+    await requestWorker("setParameter mode 0 0");
     await requestWorker(`setState ${savedState.state}`);
     const restoredParameters = await requestWorker("parameters");
     const restoredGain = restoredParameters.parameters?.find((parameter) => parameter.id === "gain");
+    const restoredMode = restoredParameters.parameters?.find((parameter) => parameter.id === "mode");
     assert(
-      restoredGain && Math.abs(restoredGain.normalizedValue - 0.75) < 0.000001,
+      restoredGain &&
+        Math.abs(restoredGain.normalizedValue - 0.75) < 0.000001 &&
+        restoredMode?.plainValue === 2 &&
+        Math.abs(restoredMode.normalizedValue - 2 / 3) < 0.000001,
       "native LV2 worker restores bounded control state"
     );
 

@@ -138,6 +138,7 @@ enum PortIndex : std::uint32_t {
   kOutputRight = 4,
   kLatency = 5,
   kMidiIn = 6,
+  kMode = 7,
 };
 
 struct GainPlugin {
@@ -148,6 +149,7 @@ struct GainPlugin {
   float* outputRight = nullptr;
   float* latency = nullptr;
   const LV2_Atom_Sequence* midiIn = nullptr;
+  const float* mode = nullptr;
   LV2_URID midiEventUrid = 0;
   LV2_URID midiGainFileKeyUrid = 0;
   LV2_URID midiGainKeyUrid = 0;
@@ -208,6 +210,9 @@ void connectPort(LV2_Handle instance, std::uint32_t port, void* dataLocation) {
       break;
     case kMidiIn:
       plugin->midiIn = static_cast<const LV2_Atom_Sequence*>(dataLocation);
+      break;
+    case kMode:
+      plugin->mode = static_cast<const float*>(dataLocation);
       break;
     default:
       break;
