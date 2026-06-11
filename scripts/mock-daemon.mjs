@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createDaemonControlEvents } from "./daemon-control-events.mjs";
 import { createMockInstrumentSupport } from "./daemon-mock-instruments.mjs";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import {
@@ -69,6 +70,11 @@ const MAX_PAIR_ATTEMPTS_PER_CONNECTION = envInteger("SOUNDBRIDGE_MAX_PAIR_ATTEMP
 const MIN_SAMPLE_RATE = 8000;
 const MAX_SAMPLE_RATE = 384000;
 const ALLOWED_ORIGINS = envList("SOUNDBRIDGE_ALLOWED_ORIGINS");
+const validators = createDaemonValidators({
+  minSampleRate: MIN_SAMPLE_RATE,
+  maxSampleRate: MAX_SAMPLE_RATE,
+  makeProtocolError: protocolError
+});
 const {
   boundedFrames,
   isPowerOfTwo,
@@ -77,11 +83,7 @@ const {
   requireIntegerInRange,
   requireNumberInRange,
   requireSampleRate
-} = createDaemonValidators({
-  minSampleRate: MIN_SAMPLE_RATE,
-  maxSampleRate: MAX_SAMPLE_RATE,
-  makeProtocolError: protocolError
-});
+} = validators;
 
 assertLoopbackHost(HOST, "SOUNDBRIDGE_HOST", "SOUNDBRIDGE_ALLOW_NON_LOOPBACK");
 
@@ -142,6 +144,29 @@ const {
     maxPluginParameterTextBytes: MAX_PLUGIN_PARAMETER_TEXT_BYTES,
     maxPluginPresets: MAX_PLUGIN_PRESETS
   }
+});
+const {
+  assertParameterAutomatable,
+  assertParameterWritable,
+  collectAutomationLaneEvents,
+  normalizeAutomationLanePoints,
+  normalizeMidiEvents,
+  normalizeParameterCurve,
+  normalizeParameterEvents,
+  requireParameterId,
+  requirePresetId
+} = createDaemonControlEvents({
+  clamp01,
+  limits: {
+    maxAutomationCurvePoints: MAX_AUTOMATION_CURVE_POINTS,
+    maxAutomationLanePoints: MAX_AUTOMATION_LANE_POINTS,
+    maxBlockSize: MAX_BLOCK_SIZE,
+    maxMidiEventsPerRequest: MAX_MIDI_EVENTS_PER_REQUEST,
+    maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST,
+    maxTransportSamplePosition: MAX_TRANSPORT_SAMPLE_POSITION
+  },
+  makeProtocolError: protocolError,
+  validators
 });
 const {
   ExampleInstrumentWorker,
@@ -1441,299 +1466,4 @@ function destroyEditorRecord(editor) {
 function sessionsForOrigin(origin) {
   cleanupExpiredSessions();
   return Array.from(sessions.values()).filter((session) => session.origin === origin);
-}
-
-function normalizeMidiEvents(events, maxBlockSize) {
-  if (events == null) {
-    return [];
-  }
-  if (!Array.isArray(events)) {
-    throw protocolError("invalid_argument", "events must be an array.");
-  }
-  if (events.length > MAX_MIDI_EVENTS_PER_REQUEST) {
-    throw protocolError("invalid_argument", `events must contain at most ${MAX_MIDI_EVENTS_PER_REQUEST} MIDI events.`, {
-      maxMidiEventsPerRequest: MAX_MIDI_EVENTS_PER_REQUEST
-    });
-  }
-
-  const maxOffset = Math.max(0, Math.min(MAX_BLOCK_SIZE, Number(maxBlockSize) || MAX_BLOCK_SIZE) - 1);
-  return events.map((event, index) => {
-    if (!event || typeof event !== "object") {
-      throw protocolError("invalid_argument", `events[${index}] must be an object.`);
-    }
-
-    const type = String(event.type ?? "");
-    const channel = requireIntInRange(event.channel ?? 0, 0, 15, `events[${index}].channel`);
-    const time = requireIntInRange(event.time ?? 0, 0, maxOffset, `events[${index}].time`);
-    if (type === "noteOn" || type === "noteOff") {
-      const note = requireIntInRange(event.note, 0, 127, `events[${index}].note`);
-      const velocity = requireNumberInRange(
-        event.velocity ?? (type === "noteOn" ? 0.8 : 0),
-        0,
-        1,
-        `events[${index}].velocity`
-      );
-      return { type, note, velocity, channel, time };
-    }
-    if (type === "controlChange") {
-      return {
-        type,
-        controller: requireIntInRange(event.controller, 0, 127, `events[${index}].controller`),
-        value: requireNumberInRange(event.value, 0, 1, `events[${index}].value`),
-        channel,
-        time
-      };
-    }
-    if (type === "pitchBend") {
-      return {
-        type,
-        value: requireNumberInRange(event.value, -1, 1, `events[${index}].value`),
-        channel,
-        time
-      };
-    }
-    if (type === "channelPressure") {
-      return {
-        type,
-        pressure: requireNumberInRange(event.pressure, 0, 1, `events[${index}].pressure`),
-        channel,
-        time
-      };
-    }
-    if (type === "polyPressure") {
-      return {
-        type,
-        note: requireIntInRange(event.note, 0, 127, `events[${index}].note`),
-        pressure: requireNumberInRange(event.pressure, 0, 1, `events[${index}].pressure`),
-        channel,
-        time
-      };
-    }
-    if (type === "programChange") {
-      return {
-        type,
-        program: requireIntInRange(event.program, 0, 127, `events[${index}].program`),
-        channel,
-        time
-      };
-    }
-    throw protocolError(
-      "invalid_argument",
-      `events[${index}].type must be noteOn, noteOff, controlChange, pitchBend, channelPressure, polyPressure, or programChange.`
-    );
-  });
-}
-
-function normalizeParameterEvents(events, maxBlockSize) {
-  if (events == null) {
-    return [];
-  }
-  if (!Array.isArray(events)) {
-    throw protocolError("invalid_argument", "events must be an array.");
-  }
-  if (events.length > MAX_PARAMETER_EVENTS_PER_REQUEST) {
-    throw protocolError("invalid_argument", `events must contain at most ${MAX_PARAMETER_EVENTS_PER_REQUEST} parameter events.`, {
-      maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST
-    });
-  }
-
-  const maxOffset = Math.max(0, Math.min(MAX_BLOCK_SIZE, Number(maxBlockSize) || MAX_BLOCK_SIZE) - 1);
-  return events
-    .map((event, index) => {
-      if (!event || typeof event !== "object") {
-        throw protocolError("invalid_argument", `events[${index}] must be an object.`);
-      }
-      return {
-        parameterId: requireParameterId(event.parameterId, `events[${index}].parameterId`),
-        normalizedValue: requireNumberInRange(event.normalizedValue, 0, 1, `events[${index}].normalizedValue`),
-        time: requireIntInRange(event.time ?? 0, 0, maxOffset, `events[${index}].time`),
-        order: index
-      };
-    })
-    .sort((left, right) => left.time - right.time || left.order - right.order);
-}
-
-function normalizeParameterCurve(parameterId, points, interpolation, maxBlockSize) {
-  if (!Array.isArray(points)) {
-    throw protocolError("invalid_argument", "points must be an array.");
-  }
-  if (points.length < 1 || points.length > MAX_AUTOMATION_CURVE_POINTS) {
-    throw protocolError("invalid_argument", `points must contain 1..${MAX_AUTOMATION_CURVE_POINTS} automation points.`, {
-      maxAutomationCurvePoints: MAX_AUTOMATION_CURVE_POINTS
-    });
-  }
-  const mode = interpolation == null ? "linear" : String(interpolation);
-  if (mode !== "linear" && mode !== "step") {
-    throw protocolError("invalid_argument", "interpolation must be linear or step.");
-  }
-
-  const maxOffset = Math.max(0, Math.min(MAX_BLOCK_SIZE, Number(maxBlockSize) || MAX_BLOCK_SIZE) - 1);
-  const normalizedPoints = points.map((point, index) => {
-    if (!point || typeof point !== "object") {
-      throw protocolError("invalid_argument", `points[${index}] must be an object.`);
-    }
-    return {
-      time: requireIntInRange(point.time, 0, maxOffset, `points[${index}].time`),
-      normalizedValue: requireNumberInRange(point.normalizedValue, 0, 1, `points[${index}].normalizedValue`)
-    };
-  });
-
-  for (let index = 1; index < normalizedPoints.length; ++index) {
-    if (normalizedPoints[index].time <= normalizedPoints[index - 1].time) {
-      throw protocolError("invalid_argument", "curve point times must be strictly increasing.");
-    }
-  }
-
-  if (mode === "step" || normalizedPoints.length === 1) {
-    return normalizedPoints.map((point) => ({
-      parameterId,
-      normalizedValue: point.normalizedValue,
-      time: point.time
-    }));
-  }
-
-  const first = normalizedPoints[0];
-  const last = normalizedPoints[normalizedPoints.length - 1];
-  const span = Math.max(0, last.time - first.time);
-  const explicitTimes = new Set(normalizedPoints.map((point) => point.time));
-  const availableInterpolatedPoints = Math.max(1, MAX_PARAMETER_EVENTS_PER_REQUEST - normalizedPoints.length);
-  const stride = Math.max(1, Math.ceil((span + 1) / availableInterpolatedPoints));
-  const times = new Set(explicitTimes);
-  for (let time = first.time; time <= last.time; time += stride) {
-    times.add(time);
-  }
-  times.add(last.time);
-
-  let sortedTimes = [...times].sort((left, right) => left - right);
-  if (sortedTimes.length > MAX_PARAMETER_EVENTS_PER_REQUEST) {
-    sortedTimes = sortedTimes.filter((time) => explicitTimes.has(time));
-    if (sortedTimes.length > MAX_PARAMETER_EVENTS_PER_REQUEST) {
-      throw protocolError("invalid_argument", `expanded curve must contain at most ${MAX_PARAMETER_EVENTS_PER_REQUEST} parameter events.`, {
-        maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST
-      });
-    }
-  }
-
-  let segmentIndex = 0;
-  return sortedTimes.map((time) => {
-    while (
-      segmentIndex + 1 < normalizedPoints.length - 1 &&
-      normalizedPoints[segmentIndex + 1].time < time
-    ) {
-      segmentIndex += 1;
-    }
-    const left = normalizedPoints[segmentIndex];
-    const right = normalizedPoints[Math.min(segmentIndex + 1, normalizedPoints.length - 1)];
-    const ratio = right.time === left.time ? 0 : (time - left.time) / (right.time - left.time);
-    return {
-      parameterId,
-      normalizedValue: clamp01(left.normalizedValue + (right.normalizedValue - left.normalizedValue) * ratio),
-      time
-    };
-  });
-}
-
-function normalizeAutomationLanePoints(points) {
-  if (!Array.isArray(points)) {
-    throw protocolError("invalid_argument", "points must be an array.");
-  }
-  if (points.length < 1 || points.length > MAX_AUTOMATION_LANE_POINTS) {
-    throw protocolError("invalid_argument", `points must contain 1..${MAX_AUTOMATION_LANE_POINTS} automation lane points.`, {
-      maxAutomationLanePoints: MAX_AUTOMATION_LANE_POINTS
-    });
-  }
-
-  const normalizedPoints = points.map((point, index) => {
-    if (!point || typeof point !== "object") {
-      throw protocolError("invalid_argument", `points[${index}] must be an object.`);
-    }
-    return {
-      samplePosition: requireIntegerInRange(
-        point.samplePosition,
-        0,
-        MAX_TRANSPORT_SAMPLE_POSITION,
-        `points[${index}].samplePosition`
-      ),
-      normalizedValue: requireNumberInRange(point.normalizedValue, 0, 1, `points[${index}].normalizedValue`)
-    };
-  });
-
-  for (let index = 1; index < normalizedPoints.length; ++index) {
-    if (normalizedPoints[index].samplePosition <= normalizedPoints[index - 1].samplePosition) {
-      throw protocolError("invalid_argument", "automation lane sample positions must be strictly increasing.");
-    }
-  }
-
-  return normalizedPoints;
-}
-
-function collectAutomationLaneEvents(instance, transport, frames) {
-  if (!instance.automationLanes || instance.automationLanes.size === 0 || !Object.hasOwn(transport ?? {}, "samplePosition")) {
-    return [];
-  }
-
-  const blockStart = transport.samplePosition;
-  const maxOffset = Math.max(0, frames - 1);
-  const blockEndInclusive =
-    blockStart > MAX_TRANSPORT_SAMPLE_POSITION - maxOffset ? MAX_TRANSPORT_SAMPLE_POSITION : blockStart + maxOffset;
-  const events = [];
-  let laneOrder = 0;
-
-  for (const [parameterId, points] of instance.automationLanes) {
-    for (const point of points) {
-      if (point.samplePosition < blockStart) {
-        continue;
-      }
-      if (point.samplePosition > blockEndInclusive) {
-        break;
-      }
-      events.push({
-        parameterId,
-        normalizedValue: point.normalizedValue,
-        time: point.samplePosition - blockStart,
-        laneOrder
-      });
-      if (events.length > MAX_PARAMETER_EVENTS_PER_REQUEST) {
-        throw protocolError("invalid_argument", "automation lanes produced too many events for one render block.", {
-          maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST
-        });
-      }
-    }
-    laneOrder += 1;
-  }
-
-  return events.sort((left, right) => left.time - right.time || left.laneOrder - right.laneOrder);
-}
-
-function requireParameterId(value, label) {
-  const text = String(value ?? "");
-  if (!text || Buffer.byteLength(text, "utf8") > 64) {
-    throw protocolError("invalid_argument", `${label} must be a non-empty string up to 64 bytes.`);
-  }
-  return text;
-}
-
-function requirePresetId(value, label) {
-  const text = String(value ?? "");
-  if (!text || Buffer.byteLength(text, "utf8") > 64) {
-    throw protocolError("invalid_argument", `${label} must be a non-empty string up to 64 bytes.`);
-  }
-  return text;
-}
-
-function assertParameterWritable(parameter) {
-  if (parameter?.readOnly === true) {
-    throw protocolError("parameter_read_only", `Parameter is read-only: ${parameter.id}`, {
-      parameterId: parameter.id
-    });
-  }
-}
-
-function assertParameterAutomatable(parameter) {
-  assertParameterWritable(parameter);
-  if (parameter?.automatable === false) {
-    throw protocolError("parameter_not_automatable", `Parameter is not automatable: ${parameter.id}`, {
-      parameterId: parameter.id
-    });
-  }
 }
