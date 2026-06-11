@@ -475,7 +475,7 @@ Response:
 }
 ```
 
-`channels` is the backwards-compatible main output bus. `outputBuses` carries indexed output bus buffers and bus index `0` mirrors `channels`. The VST3 worker can route bounded indexed input buffers into active VST3 buses and return indexed output bus buffers. Installed AU workers can consume active indexed input buses and return active CoreAudio output elements as indexed output buses. Installed LV2 workers return bus index `0` as the aggregate main output and bus indexes `1..31` as bounded mono taps for parsed LV2 audio output ports. Mock and example workers use the daemon-normalized bus-0 response.
+`channels` is the backwards-compatible main output bus. `outputBuses` carries indexed output bus buffers and bus index `0` mirrors `channels`. The VST3 worker can route bounded indexed input buffers into active VST3 buses and return indexed output bus buffers. Installed AU workers can consume active indexed input buses and return active CoreAudio output elements as indexed output buses. Installed LV2 workers return output buses from the bounded bus map reported by `getLayout`: declared `pg:group` output buses where metadata exists, otherwise aggregate bus 0 plus bounded mono taps for parsed ungrouped LV2 audio output ports. Mock and example workers use the daemon-normalized bus-0 response.
 
 `transport` is echoed only when the request supplied accepted bounded transport data. It is an acknowledgement of the host context delivered for that block, not plugin-generated timing.
 
