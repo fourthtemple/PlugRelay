@@ -81,7 +81,7 @@ Example paired capability payload:
         "scan": true,
         "host": true,
         "exampleHost": true,
-        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI extensions remain disabled."
+        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI extensions remain disabled."
       }
     },
     "security": {
@@ -438,6 +438,8 @@ Request:
 `channels` is the backwards-compatible main input bus. `inputBuses` is optional and carries explicit indexed input bus buffers for sidechain-style routing. When both are present, bus index `0` is the main input bus. Explicit `inputBuses` must be an array of at most 32 bus blocks with unique integer indexes in `0..31`; malformed, duplicate, non-integer, or out-of-range indexes are rejected at the daemon boundary and rechecked by native worker line-protocol parsers. All channel counts are capped to 32, and all frame counts are capped to the instance `maxBlockSize`. Installed VST3 workers negotiate bounded per-bus SDK speaker arrangements where accepted and route bounded indexed input buffers into active VST3 buses. Installed AU workers route bounded indexed input buffers into matching active CoreAudio input elements where the unit exposes them. Installed LV2 workers route bus index `0` into the declared main LV2 port group when `pg:group` metadata is present; ungrouped LV2 metadata keeps the compatibility fallback where bus index `0` is the aggregate main input and bus indexes `1..31` are bounded mono overrides for parsed audio input ports.
 
 `transport` is optional bounded host timeline context. Supported fields are `playing`, `recording`, `loopActive`, `tempo`, `timeSignatureNumerator`, `timeSignatureDenominator`, `projectTimeMusic`, `barPositionMusic`, `cycleStartMusic`, `cycleEndMusic`, and `samplePosition`. Tempo is `1..960` BPM, time-signature denominators must be powers of two in `1..64`, musical positions are quarter-note values in `0..1000000000`, sample positions are integers in `0..9007199254740991`, and cycle start/end must be supplied together with `cycleEndMusic >= cycleStartMusic`. VST3 workers map accepted values into Steinberg `ProcessContext`; AU workers map accepted values into `AudioTimeStamp` sample time plus `kAudioUnitProperty_HostCallbacks`; LV2 workers map supported timeline values into bounded atom `time:Position` events for compatible atom/event input ports.
+
+Compatible LV2 plugins that declare `work:schedule` and expose `work:interface` receive a bounded synchronous worker feature inside the LV2 worker process. The reference host caps worker message counts and byte sizes, copies all request/response bodies before delivery, never exposes browser-controlled pointers to plugin code, and calls `work_response` / `end_run` after `run()` returns. This is compatibility support for the LV2 worker extension, not an OS sandbox.
 
 Stored automation lanes use `transport.samplePosition` to decide which absolute-sample points belong in the current render block. Lane points are expanded into the same bounded per-block parameter event path used by `setParameterEvents`.
 

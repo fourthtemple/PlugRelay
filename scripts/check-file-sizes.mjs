@@ -5,9 +5,9 @@ const ROOT = process.cwd();
 const MAX_SOURCE_LINES = 1200;
 
 const OVERSIZED_BASELINE = new Map([
-  ["native/bridge-daemon/src/Lv2HostWorker.cpp", 2017],
+  ["native/bridge-daemon/src/Lv2HostWorker.cpp", 1985],
   ["scripts/mock-daemon.mjs", 3687],
-  ["scripts/smoke-test.mjs", 1535]
+  ["scripts/smoke-test.mjs", 1334]
 ]);
 
 const SOURCE_EXTENSIONS = new Set([

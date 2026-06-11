@@ -5,11 +5,13 @@
 @prefix pg: <http://lv2plug.in/ns/ext/port-groups#> .
 @prefix state: <http://lv2plug.in/ns/ext/state#> .
 @prefix time: <http://lv2plug.in/ns/ext/time#> .
+@prefix work: <http://lv2plug.in/ns/ext/worker#> .
 
 <urn:soundbridge:example:lv2-gain>
   a lv2:Plugin ;
   doap:name "SoundBridge Example LV2 Gain" ;
-  lv2:extensionData state:interface ;
+  lv2:extensionData state:interface, work:interface ;
+  lv2:requiredFeature work:schedule ;
   pg:mainInput <urn:soundbridge:example:lv2-gain#input> ;
   pg:mainOutput <urn:soundbridge:example:lv2-gain#output> ;
   lv2:port [

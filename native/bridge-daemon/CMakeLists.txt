@@ -34,6 +34,7 @@ target_compile_features(soundbridge-example-instrument PRIVATE cxx_std_17)
 target_compile_features(soundbridge-example-lv2-gain PRIVATE cxx_std_17)
 target_include_directories(soundbridge-daemon PRIVATE include)
 target_include_directories(soundbridge-example-instrument PRIVATE include)
+target_include_directories(soundbridge-example-lv2-gain PRIVATE include)
 set_target_properties(soundbridge-example-lv2-gain PROPERTIES
   PREFIX ""
   OUTPUT_NAME "soundbridge-example-lv2-gain"

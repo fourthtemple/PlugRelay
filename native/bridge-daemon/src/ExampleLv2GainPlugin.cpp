@@ -1,3 +1,5 @@
+#include "SoundBridge/Lv2Abi.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -8,110 +10,7 @@
 
 namespace {
 
-using LV2_Handle = void*;
-
-struct LV2_Feature {
-  const char* URI;
-  void* data;
-};
-
-struct LV2_Descriptor {
-  const char* URI;
-  LV2_Handle (*instantiate)(
-      const LV2_Descriptor* descriptor,
-      double sampleRate,
-      const char* bundlePath,
-      const LV2_Feature* const* features);
-  void (*connect_port)(LV2_Handle instance, std::uint32_t port, void* dataLocation);
-  void (*activate)(LV2_Handle instance);
-  void (*run)(LV2_Handle instance, std::uint32_t sampleCount);
-  void (*deactivate)(LV2_Handle instance);
-  void (*cleanup)(LV2_Handle instance);
-  const void* (*extension_data)(const char* uri);
-};
-
-using LV2_URID = std::uint32_t;
-using LV2_URID_Map_Handle = void*;
-using LV2_State_Free_Path_Handle = void*;
-using LV2_State_Map_Path_Handle = void*;
-using LV2_State_Make_Path_Handle = void*;
-
-struct LV2_URID_Map {
-  LV2_URID_Map_Handle handle;
-  LV2_URID (*map)(LV2_URID_Map_Handle handle, const char* uri);
-};
-
-using LV2_State_Handle = void*;
-using LV2_State_Status = std::uint32_t;
-using LV2_State_Store_Function = LV2_State_Status (*)(
-    LV2_State_Handle handle,
-    std::uint32_t key,
-    const void* value,
-    std::size_t size,
-    std::uint32_t type,
-    std::uint32_t flags);
-using LV2_State_Retrieve_Function = const void* (*)(
-    LV2_State_Handle handle,
-    std::uint32_t key,
-    std::size_t* size,
-    std::uint32_t* type,
-    std::uint32_t* flags);
-
-struct LV2_State_Interface {
-  LV2_State_Status (*save)(
-      LV2_Handle instance,
-      LV2_State_Store_Function store,
-      LV2_State_Handle handle,
-      std::uint32_t flags,
-      const LV2_Feature* const* features);
-  LV2_State_Status (*restore)(
-      LV2_Handle instance,
-      LV2_State_Retrieve_Function retrieve,
-      LV2_State_Handle handle,
-      std::uint32_t flags,
-      const LV2_Feature* const* features);
-};
-
-struct LV2_State_Map_Path {
-  LV2_State_Map_Path_Handle handle;
-  char* (*abstract_path)(LV2_State_Map_Path_Handle handle, const char* absolutePath);
-  char* (*absolute_path)(LV2_State_Map_Path_Handle handle, const char* abstractPath);
-};
-
-struct LV2_State_Make_Path {
-  LV2_State_Make_Path_Handle handle;
-  char* (*path)(LV2_State_Make_Path_Handle handle, const char* path);
-};
-
-struct LV2_State_Free_Path {
-  LV2_State_Free_Path_Handle handle;
-  void (*free_path)(LV2_State_Free_Path_Handle handle, char* path);
-};
-
-struct LV2_Atom {
-  std::uint32_t size;
-  LV2_URID type;
-};
-
-struct LV2_Atom_Sequence_Body {
-  LV2_URID unit;
-  std::uint32_t pad;
-};
-
-struct LV2_Atom_Sequence {
-  LV2_Atom atom;
-  LV2_Atom_Sequence_Body body;
-};
-
-union LV2_Atom_Event_Time {
-  std::int64_t frames;
-  double beats;
-};
-
-struct LV2_Atom_Event {
-  LV2_Atom_Event_Time time;
-  LV2_Atom body;
-};
+using namespace soundbridge::lv2_abi;
 
 constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
 constexpr const char* kLv2AtomFloatUri = "http://lv2plug.in/ns/ext/atom#Float";
@@ -121,6 +20,8 @@ constexpr const char* kLv2StateFreePathUri = "http://lv2plug.in/ns/ext/state#fre
 constexpr const char* kLv2StateInterfaceUri = "http://lv2plug.in/ns/ext/state#interface";
 constexpr const char* kLv2StateMakePathUri = "http://lv2plug.in/ns/ext/state#makePath";
 constexpr const char* kLv2StateMapPathUri = "http://lv2plug.in/ns/ext/state#mapPath";
+constexpr const char* kLv2WorkerInterfaceUri = "http://lv2plug.in/ns/ext/worker#interface";
+constexpr const char* kLv2WorkerScheduleUri = "http://lv2plug.in/ns/ext/worker#schedule";
 constexpr const char* kMidiGainFileStateUri = "urn:soundbridge:example:lv2-gain#midiGainFile";
 constexpr const char* kMidiGainStateUri = "urn:soundbridge:example:lv2-gain#midiGain";
 constexpr float kExampleLatencyFrames = 17.0F;
@@ -129,6 +30,8 @@ constexpr std::uint32_t kLv2StateErrBadType = 2;
 constexpr std::uint32_t kLv2StateErrNoFeature = 4;
 constexpr std::uint32_t kLv2StateIsPod = 1U << 0U;
 constexpr std::uint32_t kLv2StateIsPortable = 1U << 1U;
+constexpr std::uint32_t kLv2WorkerSuccess = 0;
+constexpr std::uint32_t kLv2WorkerErrUnknown = 1;
 
 enum PortIndex : std::uint32_t {
   kGain = 0,
@@ -155,7 +58,9 @@ struct GainPlugin {
   LV2_URID midiGainKeyUrid = 0;
   LV2_URID atomFloatUrid = 0;
   LV2_URID atomPathUrid = 0;
+  const LV2_Worker_Schedule* workerSchedule = nullptr;
   float midiGain = 1.0F;
+  float workerGain = 1.0F;
 };
 
 std::size_t alignAtomSize(std::size_t size) {
@@ -170,8 +75,14 @@ LV2_Handle instantiate(
   auto* plugin = new GainPlugin();
   if (features != nullptr) {
     for (const LV2_Feature* const* feature = features; *feature != nullptr; ++feature) {
-      if ((*feature)->URI == nullptr || (*feature)->data == nullptr ||
-          std::strcmp((*feature)->URI, kLv2UridMapUri) != 0) {
+      if ((*feature)->URI == nullptr || (*feature)->data == nullptr) {
+        continue;
+      }
+      if (std::strcmp((*feature)->URI, kLv2WorkerScheduleUri) == 0) {
+        plugin->workerSchedule = static_cast<const LV2_Worker_Schedule*>((*feature)->data);
+        continue;
+      }
+      if (std::strcmp((*feature)->URI, kLv2UridMapUri) != 0) {
         continue;
       }
       auto* uridMap = static_cast<const LV2_URID_Map*>((*feature)->data);
@@ -240,6 +151,10 @@ void applyMidi(GainPlugin& plugin) {
       const auto* midi = bytes + bodyOffset;
       if ((midi[0] & 0xF0U) == 0xB0U && midi[1] == 7U) {
         plugin.midiGain = std::clamp(static_cast<float>(midi[2]) / 127.0F, 0.0F, 1.0F);
+      } else if ((midi[0] & 0xF0U) == 0xB0U && midi[1] == 8U &&
+          plugin.workerSchedule != nullptr && plugin.workerSchedule->schedule_work != nullptr) {
+        const std::uint8_t value = midi[2];
+        plugin.workerSchedule->schedule_work(plugin.workerSchedule->handle, sizeof(value), &value);
       }
     }
     offset = nextOffset;
@@ -252,7 +167,9 @@ void run(LV2_Handle instance, std::uint32_t sampleCount) {
     *plugin->latency = kExampleLatencyFrames;
   }
   applyMidi(*plugin);
-  const float gain = std::clamp(plugin->gain == nullptr ? 1.0F : *plugin->gain, 0.0F, 2.0F) * plugin->midiGain;
+  const float gain = std::clamp(plugin->gain == nullptr ? 1.0F : *plugin->gain, 0.0F, 2.0F) *
+      plugin->midiGain *
+      plugin->workerGain;
   for (std::uint32_t frame = 0; frame < sampleCount; ++frame) {
     if (plugin->outputLeft != nullptr) {
       plugin->outputLeft[frame] = (plugin->inputLeft == nullptr ? 0.0F : plugin->inputLeft[frame]) * gain;
@@ -436,6 +353,35 @@ LV2_State_Status restoreState(
   return kLv2StateSuccess;
 }
 
+LV2_Worker_Status workerWork(
+    LV2_Handle /* instance */,
+    LV2_Worker_Respond_Function respond,
+    LV2_Worker_Respond_Handle handle,
+    std::uint32_t size,
+    const void* data) {
+  if (respond == nullptr || size != sizeof(std::uint8_t) || data == nullptr) {
+    return kLv2WorkerErrUnknown;
+  }
+  std::uint8_t value = 0;
+  std::memcpy(&value, data, sizeof(value));
+  return respond(handle, sizeof(value), &value);
+}
+
+LV2_Worker_Status workerResponse(LV2_Handle instance, std::uint32_t size, const void* body) {
+  auto* plugin = static_cast<GainPlugin*>(instance);
+  if (plugin == nullptr || size != sizeof(std::uint8_t) || body == nullptr) {
+    return kLv2WorkerErrUnknown;
+  }
+  std::uint8_t value = 0;
+  std::memcpy(&value, body, sizeof(value));
+  plugin->workerGain = std::clamp(static_cast<float>(value) / 127.0F, 0.0F, 1.0F);
+  return kLv2WorkerSuccess;
+}
+
+LV2_Worker_Status workerEndRun(LV2_Handle /* instance */) {
+  return kLv2WorkerSuccess;
+}
+
 void cleanup(LV2_Handle instance) {
   delete static_cast<GainPlugin*>(instance);
 }
@@ -444,9 +390,17 @@ const LV2_State_Interface kStateInterface {
     saveState,
     restoreState};
 
+const LV2_Worker_Interface kWorkerInterface {
+    workerWork,
+    workerResponse,
+    workerEndRun};
+
 const void* extensionData(const char* uri) {
   if (uri != nullptr && std::strcmp(uri, kLv2StateInterfaceUri) == 0) {
     return &kStateInterface;
+  }
+  if (uri != nullptr && std::strcmp(uri, kLv2WorkerInterfaceUri) == 0) {
+    return &kWorkerInterface;
   }
   return nullptr;
 }

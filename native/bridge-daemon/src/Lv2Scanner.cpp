@@ -16,6 +16,7 @@ namespace {
 
 constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
 constexpr const char* kLv2UridUnmapUri = "http://lv2plug.in/ns/ext/urid#unmap";
+constexpr const char* kLv2WorkerScheduleUri = "http://lv2plug.in/ns/ext/worker#schedule";
 
 std::filesystem::path repositoryExampleLv2Path() {
 #ifdef SOUNDBRIDGE_SOURCE_DIR
@@ -337,7 +338,7 @@ std::set<std::string> requiredFeatureUris(const std::string& text) {
 }
 
 bool lv2RequiredFeatureSupported(const std::string& uri) {
-  return uri == kLv2UridMapUri || uri == kLv2UridUnmapUri;
+  return uri == kLv2UridMapUri || uri == kLv2UridUnmapUri || uri == kLv2WorkerScheduleUri;
 }
 
 std::filesystem::path canonicalPathOrInput(const std::filesystem::path& path) {

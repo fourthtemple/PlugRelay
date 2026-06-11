@@ -1,6 +1,7 @@
 #include "SoundBridge/Lv2HostWorker.h"
 
 #include "SoundBridge/Base64.h"
+#include "SoundBridge/Lv2Abi.h"
 #include "SoundBridge/Lv2HostWorkerSupport.h"
 #include "SoundBridge/NativePlugin.h"
 
@@ -35,151 +36,7 @@ namespace {
 
 #ifndef _WIN32
 
-// Minimal LV2 core ABI declarations. The full LV2 SDK is intentionally not
-// required for this conservative audio/control host path.
-using LV2_Handle = void*;
-
-struct LV2_Feature {
-  const char* URI;
-  void* data;
-};
-
-struct LV2_Descriptor {
-  const char* URI;
-  LV2_Handle (*instantiate)(
-      const LV2_Descriptor* descriptor,
-      double sampleRate,
-      const char* bundlePath,
-      const LV2_Feature* const* features);
-  void (*connect_port)(LV2_Handle instance, std::uint32_t port, void* dataLocation);
-  void (*activate)(LV2_Handle instance);
-  void (*run)(LV2_Handle instance, std::uint32_t sampleCount);
-  void (*deactivate)(LV2_Handle instance);
-  void (*cleanup)(LV2_Handle instance);
-  const void* (*extension_data)(const char* uri);
-};
-
-using Lv2DescriptorFunction = const LV2_Descriptor* (*)(std::uint32_t index);
-using LV2_URID = std::uint32_t;
-using LV2_URID_Map_Handle = void*;
-using LV2_URID_Unmap_Handle = void*;
-using LV2_State_Handle = void*;
-using LV2_State_Free_Path_Handle = void*;
-using LV2_State_Map_Path_Handle = void*;
-using LV2_State_Make_Path_Handle = void*;
-
-struct LV2_URID_Map {
-  LV2_URID_Map_Handle handle;
-  LV2_URID (*map)(LV2_URID_Map_Handle handle, const char* uri);
-};
-
-struct LV2_URID_Unmap {
-  LV2_URID_Unmap_Handle handle;
-  const char* (*unmap)(LV2_URID_Unmap_Handle handle, LV2_URID urid);
-};
-
-using LV2_State_Status = std::uint32_t;
-using LV2_State_Store_Function = LV2_State_Status (*)(
-    LV2_State_Handle handle,
-    std::uint32_t key,
-    const void* value,
-    std::size_t size,
-    std::uint32_t type,
-    std::uint32_t flags);
-using LV2_State_Retrieve_Function = const void* (*)(
-    LV2_State_Handle handle,
-    std::uint32_t key,
-    std::size_t* size,
-    std::uint32_t* type,
-    std::uint32_t* flags);
-
-struct LV2_State_Interface {
-  LV2_State_Status (*save)(
-      LV2_Handle instance,
-      LV2_State_Store_Function store,
-      LV2_State_Handle handle,
-      std::uint32_t flags,
-      const LV2_Feature* const* features);
-  LV2_State_Status (*restore)(
-      LV2_Handle instance,
-      LV2_State_Retrieve_Function retrieve,
-      LV2_State_Handle handle,
-      std::uint32_t flags,
-      const LV2_Feature* const* features);
-};
-
-struct LV2_State_Map_Path {
-  LV2_State_Map_Path_Handle handle;
-  char* (*abstract_path)(LV2_State_Map_Path_Handle handle, const char* absolutePath);
-  char* (*absolute_path)(LV2_State_Map_Path_Handle handle, const char* abstractPath);
-};
-
-struct LV2_State_Make_Path {
-  LV2_State_Make_Path_Handle handle;
-  char* (*path)(LV2_State_Make_Path_Handle handle, const char* path);
-};
-
-struct LV2_State_Free_Path {
-  LV2_State_Free_Path_Handle handle;
-  void (*free_path)(LV2_State_Free_Path_Handle handle, char* path);
-};
-
-struct LV2_Atom {
-  std::uint32_t size;
-  LV2_URID type;
-};
-
-struct LV2_Atom_Sequence_Body {
-  LV2_URID unit;
-  std::uint32_t pad;
-};
-
-struct LV2_Atom_Sequence {
-  LV2_Atom atom;
-  LV2_Atom_Sequence_Body body;
-};
-
-union LV2_Atom_Event_Time {
-  std::int64_t frames;
-  double beats;
-};
-
-struct LV2_Atom_Event {
-  LV2_Atom_Event_Time time;
-  LV2_Atom body;
-};
-
-struct LV2_Atom_Int {
-  LV2_Atom atom;
-  std::int32_t body;
-};
-
-struct LV2_Atom_Long {
-  LV2_Atom atom;
-  std::int64_t body;
-};
-
-struct LV2_Atom_Float {
-  LV2_Atom atom;
-  float body;
-};
-
-struct LV2_Atom_Double {
-  LV2_Atom atom;
-  double body;
-};
-
-struct LV2_Atom_Object_Body {
-  std::uint32_t id;
-  std::uint32_t otype;
-};
-
-struct LV2_Atom_Property_Body {
-  LV2_URID key;
-  LV2_URID context;
-  LV2_Atom value;
-};
-
+using namespace lv2_abi;
 using namespace lv2_worker;
 
 struct Lv2StateProperty {
@@ -651,6 +508,7 @@ public:
     inputChannels_ = static_cast<std::uint32_t>(std::min<std::size_t>(inputPortIndexes_.size(), kMaxWorkerAudioPorts));
     outputChannels_ = static_cast<std::uint32_t>(std::min<std::size_t>(outputPortIndexes_.size(), kMaxWorkerAudioPorts));
     loadDescriptor();
+    workerSchedule_ = LV2_Worker_Schedule{this, &HostedLv2Plugin::scheduleLv2Work};
     instantiate();
   }
 
@@ -1329,6 +1187,10 @@ private:
           if (stateInterface != nullptr && (stateInterface->save != nullptr || stateInterface->restore != nullptr)) {
             stateInterface_ = stateInterface;
           }
+          auto* workerInterface = static_cast<const LV2_Worker_Interface*>(descriptor_->extension_data(kLv2WorkerInterfaceUri));
+          if (workerInterface != nullptr && workerInterface->work != nullptr) {
+            workerInterface_ = workerInterface;
+          }
         }
         return;
       }
@@ -1342,12 +1204,17 @@ private:
     LV2_URID_Unmap uridUnmap {&uridMapper_, &unmapLv2Urid};
     LV2_Feature uridMapFeature {kLv2UridMapUri, &uridMap};
     LV2_Feature uridUnmapFeature {kLv2UridUnmapUri, &uridUnmap};
-    const LV2_Feature* const features[] = {&uridMapFeature, &uridUnmapFeature, nullptr};
+    LV2_Feature workerScheduleFeature {kLv2WorkerScheduleUri, &workerSchedule_};
+    std::vector<const LV2_Feature*> features {&uridMapFeature, &uridUnmapFeature};
+    if (workerInterface_ != nullptr) {
+      features.push_back(&workerScheduleFeature);
+    }
+    features.push_back(nullptr);
     auto bundlePath = bundlePath_;
     if (!bundlePath.empty() && bundlePath.back() != '/') {
       bundlePath.push_back('/');
     }
-    handle_ = descriptor_->instantiate(descriptor_, sampleRate_, bundlePath.c_str(), features);
+    handle_ = descriptor_->instantiate(descriptor_, sampleRate_, bundlePath.c_str(), features.data());
     if (handle_ == nullptr) {
       throw std::runtime_error("LV2 descriptor refused instantiation.");
     }
@@ -1401,7 +1268,9 @@ private:
     }
     prepareMidiBuffers(frameOffset, frames, totalFrames, transport);
     connectPorts(frameOffset);
+    resetWorkerCycle();
     descriptor_->run(handle_, frames);
+    deliverWorkerResponses();
   }
 
   void refreshInstantOutputPorts() {
@@ -1410,7 +1279,101 @@ private:
     }
     prepareEmptyMidiBuffers();
     connectPorts(0);
+    resetWorkerCycle();
     descriptor_->run(handle_, 0);
+    deliverWorkerResponses();
+  }
+
+  static LV2_Worker_Status scheduleLv2Work(
+      LV2_Worker_Schedule_Handle handle,
+      std::uint32_t size,
+      const void* data) {
+    if (handle == nullptr) {
+      return kLv2WorkerErrUnknown;
+    }
+    return static_cast<HostedLv2Plugin*>(handle)->scheduleWorkerWork(size, data);
+  }
+
+  static LV2_Worker_Status respondLv2Work(
+      LV2_Worker_Respond_Handle handle,
+      std::uint32_t size,
+      const void* data) {
+    if (handle == nullptr) {
+      return kLv2WorkerErrUnknown;
+    }
+    return static_cast<HostedLv2Plugin*>(handle)->queueWorkerResponse(size, data);
+  }
+
+  LV2_Worker_Status scheduleWorkerWork(std::uint32_t size, const void* data) noexcept {
+    try {
+      if (workerInterface_ == nullptr || workerInterface_->work == nullptr || handle_ == nullptr) {
+        return kLv2WorkerErrUnknown;
+      }
+      if ((size > 0 && data == nullptr) ||
+          size > kMaxWorkerWorkMessageBytes ||
+          scheduledWorkerMessages_ >= kMaxWorkerWorkMessages ||
+          workerWorkBytes_ + size > kMaxWorkerWorkTotalBytes) {
+        return kLv2WorkerErrNoSpace;
+      }
+      ++scheduledWorkerMessages_;
+      workerWorkBytes_ += size;
+      return workerInterface_->work(handle_, &HostedLv2Plugin::respondLv2Work, this, size, data);
+    } catch (...) {
+      return kLv2WorkerErrUnknown;
+    }
+  }
+
+  LV2_Worker_Status queueWorkerResponse(std::uint32_t size, const void* data) noexcept {
+    try {
+      if ((size > 0 && data == nullptr) ||
+          size > kMaxWorkerWorkMessageBytes ||
+          pendingWorkerResponses_.size() >= kMaxWorkerWorkMessages ||
+          workerResponseBytes_ + size > kMaxWorkerWorkTotalBytes) {
+        return kLv2WorkerErrNoSpace;
+      }
+      std::vector<std::uint8_t> response;
+      if (size > 0) {
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        response.assign(bytes, bytes + size);
+      }
+      workerResponseBytes_ += response.size();
+      pendingWorkerResponses_.push_back(std::move(response));
+      return kLv2WorkerSuccess;
+    } catch (...) {
+      return kLv2WorkerErrUnknown;
+    }
+  }
+
+  void resetWorkerCycle() {
+    pendingWorkerResponses_.clear();
+    scheduledWorkerMessages_ = 0;
+    workerWorkBytes_ = 0;
+    workerResponseBytes_ = 0;
+  }
+
+  void deliverWorkerResponses() {
+    if (workerInterface_ == nullptr) {
+      return;
+    }
+    if (!pendingWorkerResponses_.empty() && workerInterface_->work_response == nullptr) {
+      throw std::runtime_error("lv2_worker_response_unavailable");
+    }
+    for (const auto& response : pendingWorkerResponses_) {
+      const auto status = workerInterface_->work_response(
+          handle_,
+          static_cast<std::uint32_t>(response.size()),
+          response.empty() ? nullptr : response.data());
+      if (status != kLv2WorkerSuccess) {
+        throw std::runtime_error("lv2_worker_response_failed");
+      }
+    }
+    pendingWorkerResponses_.clear();
+    if (workerInterface_->end_run != nullptr) {
+      const auto status = workerInterface_->end_run(handle_);
+      if (status != kLv2WorkerSuccess) {
+        throw std::runtime_error("lv2_worker_end_run_failed");
+      }
+    }
   }
 
   void applyParameterChange(const PendingParameterChange& change) {
@@ -1479,7 +1442,6 @@ private:
       midiBuffers_[index] = midiSequenceBuffer(port, {}, 0, maxBlockSize_, maxBlockSize_, HostTransportContext {});
     }
   }
-
   enum class Lv2AtomScalarKind {
     Int,
     Long,
@@ -1788,6 +1750,8 @@ private:
   Lv2DescriptorFunction descriptorFunction_ = nullptr;
   const LV2_Descriptor* descriptor_ = nullptr;
   const LV2_State_Interface* stateInterface_ = nullptr;
+  const LV2_Worker_Interface* workerInterface_ = nullptr;
+  LV2_Worker_Schedule workerSchedule_ {};
   LV2_Handle handle_ = nullptr;
   Lv2UridMapper uridMapper_;
   double sampleRate_ = 48000.0;
@@ -1811,6 +1775,10 @@ private:
   std::vector<std::vector<std::uint64_t>> midiBuffers_;
   std::vector<PendingParameterChange> pendingParameterChanges_;
   std::vector<PendingMidiMessage> pendingMidiMessages_;
+  std::vector<std::vector<std::uint8_t>> pendingWorkerResponses_;
+  std::size_t scheduledWorkerMessages_ = 0;
+  std::size_t workerWorkBytes_ = 0;
+  std::size_t workerResponseBytes_ = 0;
   bool activated_ = false;
 };
 
@@ -1997,7 +1965,7 @@ bool lv2HostWorkerAvailable() {
 
 std::string lv2HostWorkerStatus() {
 #ifndef _WIN32
-  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI extensions remain disabled.";
+  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI extensions remain disabled.";
 #else
   return "LV2 host worker is not available on this platform build.";
 #endif

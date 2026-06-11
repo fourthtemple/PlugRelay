@@ -1,11 +1,11 @@
 @prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix buf-size: <http://lv2plug.in/ns/ext/buf-size#> .
 @prefix lv2: <http://lv2plug.in/ns/lv2core#> .
-@prefix worker: <http://lv2plug.in/ns/ext/worker#> .
 
 <urn:soundbridge:example:unsupported-required>
   a lv2:Plugin ;
   doap:name "SoundBridge Unsupported Required LV2" ;
-  lv2:requiredFeature worker:schedule ;
+  lv2:requiredFeature buf-size:boundedBlockLength ;
   lv2:port [
     a lv2:InputPort, lv2:AudioPort ;
     lv2:index 0 ;

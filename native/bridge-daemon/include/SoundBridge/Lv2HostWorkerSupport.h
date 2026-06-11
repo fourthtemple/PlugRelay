@@ -15,6 +15,9 @@ constexpr std::size_t kMaxWorkerPorts = 1024;
 constexpr std::size_t kMaxWorkerParameters = 1024;
 constexpr std::size_t kMaxWorkerParameterChanges = 4096;
 constexpr std::size_t kMaxWorkerMidiEvents = 4096;
+constexpr std::size_t kMaxWorkerWorkMessages = 128;
+constexpr std::size_t kMaxWorkerWorkMessageBytes = 64 * 1024;
+constexpr std::size_t kMaxWorkerWorkTotalBytes = 256 * 1024;
 constexpr std::size_t kMaxWorkerStateProperties = 1024;
 constexpr std::size_t kMaxWorkerStatePropertyBytes = 64 * 1024;
 constexpr std::size_t kMaxWorkerStateFiles = 64;
@@ -58,6 +61,8 @@ constexpr const char* kLv2StateInterfaceUri = "http://lv2plug.in/ns/ext/state#in
 constexpr const char* kLv2StateFreePathUri = "http://lv2plug.in/ns/ext/state#freePath";
 constexpr const char* kLv2StateMakePathUri = "http://lv2plug.in/ns/ext/state#makePath";
 constexpr const char* kLv2StateMapPathUri = "http://lv2plug.in/ns/ext/state#mapPath";
+constexpr const char* kLv2WorkerInterfaceUri = "http://lv2plug.in/ns/ext/worker#interface";
+constexpr const char* kLv2WorkerScheduleUri = "http://lv2plug.in/ns/ext/worker#schedule";
 constexpr const char* kLv2TimePositionUri = "http://lv2plug.in/ns/ext/time#Position";
 constexpr const char* kLv2TimeFrameUri = "http://lv2plug.in/ns/ext/time#frame";
 constexpr const char* kLv2TimeSpeedUri = "http://lv2plug.in/ns/ext/time#speed";
@@ -91,6 +96,9 @@ constexpr std::uint32_t kLv2StateErrNoSpace = 6;
 constexpr std::uint32_t kLv2StateIsPod = 1U << 0U;
 constexpr std::uint32_t kLv2StateIsPortable = 1U << 1U;
 constexpr std::uint32_t kLv2StateIsNative = 1U << 2U;
+constexpr std::uint32_t kLv2WorkerSuccess = 0;
+constexpr std::uint32_t kLv2WorkerErrUnknown = 1;
+constexpr std::uint32_t kLv2WorkerErrNoSpace = 2;
 
 enum class Lv2PortDirection {
   Input,
