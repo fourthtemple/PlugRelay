@@ -149,6 +149,8 @@ SOUNDBRIDGE_ALLOWED_ORIGINS=https://your-site.example npm run bridge
 
 The bridge and demo bind to loopback only by default. Non-loopback binds require an explicit unsafe test opt-in with `SOUNDBRIDGE_ALLOW_NON_LOOPBACK=1` or `SOUNDBRIDGE_DEMO_ALLOW_NON_LOOPBACK=1`.
 
+Browser-to-native plugin bridges are powerful enough to need public review. SoundBridge documents its protocol and security model so this category can move toward an auditable open standard instead of opaque localhost helpers.
+
 ## Common Problems
 
 `vst3.hostAvailable` is false:
@@ -201,6 +203,7 @@ npm run check
 
 - [Protocol](docs/protocol.md)
 - [Security](docs/security.md)
+- [Why browser plugin bridges need an open standard](docs/open-standard.md)
 - [Architecture](docs/architecture.md)
 - [Web DAW integration](docs/daw-integration.md)
 

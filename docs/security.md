@@ -2,6 +2,8 @@
 
 SoundBridge exposes native audio plugins to browser origins. That is powerful, so the default posture must be narrow and explicit.
 
+This is also why browser-to-native plugin bridges should converge on an auditable open standard. A web origin that can ask a local companion app to scan or load VST3, Audio Unit, or LV2 plugins is crossing the browser sandbox into native code. See [Why Browser Plugin Bridges Need An Open Standard](open-standard.md).
+
 ## Threat Model
 
 Risks:
