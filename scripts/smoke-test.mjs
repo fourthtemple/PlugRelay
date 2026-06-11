@@ -937,8 +937,28 @@ function assertLayoutReport(layout, requestedInputChannels, requestedOutputChann
       layout.outputBuses <= MAX_PLUGIN_BUSES,
     `${message}: output bus count is bounded`
   );
+  assertBusLayouts(layout.inputBusLayouts, "input", layout.inputBuses, `${message}: input bus layouts`);
+  assertBusLayouts(layout.outputBusLayouts, "output", layout.outputBuses, `${message}: output bus layouts`);
   assert(Math.abs(layout.sampleRate - sampleRate) < 0.01, `${message}: sample rate round-trips`);
   assert(layout.maxBlockSize === maxBlockSize, `${message}: max block size round-trips`);
+}
+
+function assertBusLayouts(buses, direction, expectedCount, message) {
+  assert(Array.isArray(buses), `${message}: bus layout array exists`);
+  assert(buses.length === expectedCount, `${message}: bus layout count matches aggregate count`);
+  for (const [index, bus] of buses.entries()) {
+    assert(bus && typeof bus === "object", `${message}: bus ${index} is an object`);
+    assert(Number.isInteger(bus.index) && bus.index >= 0 && bus.index < MAX_PLUGIN_BUSES, `${message}: bus ${index} index is bounded`);
+    assert(bus.direction === direction, `${message}: bus ${index} direction matches`);
+    assert(bus.mediaType === "audio", `${message}: bus ${index} media type is audio`);
+    assert(typeof bus.name === "string" && Buffer.byteLength(bus.name, "utf8") <= 160, `${message}: bus ${index} name is bounded`);
+    assert(["main", "aux", "unknown"].includes(bus.type), `${message}: bus ${index} type is bounded`);
+    assert(
+      Number.isInteger(bus.channels) && bus.channels >= 0 && bus.channels <= MAX_AUDIO_CHANNELS,
+      `${message}: bus ${index} channels are bounded`
+    );
+    assert(typeof bus.active === "boolean", `${message}: bus ${index} active flag is explicit`);
+  }
 }
 
 function assertSameLayout(actual, expected, message) {
@@ -954,6 +974,14 @@ function assertSameLayout(actual, expected, message) {
   ]) {
     assert(actual[key] === expected[key], `${message}: ${key} matches`);
   }
+  assert(
+    JSON.stringify(actual.inputBusLayouts) === JSON.stringify(expected.inputBusLayouts),
+    `${message}: inputBusLayouts match`
+  );
+  assert(
+    JSON.stringify(actual.outputBusLayouts) === JSON.stringify(expected.outputBusLayouts),
+    `${message}: outputBusLayouts match`
+  );
 }
 
 function blockHasSignal(channels) {

@@ -14,11 +14,11 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | VST3/AU opaque state | Fixed | Native state is bounded, opaque, plugin-id bound, and restored through worker processes. |
 | VST3/AU latency reporting | Fixed | Native workers report plugin latency through the shared protocol, and the daemon bounds transport and reported totals. |
 | VST3/AU tail-time reporting | Fixed | Native workers report bounded tail time through the shared protocol, including explicit infinite-tail metadata for VST3. |
-| VST3/AU layout reporting | Fixed | Native workers report bounded negotiated layout metadata through the shared protocol, and instance metadata reflects the effective channel counts. |
+| VST3/AU layout reporting | Fixed | Native workers report bounded negotiated channel and per-bus layout metadata through the shared protocol, and instance metadata reflects the effective channel counts. |
 | Basic LV2 audio/control hosting | Fixed | The native LV2 worker loads bundle-local dynamic libraries through the LV2 C ABI, bounds TTL metadata, exposes control ports as parameters, renders audio, and reports conservative latency/tail metadata. |
 | Bounded parameter automation events | Fixed | The protocol and daemon reject oversized automation batches, validate parameter ids/values/sample offsets, enforce instance ownership, and forward bounded events to native workers. |
 | Bounded richer MIDI events | Fixed | The protocol and daemon reject oversized MIDI batches and validate note, CC, pitch-bend, pressure, program, channel, and timing fields before worker dispatch; native workers keep per-format MIDI behavior bounded. |
-| Full plugin-hosting surface | Open roadmap | Automation curve interpolation, advanced bus negotiation, LV2 atom/state/worker/UI extensions, plugin UI, and file access need feature-specific controls as they are implemented. |
+| Full plugin-hosting surface | Open roadmap | Automation curve interpolation, full sidechain/multi-output routing, LV2 atom/state/worker/UI extensions, plugin UI, and file access need feature-specific controls as they are implemented. |
 | Third-party worker sandboxing | Last-stage hardening | Worker processes isolate crashes today, but OS-level sandboxing for malicious third-party plugin code is intentionally tracked after the core host features. |
 
 ## Open Roadmap Items
@@ -31,7 +31,7 @@ Full plugin hosting should be tracked as security-sensitive roadmap work, not ju
 | --- | --- | --- |
 | Parameter enumeration and automation | Plugin-controlled names, units, ids, display strings, and dense automation bursts can break JSON, UI, logs, or automation paths. | Cap counts and string lengths, escape text, normalize values, bound event lists, rate-limit future high-density curves, and verify instance ownership. |
 | LV2 extension support | Atom MIDI, state, worker, UI, and extension features introduce untrusted binary callbacks and host-provided feature data. | Keep unsupported LV2 extensions disabled until each one has explicit feature structs, bounds, ownership checks, and worker-process containment. |
-| Advanced bus negotiation | Bad channel, block-size, sample-rate, sidechain, or multi-output negotiation can cause large allocations or crashes. | Apply hard resource limits at the daemon boundary and inside every worker before allocation, and expose bounded layout metadata only. |
+| Advanced bus routing | Bad channel, block-size, sample-rate, sidechain, or multi-output negotiation can cause large allocations or crashes. | Apply hard resource limits at the daemon boundary and inside every worker before allocation, expose bounded per-bus layout metadata, and only enable active sidechain/multi-output routing through explicit bounded buffers. |
 | Plugin editor/UI hosting | Native editor code exposes windowing, focus, clipboard, drag/drop, and file-dialog surfaces. | Host editors in a separate UI worker or broker process, never in the daemon, and broker UI actions explicitly. |
 | Presets, samples, caches, licensing | Plugins often expect filesystem and sometimes network access. | Broker narrow user-approved file access, avoid ambient filesystem access, and deny network access where the OS sandbox permits it. |
 

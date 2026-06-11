@@ -594,6 +594,8 @@ public:
            << ",\"outputChannels\":" << outputChannels_
            << ",\"inputBuses\":" << (inputChannels_ > 0 ? 1 : 0)
            << ",\"outputBuses\":1"
+           << ",\"inputBusLayouts\":" << mainBusLayoutToJson("input", inputChannels_, inputChannels_ > 0)
+           << ",\"outputBusLayouts\":" << mainBusLayoutToJson("output", outputChannels_, true)
            << ",\"sampleRate\":" << sampleRate_
            << ",\"maxBlockSize\":" << maxBlockSize_
            << "}";
@@ -628,6 +630,23 @@ public:
   }
 
 private:
+  static std::string mainBusLayoutToJson(const char* direction, std::uint32_t channels, bool active) {
+    const std::string directionText(direction);
+    if (!active && directionText == "input") {
+      return "[]";
+    }
+    std::ostringstream output;
+    output << "[{\"index\":0"
+           << ",\"direction\":\"" << directionText << "\""
+           << ",\"mediaType\":\"audio\""
+           << ",\"name\":\"" << (directionText == "input" ? "Main Input" : "Main Output") << "\""
+           << ",\"type\":\"main\""
+           << ",\"channels\":" << std::min<std::uint32_t>(channels, kMaxWorkerChannels)
+           << ",\"active\":" << (active ? "true" : "false")
+           << "}]";
+    return output.str();
+  }
+
   std::string stateBase64() const {
     CFPropertyListRef classInfo = nullptr;
     UInt32 classInfoSize = sizeof(classInfo);

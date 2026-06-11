@@ -2244,15 +2244,73 @@ function normalizePluginLayout(value, fallback = {}) {
     MAX_AUDIO_CHANNELS,
     fallback.outputChannels ?? requestedOutputChannels
   );
+  const inputBuses = normalizeInt(value?.inputBuses, 0, MAX_PLUGIN_BUSES, fallback.inputBuses ?? (inputChannels > 0 ? 1 : 0));
+  const outputBuses = normalizeInt(value?.outputBuses, 1, MAX_PLUGIN_BUSES, fallback.outputBuses ?? 1);
+  const inputBusLayouts = normalizeBusLayouts(
+    value?.inputBusLayouts,
+    fallback.inputBusLayouts,
+    "input",
+    inputBuses,
+    inputChannels
+  );
+  const outputBusLayouts = normalizeBusLayouts(
+    value?.outputBusLayouts,
+    fallback.outputBusLayouts,
+    "output",
+    outputBuses,
+    outputChannels
+  );
   return {
     requestedInputChannels,
     requestedOutputChannels,
     inputChannels,
     outputChannels,
-    inputBuses: normalizeInt(value?.inputBuses, 0, MAX_PLUGIN_BUSES, fallback.inputBuses ?? (inputChannels > 0 ? 1 : 0)),
-    outputBuses: normalizeInt(value?.outputBuses, 1, MAX_PLUGIN_BUSES, fallback.outputBuses ?? 1),
+    inputBuses: inputBusLayouts.length,
+    outputBuses: Math.max(1, outputBusLayouts.length),
+    inputBusLayouts,
+    outputBusLayouts,
     sampleRate: clampSampleRate(value?.sampleRate, fallback.sampleRate ?? 48000),
     maxBlockSize: normalizeInt(value?.maxBlockSize, 1, MAX_BLOCK_SIZE, fallback.maxBlockSize ?? 128)
+  };
+}
+
+function normalizeBusLayouts(value, fallback, direction, busCount, totalChannels) {
+  const source = Array.isArray(value) ? value : Array.isArray(fallback) ? fallback : undefined;
+  const normalized = [];
+  if (source) {
+    for (const bus of source.slice(0, MAX_PLUGIN_BUSES)) {
+      normalized.push(normalizeBusLayout(bus, direction, normalized.length));
+    }
+  }
+  if (normalized.length > 0) {
+    return normalized;
+  }
+  return defaultBusLayouts(direction, busCount, totalChannels);
+}
+
+function defaultBusLayouts(direction, busCount, totalChannels) {
+  const count = normalizeInt(busCount, direction === "input" ? 0 : 1, MAX_PLUGIN_BUSES, direction === "input" ? 0 : 1);
+  return Array.from({ length: count }, (_, index) => ({
+    index,
+    direction,
+    mediaType: "audio",
+    name: index === 0 ? (direction === "input" ? "Main Input" : "Main Output") : `${direction === "input" ? "Aux Input" : "Aux Output"} ${index}`,
+    type: index === 0 ? "main" : "aux",
+    channels: index === 0 ? normalizeInt(totalChannels, 0, MAX_AUDIO_CHANNELS, direction === "input" ? 0 : 2) : 0,
+    active: index === 0
+  }));
+}
+
+function normalizeBusLayout(bus, direction, fallbackIndex) {
+  const type = bus?.type === "main" || bus?.type === "aux" ? bus.type : "unknown";
+  return {
+    index: normalizeInt(bus?.index, 0, MAX_PLUGIN_BUSES - 1, fallbackIndex),
+    direction,
+    mediaType: "audio",
+    name: truncateText(bus?.name ?? `${direction === "input" ? "Input" : "Output"} ${fallbackIndex + 1}`, MAX_PLUGIN_PARAMETER_TEXT_BYTES),
+    type,
+    channels: normalizeInt(bus?.channels, 0, MAX_AUDIO_CHANNELS, 0),
+    active: Boolean(bus?.active)
   };
 }
 

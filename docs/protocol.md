@@ -221,6 +221,8 @@ Parameter metadata is plugin-controlled and must be bounded before it reaches a 
 
 Returns the negotiated channel and bus layout for an instance. `requestedInputChannels` and `requestedOutputChannels` record the bounded host request; `inputChannels` and `outputChannels` are the effective worker layout. All channel and bus counts are clamped to `0..32` for inputs and `1..32` for outputs before they reach the host.
 
+`inputBusLayouts` and `outputBusLayouts` expose bounded per-bus metadata for routing UIs and future sidechain/multi-output scheduling. Each bus has an `index`, `direction`, `mediaType`, display `name`, `type` (`main`, `aux`, or `unknown`), `channels`, and `active`. VST3 reports SDK bus info, including aux input buses that commonly represent sidechains. AU, LV2, and mock workers currently report conservative main-bus layouts that match their render paths.
+
 ```json
 {
   "requestedInputChannels": 2,
@@ -229,6 +231,28 @@ Returns the negotiated channel and bus layout for an instance. `requestedInputCh
   "outputChannels": 2,
   "inputBuses": 1,
   "outputBuses": 1,
+  "inputBusLayouts": [
+    {
+      "index": 0,
+      "direction": "input",
+      "mediaType": "audio",
+      "name": "Main Input",
+      "type": "main",
+      "channels": 2,
+      "active": true
+    }
+  ],
+  "outputBusLayouts": [
+    {
+      "index": 0,
+      "direction": "output",
+      "mediaType": "audio",
+      "name": "Main Output",
+      "type": "main",
+      "channels": 2,
+      "active": true
+    }
+  ],
   "sampleRate": 48000,
   "maxBlockSize": 128
 }

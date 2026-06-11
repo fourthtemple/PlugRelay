@@ -164,6 +164,24 @@ export class SoundBridgeClient extends EventTarget {
     outputChannels: number;
     inputBuses: number;
     outputBuses: number;
+    inputBusLayouts: Array<{
+      index: number;
+      direction: "input" | "output";
+      mediaType: "audio";
+      name: string;
+      type: "main" | "aux" | "unknown";
+      channels: number;
+      active: boolean;
+    }>;
+    outputBusLayouts: Array<{
+      index: number;
+      direction: "input" | "output";
+      mediaType: "audio";
+      name: string;
+      type: "main" | "aux" | "unknown";
+      channels: number;
+      active: boolean;
+    }>;
     sampleRate: number;
     maxBlockSize: number;
   }> {

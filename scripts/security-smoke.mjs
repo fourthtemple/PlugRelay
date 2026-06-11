@@ -117,7 +117,11 @@ async function run() {
     created.layout?.inputChannels === 2 &&
       created.layout?.outputChannels === 2 &&
       created.layout?.inputBuses <= 32 &&
-      created.layout?.outputBuses <= 32,
+      created.layout?.outputBuses <= 32 &&
+      Array.isArray(created.layout?.inputBusLayouts) &&
+      Array.isArray(created.layout?.outputBusLayouts) &&
+      created.layout.inputBusLayouts.length === created.layout.inputBuses &&
+      created.layout.outputBusLayouts.length === created.layout.outputBuses,
     "createInstance reports bounded negotiated layout"
   );
 

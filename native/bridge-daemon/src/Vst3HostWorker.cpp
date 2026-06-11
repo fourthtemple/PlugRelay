@@ -682,6 +682,8 @@ public:
            << ",\"outputChannels\":" << outputChannels_
            << ",\"inputBuses\":" << std::clamp<Steinberg::int32>(inputBusCount_, 0, static_cast<Steinberg::int32>(kMaxWorkerChannels))
            << ",\"outputBuses\":" << std::clamp<Steinberg::int32>(outputBusCount_, 0, static_cast<Steinberg::int32>(kMaxWorkerChannels))
+           << ",\"inputBusLayouts\":" << busLayoutsToJson(Steinberg::Vst::kInput, inputBusCount_)
+           << ",\"outputBusLayouts\":" << busLayoutsToJson(Steinberg::Vst::kOutput, outputBusCount_)
            << ",\"sampleRate\":" << sampleRate_
            << ",\"maxBlockSize\":" << maxBlockSize_
            << "}";
@@ -689,6 +691,43 @@ public:
   }
 
 private:
+  std::string busLayoutsToJson(Steinberg::Vst::BusDirection direction, Steinberg::int32 busCount) const {
+    std::ostringstream output;
+    output << "[";
+    const auto count = std::clamp<Steinberg::int32>(busCount, 0, static_cast<Steinberg::int32>(kMaxWorkerChannels));
+    for (Steinberg::int32 index = 0; index < count; ++index) {
+      if (index > 0) {
+        output << ",";
+      }
+      Steinberg::Vst::BusInfo info {};
+      if (component_->getBusInfo(Steinberg::Vst::kAudio, direction, index, info) != Steinberg::kResultOk) {
+        info.mediaType = Steinberg::Vst::kAudio;
+        info.direction = direction;
+        info.channelCount = 0;
+        info.busType = index == 0 ? Steinberg::Vst::kMain : Steinberg::Vst::kAux;
+      }
+
+      const auto active = index == 0 && (direction == Steinberg::Vst::kOutput || inputChannels_ > 0);
+      std::uint32_t channels = 0;
+      if (active) {
+        channels = direction == Steinberg::Vst::kInput ? inputChannels_ : outputChannels_;
+      } else {
+        channels = static_cast<std::uint32_t>(std::clamp<Steinberg::int32>(info.channelCount, 0, static_cast<Steinberg::int32>(kMaxWorkerChannels)));
+      }
+      const auto name = cappedString(VST3::StringConvert::convert(info.name));
+      output << "{\"index\":" << index
+             << ",\"direction\":\"" << (direction == Steinberg::Vst::kInput ? "input" : "output") << "\""
+             << ",\"mediaType\":\"audio\""
+             << ",\"name\":\"" << jsonEscape(name.empty() ? (direction == Steinberg::Vst::kInput ? "Input" : "Output") : name) << "\""
+             << ",\"type\":\"" << (info.busType == Steinberg::Vst::kMain ? "main" : info.busType == Steinberg::Vst::kAux ? "aux" : "unknown") << "\""
+             << ",\"channels\":" << std::min<std::uint32_t>(channels, kMaxWorkerChannels)
+             << ",\"active\":" << (active ? "true" : "false")
+             << "}";
+    }
+    output << "]";
+    return output.str();
+  }
+
   bool midiEventToParameterChange(const PendingMidiEvent& event, PendingParameterChange& parameterChange) {
     if (!midiMapping_ || !controller_) {
       return false;

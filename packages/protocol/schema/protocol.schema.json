@@ -257,6 +257,8 @@
         "outputChannels",
         "inputBuses",
         "outputBuses",
+        "inputBusLayouts",
+        "outputBusLayouts",
         "sampleRate",
         "maxBlockSize"
       ],
@@ -268,8 +270,32 @@
         "outputChannels": { "type": "integer", "minimum": 1, "maximum": 32 },
         "inputBuses": { "type": "integer", "minimum": 0, "maximum": 32 },
         "outputBuses": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "inputBusLayouts": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/pluginBusLayout" }
+        },
+        "outputBusLayouts": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/pluginBusLayout" }
+        },
         "sampleRate": { "type": "number", "minimum": 8000, "maximum": 384000 },
         "maxBlockSize": { "type": "integer", "minimum": 1, "maximum": 8192 }
+      }
+    },
+    "pluginBusLayout": {
+      "type": "object",
+      "required": ["index", "direction", "mediaType", "name", "type", "channels", "active"],
+      "additionalProperties": true,
+      "properties": {
+        "index": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "direction": { "type": "string", "enum": ["input", "output"] },
+        "mediaType": { "type": "string", "enum": ["audio"] },
+        "name": { "type": "string", "maxLength": 160 },
+        "type": { "type": "string", "enum": ["main", "aux", "unknown"] },
+        "channels": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "active": { "type": "boolean" }
       }
     },
     "pluginPreset": {

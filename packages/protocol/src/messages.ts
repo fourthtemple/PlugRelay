@@ -111,6 +111,16 @@ export interface PluginPreset {
   parameters: Record<string, number>;
 }
 
+export interface PluginBusLayout {
+  index: number;
+  direction: "input" | "output";
+  mediaType: "audio";
+  name: string;
+  type: "main" | "aux" | "unknown";
+  channels: number;
+  active: boolean;
+}
+
 export interface PluginLayout {
   requestedInputChannels: number;
   requestedOutputChannels: number;
@@ -118,6 +128,8 @@ export interface PluginLayout {
   outputChannels: number;
   inputBuses: number;
   outputBuses: number;
+  inputBusLayouts: PluginBusLayout[];
+  outputBusLayouts: PluginBusLayout[];
   sampleRate: number;
   maxBlockSize: number;
 }
