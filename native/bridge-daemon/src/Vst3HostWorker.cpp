@@ -11,6 +11,7 @@
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivstmessage.h"
+#include "pluginterfaces/vst/ivstmidicontrollers.h"
 #include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
@@ -53,10 +54,22 @@ constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
 constexpr double kMaxWorkerSampleRate = 384000.0;
 
+enum class PendingMidiEventType {
+  NoteOn,
+  NoteOff,
+  ControlChange,
+  PitchBend,
+  ChannelPressure,
+  PolyPressure,
+  ProgramChange
+};
+
 struct PendingMidiEvent {
-  bool noteOn = true;
+  PendingMidiEventType type = PendingMidiEventType::NoteOn;
   std::uint8_t note = 60;
-  float velocity = 0.8F;
+  std::uint8_t controller = 0;
+  std::uint8_t program = 0;
+  float value = 0.8F;
   std::uint8_t channel = 0;
   std::uint32_t sampleOffset = 0;
 };
@@ -171,34 +184,101 @@ bool parseMidiEventToken(const std::string& token, PendingMidiEvent& event) {
   while (std::getline(stream, part, ':')) {
     parts.push_back(part);
   }
-  if (parts.size() != 5) {
+  if (parts.empty()) {
     return false;
   }
 
-  if (parts[0] == "on") {
-    event.noteOn = true;
-  } else if (parts[0] == "off") {
-    event.noteOn = false;
-  } else {
-    return false;
+  auto parseChannelAndOffset = [&](std::size_t channelIndex, std::size_t offsetIndex) -> bool {
+    std::uint32_t channel = 0;
+    std::uint32_t sampleOffset = 0;
+    if (!parseUint32Arg(parts[channelIndex].c_str(), 0, 15, channel) ||
+        !parseUint32Arg(parts[offsetIndex].c_str(), 0, kMaxWorkerFrames - 1, sampleOffset)) {
+      return false;
+    }
+    event.channel = static_cast<std::uint8_t>(channel);
+    event.sampleOffset = sampleOffset;
+    return true;
+  };
+
+  if (parts[0] == "on" || parts[0] == "off" || parts[0] == "poly") {
+    if (parts.size() != 5) {
+      return false;
+    }
+    std::uint32_t note = 60;
+    double value = parts[0] == "off" ? 0.0 : 0.8;
+    if (!parseUint32Arg(parts[1].c_str(), 0, 127, note) ||
+        !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) ||
+        !parseChannelAndOffset(3, 4)) {
+      return false;
+    }
+    event.type = parts[0] == "on"
+        ? PendingMidiEventType::NoteOn
+        : parts[0] == "off" ? PendingMidiEventType::NoteOff : PendingMidiEventType::PolyPressure;
+    event.note = static_cast<std::uint8_t>(note);
+    event.value = static_cast<float>(value);
+    return true;
   }
 
-  std::uint32_t note = 60;
-  std::uint32_t channel = 0;
-  std::uint32_t sampleOffset = 0;
-  double velocity = event.noteOn ? 0.8 : 0.0;
-  if (!parseUint32Arg(parts[1].c_str(), 0, 127, note) ||
-      !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, velocity) ||
-      !parseUint32Arg(parts[3].c_str(), 0, 15, channel) ||
-      !parseUint32Arg(parts[4].c_str(), 0, kMaxWorkerFrames - 1, sampleOffset)) {
-    return false;
+  if (parts[0] == "cc") {
+    if (parts.size() != 5) {
+      return false;
+    }
+    std::uint32_t controller = 0;
+    double value = 0.0;
+    if (!parseUint32Arg(parts[1].c_str(), 0, 127, controller) ||
+        !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) ||
+        !parseChannelAndOffset(3, 4)) {
+      return false;
+    }
+    event.type = PendingMidiEventType::ControlChange;
+    event.controller = static_cast<std::uint8_t>(controller);
+    event.value = static_cast<float>(value);
+    return true;
   }
 
-  event.note = static_cast<std::uint8_t>(note);
-  event.velocity = static_cast<float>(velocity);
-  event.channel = static_cast<std::uint8_t>(channel);
-  event.sampleOffset = sampleOffset;
-  return true;
+  if (parts[0] == "bend") {
+    if (parts.size() != 4) {
+      return false;
+    }
+    double value = 0.0;
+    if (!parseDoubleArg(parts[1].c_str(), -1.0, 1.0, value) ||
+        !parseChannelAndOffset(2, 3)) {
+      return false;
+    }
+    event.type = PendingMidiEventType::PitchBend;
+    event.value = static_cast<float>(value);
+    return true;
+  }
+
+  if (parts[0] == "pressure") {
+    if (parts.size() != 4) {
+      return false;
+    }
+    double pressure = 0.0;
+    if (!parseDoubleArg(parts[1].c_str(), 0.0, 1.0, pressure) ||
+        !parseChannelAndOffset(2, 3)) {
+      return false;
+    }
+    event.type = PendingMidiEventType::ChannelPressure;
+    event.value = static_cast<float>(pressure);
+    return true;
+  }
+
+  if (parts[0] == "program") {
+    if (parts.size() != 4) {
+      return false;
+    }
+    std::uint32_t program = 0;
+    if (!parseUint32Arg(parts[1].c_str(), 0, 127, program) ||
+        !parseChannelAndOffset(2, 3)) {
+      return false;
+    }
+    event.type = PendingMidiEventType::ProgramChange;
+    event.program = static_cast<std::uint8_t>(program);
+    return true;
+  }
+
+  return false;
 }
 
 bool parseMidiEvents(const std::string& encoded, std::vector<PendingMidiEvent>& events) {
@@ -225,30 +305,42 @@ bool parseMidiEvents(const std::string& encoded, std::vector<PendingMidiEvent>& 
   return true;
 }
 
-Steinberg::Vst::Event makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames) {
-  Steinberg::Vst::Event event {};
+bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinberg::Vst::Event& event) {
+  event = {};
   event.busIndex = 0;
   event.sampleOffset = static_cast<Steinberg::int32>(
       std::clamp<std::uint32_t>(pending.sampleOffset, 0, frames > 0 ? frames - 1 : 0));
   event.ppqPosition = 0.0;
   event.flags = Steinberg::Vst::Event::kIsLive;
-  if (pending.noteOn && pending.velocity > 0.0F) {
+  if (pending.type == PendingMidiEventType::NoteOn && pending.value > 0.0F) {
     event.type = Steinberg::Vst::Event::kNoteOnEvent;
     event.noteOn.channel = static_cast<Steinberg::int16>(pending.channel);
     event.noteOn.pitch = static_cast<Steinberg::int16>(pending.note);
     event.noteOn.tuning = 0.0F;
-    event.noteOn.velocity = std::clamp(pending.velocity, 0.0F, 1.0F);
+    event.noteOn.velocity = std::clamp(pending.value, 0.0F, 1.0F);
     event.noteOn.length = 0;
     event.noteOn.noteId = -1;
-  } else {
+    return true;
+  }
+  if (pending.type == PendingMidiEventType::NoteOff ||
+      pending.type == PendingMidiEventType::NoteOn) {
     event.type = Steinberg::Vst::Event::kNoteOffEvent;
     event.noteOff.channel = static_cast<Steinberg::int16>(pending.channel);
     event.noteOff.pitch = static_cast<Steinberg::int16>(pending.note);
-    event.noteOff.velocity = std::clamp(pending.velocity, 0.0F, 1.0F);
+    event.noteOff.velocity = std::clamp(pending.value, 0.0F, 1.0F);
     event.noteOff.noteId = -1;
     event.noteOff.tuning = 0.0F;
+    return true;
   }
-  return event;
+  if (pending.type == PendingMidiEventType::PolyPressure) {
+    event.type = Steinberg::Vst::Event::kPolyPressureEvent;
+    event.polyPressure.channel = static_cast<Steinberg::int16>(pending.channel);
+    event.polyPressure.pitch = static_cast<Steinberg::int16>(pending.note);
+    event.polyPressure.pressure = std::clamp(pending.value, 0.0F, 1.0F);
+    event.polyPressure.noteId = -1;
+    return true;
+  }
+  return false;
 }
 
 bool parameterIsAutomatable(const Steinberg::Vst::ParameterInfo& info) {
@@ -408,8 +500,21 @@ public:
     processData.inputs = inputChannels_ > 0 ? &inputBus : nullptr;
     processData.outputs = outputChannels_ > 0 ? &outputBus : nullptr;
 
+    auto midiEvents = std::move(pendingMidiEvents_);
+    pendingMidiEvents_.clear();
+    std::stable_sort(midiEvents.begin(), midiEvents.end(), [](const auto& left, const auto& right) {
+      return left.sampleOffset < right.sampleOffset;
+    });
+
     auto parameterEvents = std::move(pendingParameterChanges_);
     pendingParameterChanges_.clear();
+    for (const auto& midiEvent : midiEvents) {
+      PendingParameterChange mappedChange {};
+      if (midiEventToParameterChange(midiEvent, mappedChange) &&
+          parameterEvents.size() < kMaxWorkerParameterChanges) {
+        parameterEvents.push_back(mappedChange);
+      }
+    }
     std::stable_sort(parameterEvents.begin(), parameterEvents.end(), [](const auto& left, const auto& right) {
       return left.sampleOffset < right.sampleOffset;
     });
@@ -430,15 +535,12 @@ public:
     processData.inputParameterChanges = inputParameterChanges.getParameterCount() > 0 ? &inputParameterChanges : nullptr;
     processData.outputParameterChanges = nullptr;
 
-    auto midiEvents = std::move(pendingMidiEvents_);
-    pendingMidiEvents_.clear();
-    std::stable_sort(midiEvents.begin(), midiEvents.end(), [](const auto& left, const auto& right) {
-      return left.sampleOffset < right.sampleOffset;
-    });
     Steinberg::Vst::EventList inputEvents(static_cast<Steinberg::int32>(midiEvents.size()));
     for (const auto& midiEvent : midiEvents) {
-      auto vstEvent = makeVst3Event(midiEvent, frames);
-      inputEvents.addEvent(vstEvent);
+      Steinberg::Vst::Event vstEvent {};
+      if (makeVst3Event(midiEvent, frames, vstEvent)) {
+        inputEvents.addEvent(vstEvent);
+      }
     }
     processData.inputEvents = inputEvents.getEventCount() > 0 ? &inputEvents : nullptr;
     processData.outputEvents = nullptr;
@@ -587,9 +689,54 @@ public:
   }
 
 private:
+  bool midiEventToParameterChange(const PendingMidiEvent& event, PendingParameterChange& parameterChange) {
+    if (!midiMapping_ || !controller_) {
+      return false;
+    }
+
+    Steinberg::Vst::CtrlNumber controllerNumber = 0;
+    double normalizedValue = 0.0;
+    switch (event.type) {
+      case PendingMidiEventType::ControlChange:
+        controllerNumber = static_cast<Steinberg::Vst::CtrlNumber>(event.controller);
+        normalizedValue = event.value;
+        break;
+      case PendingMidiEventType::PitchBend:
+        controllerNumber = Steinberg::Vst::kPitchBend;
+        normalizedValue = (static_cast<double>(event.value) + 1.0) / 2.0;
+        break;
+      case PendingMidiEventType::ChannelPressure:
+        controllerNumber = Steinberg::Vst::kAfterTouch;
+        normalizedValue = event.value;
+        break;
+      default:
+        return false;
+    }
+
+    Steinberg::Vst::ParamID id = 0;
+    if (midiMapping_->getMidiControllerAssignment(
+            0,
+            static_cast<Steinberg::int16>(event.channel),
+            controllerNumber,
+            id) != Steinberg::kResultOk) {
+      return false;
+    }
+
+    normalizedValue = std::clamp(normalizedValue, 0.0, 1.0);
+    if (controller_->setParamNormalized(id, normalizedValue) != Steinberg::kResultOk) {
+      return false;
+    }
+
+    parameterChange.id = id;
+    parameterChange.value = normalizedValue;
+    parameterChange.sampleOffset = std::clamp<std::uint32_t>(event.sampleOffset, 0, kMaxWorkerFrames - 1);
+    return true;
+  }
+
   void initializeController() {
     controller_ = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(component_);
     if (controller_) {
+      midiMapping_ = Steinberg::FUnknownPtr<Steinberg::Vst::IMidiMapping>(controller_);
       return;
     }
 
@@ -602,6 +749,7 @@ private:
     if (controller_) {
       checkResult(controller_->initialize(&hostApplication_), "IEditController::initialize");
       controllerInitialized_ = true;
+      midiMapping_ = Steinberg::FUnknownPtr<Steinberg::Vst::IMidiMapping>(controller_);
     }
   }
 
@@ -771,6 +919,7 @@ private:
   Steinberg::IPtr<Steinberg::Vst::IConnectionPoint> componentConnection_;
   Steinberg::IPtr<Steinberg::Vst::IConnectionPoint> controllerConnection_;
   Steinberg::IPtr<Steinberg::Vst::IAudioProcessor> processor_;
+  Steinberg::IPtr<Steinberg::Vst::IMidiMapping> midiMapping_;
   double sampleRate_ = 48000.0;
   std::uint32_t maxBlockSize_ = 128;
   std::uint32_t requestedInputChannels_ = 2;
@@ -836,9 +985,11 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
             velocity = 0.0;
           }
           PendingMidiEvent event;
-          event.noteOn = command == "noteOn" && velocity > 0.0;
+          event.type = command == "noteOn" && velocity > 0.0
+              ? PendingMidiEventType::NoteOn
+              : PendingMidiEventType::NoteOff;
           event.note = static_cast<std::uint8_t>(std::clamp(note, 0, 127));
-          event.velocity = static_cast<float>(std::clamp(velocity, 0.0, 1.0));
+          event.value = static_cast<float>(std::clamp(velocity, 0.0, 1.0));
           event.channel = static_cast<std::uint8_t>(std::clamp(channel, 0, 15));
           event.sampleOffset = static_cast<std::uint32_t>(std::clamp(sampleOffset, 0, static_cast<int>(kMaxWorkerFrames - 1)));
           host.enqueueMidiEvents({event});

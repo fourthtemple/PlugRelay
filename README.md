@@ -125,9 +125,9 @@ Open <http://127.0.0.1:5173>. The demo can select installed VST3/AU/LV2 plugins 
 
 ## What Works Now
 
-- VST3: installed audio effects through the Steinberg VST3 SDK host worker, including parameter metadata, parameter writes, bounded automation event lists, MIDI note events, negotiated layout reporting, rendering, bounded latency/tail reporting, and opaque state save/restore.
-- AU: installed macOS Audio Units through the CoreAudio host worker, including parameter metadata, parameter writes, bounded automation event lists, negotiated layout reporting, rendering, MIDI note events where supported, bounded latency/tail reporting, and opaque state save/restore.
-- LV2: installed basic audio/control LV2 effects through the native LV2 host worker, including bounded TTL metadata parsing, parameter metadata, parameter writes, bounded automation event lists for control ports, negotiated layout reporting, rendering, and conservative latency/tail reporting. LV2 atom MIDI, state, worker, UI, and advanced extension support are still roadmap items.
+- VST3: installed audio effects through the Steinberg VST3 SDK host worker, including parameter metadata, parameter writes, bounded automation event lists, bounded note/poly-pressure events, VST3 MIDI-controller parameter mapping where plugins expose it, negotiated layout reporting, rendering, bounded latency/tail reporting, and opaque state save/restore.
+- AU: installed macOS Audio Units through the CoreAudio host worker, including parameter metadata, parameter writes, bounded automation event lists, negotiated layout reporting, rendering, bounded note, CC, pitch-bend, pressure, and program-change events where supported, bounded latency/tail reporting, and opaque state save/restore.
+- LV2: installed basic audio/control LV2 effects through the native LV2 host worker, including bounded TTL metadata parsing, parameter metadata, parameter writes, bounded automation event lists for control ports, negotiated layout reporting, rendering, conservative latency/tail reporting, and validation of bounded MIDI batches before acknowledgement. LV2 atom MIDI, state, worker, UI, and advanced extension support are still roadmap items.
 - VST2: not supported.
 
 VST3 hosting is enabled when `SOUNDBRIDGE_VST3_SDK_PATH` points to a Steinberg VST3 SDK checkout, or when the local development SDK path exists.

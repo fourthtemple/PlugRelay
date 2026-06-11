@@ -9,7 +9,7 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | Area | Status | Notes |
 | --- | --- | --- |
 | Original findings #1-#9 | Fixed | Remediated in the daemon (`scripts/mock-daemon.mjs`), native C++ workers, protocol schema, and docs. |
-| Regression coverage | Passing | `npm run smoke:security` exercises the fixes against a live daemon. Last recorded result: 35/35 checks passing. |
+| Regression coverage | Passing | `npm run smoke:security` exercises the fixes against a live daemon. Last recorded result: 37/37 checks passing. |
 | Example render argument hardening | Fixed | Example render entry points reject unknown example plugin ids before numeric argument parsing. |
 | VST3/AU opaque state | Fixed | Native state is bounded, opaque, plugin-id bound, and restored through worker processes. |
 | VST3/AU latency reporting | Fixed | Native workers report plugin latency through the shared protocol, and the daemon bounds transport and reported totals. |
@@ -17,7 +17,8 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | VST3/AU layout reporting | Fixed | Native workers report bounded negotiated layout metadata through the shared protocol, and instance metadata reflects the effective channel counts. |
 | Basic LV2 audio/control hosting | Fixed | The native LV2 worker loads bundle-local dynamic libraries through the LV2 C ABI, bounds TTL metadata, exposes control ports as parameters, renders audio, and reports conservative latency/tail metadata. |
 | Bounded parameter automation events | Fixed | The protocol and daemon reject oversized automation batches, validate parameter ids/values/sample offsets, enforce instance ownership, and forward bounded events to native workers. |
-| Full plugin-hosting surface | Open roadmap | Broader MIDI, automation curve interpolation, advanced bus negotiation, LV2 atom/state/worker/UI extensions, plugin UI, and file access need feature-specific controls as they are implemented. |
+| Bounded richer MIDI events | Fixed | The protocol and daemon reject oversized MIDI batches and validate note, CC, pitch-bend, pressure, program, channel, and timing fields before worker dispatch; native workers keep per-format MIDI behavior bounded. |
+| Full plugin-hosting surface | Open roadmap | Automation curve interpolation, advanced bus negotiation, LV2 atom/state/worker/UI extensions, plugin UI, and file access need feature-specific controls as they are implemented. |
 | Third-party worker sandboxing | Last-stage hardening | Worker processes isolate crashes today, but OS-level sandboxing for malicious third-party plugin code is intentionally tracked after the core host features. |
 
 ## Open Roadmap Items
@@ -28,7 +29,6 @@ Full plugin hosting should be tracked as security-sensitive roadmap work, not ju
 
 | Feature | Security concern | Roadmap control |
 | --- | --- | --- |
-| MIDI event lists | Malformed or oversized event batches can stress workers or adapter code. | Validate event count, byte size, timing offsets, channel/note ranges, and reject malformed events before worker dispatch. |
 | Parameter enumeration and automation | Plugin-controlled names, units, ids, display strings, and dense automation bursts can break JSON, UI, logs, or automation paths. | Cap counts and string lengths, escape text, normalize values, bound event lists, rate-limit future high-density curves, and verify instance ownership. |
 | LV2 extension support | Atom MIDI, state, worker, UI, and extension features introduce untrusted binary callbacks and host-provided feature data. | Keep unsupported LV2 extensions disabled until each one has explicit feature structs, bounds, ownership checks, and worker-process containment. |
 | Advanced bus negotiation | Bad channel, block-size, sample-rate, sidechain, or multi-output negotiation can cause large allocations or crashes. | Apply hard resource limits at the daemon boundary and inside every worker before allocation, and expose bounded layout metadata only. |

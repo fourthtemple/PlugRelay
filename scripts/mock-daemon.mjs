@@ -1120,7 +1120,7 @@ class NativeHostWorker {
   }
 
   async sendMidiEvents(events) {
-    if (this.nativeHost.format === "vst3") {
+    if (["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
       await this.request(`midi ${encodeMidiEvents(events)}`);
       return;
     }
@@ -2063,8 +2063,28 @@ function encodeMidiEvents(events) {
 
   return events
     .map((event) => {
-      const type = event.type === "noteOn" && event.velocity > 0 ? "on" : "off";
-      return [type, event.note, event.velocity, event.channel, event.time].join(":");
+      if (event.type === "noteOn") {
+        return ["on", event.note, event.velocity, event.channel, event.time].join(":");
+      }
+      if (event.type === "noteOff") {
+        return ["off", event.note, event.velocity, event.channel, event.time].join(":");
+      }
+      if (event.type === "controlChange") {
+        return ["cc", event.controller, event.value, event.channel, event.time].join(":");
+      }
+      if (event.type === "pitchBend") {
+        return ["bend", event.value, event.channel, event.time].join(":");
+      }
+      if (event.type === "channelPressure") {
+        return ["pressure", event.pressure, event.channel, event.time].join(":");
+      }
+      if (event.type === "polyPressure") {
+        return ["poly", event.note, event.pressure, event.channel, event.time].join(":");
+      }
+      if (event.type === "programChange") {
+        return ["program", event.program, event.channel, event.time].join(":");
+      }
+      throw protocolError("invalid_argument", `Unsupported MIDI event type: ${event.type}`);
     })
     .join(";");
 }
@@ -2271,31 +2291,71 @@ function normalizeMidiEvents(events, maxBlockSize) {
     });
   }
 
+  const maxOffset = Math.max(0, Math.min(MAX_BLOCK_SIZE, Number(maxBlockSize) || MAX_BLOCK_SIZE) - 1);
   return events.map((event, index) => {
     if (!event || typeof event !== "object") {
       throw protocolError("invalid_argument", `events[${index}] must be an object.`);
     }
-    if (event.type !== "noteOn" && event.type !== "noteOff") {
-      throw protocolError("invalid_argument", `events[${index}].type must be noteOn or noteOff.`);
-    }
 
-    const note = requireIntInRange(event.note, 0, 127, `events[${index}].note`);
+    const type = String(event.type ?? "");
     const channel = requireIntInRange(event.channel ?? 0, 0, 15, `events[${index}].channel`);
-    const velocity = requireNumberInRange(
-      event.velocity ?? (event.type === "noteOn" ? 0.8 : 0),
-      0,
-      1,
-      `events[${index}].velocity`
-    );
-    const maxOffset = Math.max(0, Math.min(MAX_BLOCK_SIZE, Number(maxBlockSize) || MAX_BLOCK_SIZE) - 1);
     const time = requireIntInRange(event.time ?? 0, 0, maxOffset, `events[${index}].time`);
-    return {
-      type: event.type,
-      note,
-      velocity,
-      channel,
-      time
-    };
+    if (type === "noteOn" || type === "noteOff") {
+      const note = requireIntInRange(event.note, 0, 127, `events[${index}].note`);
+      const velocity = requireNumberInRange(
+        event.velocity ?? (type === "noteOn" ? 0.8 : 0),
+        0,
+        1,
+        `events[${index}].velocity`
+      );
+      return { type, note, velocity, channel, time };
+    }
+    if (type === "controlChange") {
+      return {
+        type,
+        controller: requireIntInRange(event.controller, 0, 127, `events[${index}].controller`),
+        value: requireNumberInRange(event.value, 0, 1, `events[${index}].value`),
+        channel,
+        time
+      };
+    }
+    if (type === "pitchBend") {
+      return {
+        type,
+        value: requireNumberInRange(event.value, -1, 1, `events[${index}].value`),
+        channel,
+        time
+      };
+    }
+    if (type === "channelPressure") {
+      return {
+        type,
+        pressure: requireNumberInRange(event.pressure, 0, 1, `events[${index}].pressure`),
+        channel,
+        time
+      };
+    }
+    if (type === "polyPressure") {
+      return {
+        type,
+        note: requireIntInRange(event.note, 0, 127, `events[${index}].note`),
+        pressure: requireNumberInRange(event.pressure, 0, 1, `events[${index}].pressure`),
+        channel,
+        time
+      };
+    }
+    if (type === "programChange") {
+      return {
+        type,
+        program: requireIntInRange(event.program, 0, 127, `events[${index}].program`),
+        channel,
+        time
+      };
+    }
+    throw protocolError(
+      "invalid_argument",
+      `events[${index}].type must be noteOn, noteOff, controlChange, pitchBend, channelPressure, polyPressure, or programChange.`
+    );
   });
 }
 

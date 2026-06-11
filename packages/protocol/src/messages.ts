@@ -227,6 +227,38 @@ export type MidiEvent =
       velocity?: number;
       time?: number;
       channel?: number;
+    }
+  | {
+      type: "controlChange";
+      controller: number;
+      value: number;
+      time?: number;
+      channel?: number;
+    }
+  | {
+      type: "pitchBend";
+      value: number;
+      time?: number;
+      channel?: number;
+    }
+  | {
+      type: "channelPressure";
+      pressure: number;
+      time?: number;
+      channel?: number;
+    }
+  | {
+      type: "polyPressure";
+      note: number;
+      pressure: number;
+      time?: number;
+      channel?: number;
+    }
+  | {
+      type: "programChange";
+      program: number;
+      time?: number;
+      channel?: number;
     };
 
 export interface SendMidiEventsRequest {

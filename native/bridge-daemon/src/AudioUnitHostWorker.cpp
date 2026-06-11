@@ -31,6 +31,7 @@ namespace {
 // The parent daemon enforces its own caps, but the worker must not trust it.
 constexpr std::uint32_t kMaxWorkerFrames = 8192;
 constexpr std::uint32_t kMaxWorkerChannels = 32;
+constexpr std::size_t kMaxWorkerMidiEvents = 4096;
 constexpr std::size_t kMaxWorkerParameters = 1024;
 constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
 constexpr std::size_t kMaxWorkerStateBytes = 384 * 1024;
@@ -39,6 +40,13 @@ constexpr std::uint32_t kMaxWorkerTailSamples = 1'048'576;
 constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
 constexpr double kMaxWorkerSampleRate = 384000.0;
+
+struct PendingMidiMessage {
+  UInt32 status = 0x90;
+  UInt32 data1 = 60;
+  UInt32 data2 = 100;
+  std::uint32_t sampleOffset = 0;
+};
 
 float sanitizeSample(const std::string& text) {
   char* end = nullptr;
@@ -87,6 +95,149 @@ bool parseSampleRateArg(const char* text, double& out) {
     return false;
   }
   out = value;
+  return true;
+}
+
+UInt32 scaled7Bit(double value) {
+  return static_cast<UInt32>(std::clamp(std::lround(std::clamp(value, 0.0, 1.0) * 127.0), 0L, 127L));
+}
+
+bool parseMidiEventToken(const std::string& token, PendingMidiMessage& message) {
+  std::vector<std::string> parts;
+  std::stringstream stream(token);
+  std::string part;
+  while (std::getline(stream, part, ':')) {
+    parts.push_back(part);
+  }
+  if (parts.empty()) {
+    return false;
+  }
+
+  auto parseChannelAndOffset = [&](std::size_t channelIndex, std::size_t offsetIndex, std::uint32_t& channel, std::uint32_t& offset) -> bool {
+    return parseUint32Arg(parts[channelIndex].c_str(), 0, 15, channel) &&
+        parseUint32Arg(parts[offsetIndex].c_str(), 0, kMaxWorkerFrames - 1, offset);
+  };
+
+  if (parts[0] == "on" || parts[0] == "off" || parts[0] == "poly") {
+    if (parts.size() != 5) {
+      return false;
+    }
+    std::uint32_t note = 60;
+    std::uint32_t channel = 0;
+    std::uint32_t offset = 0;
+    double value = parts[0] == "off" ? 0.0 : 0.8;
+    if (!parseUint32Arg(parts[1].c_str(), 0, 127, note) ||
+        !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) ||
+        !parseChannelAndOffset(3, 4, channel, offset)) {
+      return false;
+    }
+    message.status = (parts[0] == "on" ? 0x90 : parts[0] == "off" ? 0x80 : 0xA0) | channel;
+    message.data1 = note;
+    message.data2 = scaled7Bit(value);
+    message.sampleOffset = offset;
+    return true;
+  }
+
+  if (parts[0] == "cc") {
+    if (parts.size() != 5) {
+      return false;
+    }
+    std::uint32_t controller = 0;
+    std::uint32_t channel = 0;
+    std::uint32_t offset = 0;
+    double value = 0.0;
+    if (!parseUint32Arg(parts[1].c_str(), 0, 127, controller) ||
+        !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) ||
+        !parseChannelAndOffset(3, 4, channel, offset)) {
+      return false;
+    }
+    message.status = 0xB0 | channel;
+    message.data1 = controller;
+    message.data2 = scaled7Bit(value);
+    message.sampleOffset = offset;
+    return true;
+  }
+
+  if (parts[0] == "bend") {
+    if (parts.size() != 4) {
+      return false;
+    }
+    std::uint32_t channel = 0;
+    std::uint32_t offset = 0;
+    double value = 0.0;
+    if (!parseDoubleArg(parts[1].c_str(), -1.0, 1.0, value) ||
+        !parseChannelAndOffset(2, 3, channel, offset)) {
+      return false;
+    }
+    const auto bend = static_cast<UInt32>(
+        std::clamp(std::lround(((std::clamp(value, -1.0, 1.0) + 1.0) / 2.0) * 16383.0), 0L, 16383L));
+    message.status = 0xE0 | channel;
+    message.data1 = bend & 0x7F;
+    message.data2 = (bend >> 7) & 0x7F;
+    message.sampleOffset = offset;
+    return true;
+  }
+
+  if (parts[0] == "pressure") {
+    if (parts.size() != 4) {
+      return false;
+    }
+    std::uint32_t channel = 0;
+    std::uint32_t offset = 0;
+    double pressure = 0.0;
+    if (!parseDoubleArg(parts[1].c_str(), 0.0, 1.0, pressure) ||
+        !parseChannelAndOffset(2, 3, channel, offset)) {
+      return false;
+    }
+    message.status = 0xD0 | channel;
+    message.data1 = scaled7Bit(pressure);
+    message.data2 = 0;
+    message.sampleOffset = offset;
+    return true;
+  }
+
+  if (parts[0] == "program") {
+    if (parts.size() != 4) {
+      return false;
+    }
+    std::uint32_t program = 0;
+    std::uint32_t channel = 0;
+    std::uint32_t offset = 0;
+    if (!parseUint32Arg(parts[1].c_str(), 0, 127, program) ||
+        !parseChannelAndOffset(2, 3, channel, offset)) {
+      return false;
+    }
+    message.status = 0xC0 | channel;
+    message.data1 = program;
+    message.data2 = 0;
+    message.sampleOffset = offset;
+    return true;
+  }
+
+  return false;
+}
+
+bool parseMidiEvents(const std::string& encoded, std::vector<PendingMidiMessage>& messages) {
+  messages.clear();
+  if (encoded.empty() || encoded == "-") {
+    return true;
+  }
+
+  std::stringstream stream(encoded);
+  std::string token;
+  while (std::getline(stream, token, ';')) {
+    if (token.empty()) {
+      continue;
+    }
+    if (messages.size() >= kMaxWorkerMidiEvents) {
+      return false;
+    }
+    PendingMidiMessage message;
+    if (!parseMidiEventToken(token, message)) {
+      return false;
+    }
+    messages.push_back(message);
+  }
   return true;
 }
 
@@ -153,6 +304,14 @@ void checkStatus(OSStatus status, const std::string& operation) {
   if (status != noErr) {
     throw std::runtime_error(operation + " failed with OSStatus " + osStatusText(status));
   }
+}
+
+bool isUnsupportedMidiStatus(OSStatus status) {
+  return status == kAudioUnitErr_InvalidProperty ||
+      status == kAudioUnitErr_InvalidParameter ||
+      status == kAudioUnitErr_InvalidElement ||
+      status == kAudioUnitErr_InvalidPropertyValue ||
+      status == kAudioUnitErr_InvalidParameterValue;
 }
 
 AudioStreamBasicDescription streamDescription(double sampleRate, std::uint32_t channels) {
@@ -265,13 +424,36 @@ public:
     }
   }
 
-  void noteOn(std::uint8_t note, double velocity) {
-    const auto scaledVelocity = static_cast<UInt32>(std::clamp(velocity, 0.0, 1.0) * 127.0);
-    checkStatus(MusicDeviceMIDIEvent(unit_, 0x90, note, std::max<UInt32>(1, scaledVelocity), 0), "MusicDeviceMIDIEvent noteOn");
+  bool sendMidi(UInt32 status, UInt32 data1, UInt32 data2, std::uint32_t sampleOffset) {
+    const auto result = MusicDeviceMIDIEvent(
+        unit_,
+        status & 0xFF,
+        data1 & 0x7F,
+        data2 & 0x7F,
+        std::min<std::uint32_t>(sampleOffset, maxBlockSize_ - 1));
+    if (result == noErr) {
+      return true;
+    }
+    if (isUnsupportedMidiStatus(result)) {
+      return false;
+    }
+    checkStatus(result, "MusicDeviceMIDIEvent");
+    return false;
   }
 
-  void noteOff(std::uint8_t note) {
-    checkStatus(MusicDeviceMIDIEvent(unit_, 0x80, note, 0, 0), "MusicDeviceMIDIEvent noteOff");
+  void sendMidiEvents(const std::vector<PendingMidiMessage>& messages) {
+    for (const auto& message : messages) {
+      sendMidi(message.status, message.data1, message.data2, message.sampleOffset);
+    }
+  }
+
+  void noteOn(std::uint8_t note, double velocity, std::uint8_t channel = 0, std::uint32_t sampleOffset = 0) {
+    const auto scaledVelocity = std::max<UInt32>(1, scaled7Bit(velocity));
+    sendMidi(0x90 | std::min<UInt32>(channel, 15), note, scaledVelocity, sampleOffset);
+  }
+
+  void noteOff(std::uint8_t note, std::uint8_t channel = 0, std::uint32_t sampleOffset = 0) {
+    sendMidi(0x80 | std::min<UInt32>(channel, 15), note, 0, sampleOffset);
   }
 
   std::string parametersToJson() const {
@@ -717,21 +899,45 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
         if (command == "noteOn") {
           int note = 60;
           double velocity = 0.8;
-          stream >> note;
-          stream >> velocity;
+          int channel = 0;
+          int sampleOffset = 0;
+          stream >> note >> velocity >> channel >> sampleOffset;
           if (!std::isfinite(velocity)) {
             velocity = 0.0;
           }
-          host.noteOn(static_cast<std::uint8_t>(std::clamp(note, 0, 127)), std::clamp(velocity, 0.0, 1.0));
+          host.noteOn(
+              static_cast<std::uint8_t>(std::clamp(note, 0, 127)),
+              std::clamp(velocity, 0.0, 1.0),
+              static_cast<std::uint8_t>(std::clamp(channel, 0, 15)),
+              static_cast<std::uint32_t>(std::clamp(sampleOffset, 0, static_cast<int>(kMaxWorkerFrames - 1))));
           std::cout << "{\"ok\":true}" << std::endl;
           continue;
         }
 
         if (command == "noteOff") {
           int note = 60;
-          stream >> note;
-          host.noteOff(static_cast<std::uint8_t>(std::clamp(note, 0, 127)));
+          int velocity = 0;
+          int channel = 0;
+          int sampleOffset = 0;
+          stream >> note >> velocity >> channel >> sampleOffset;
+          host.noteOff(
+              static_cast<std::uint8_t>(std::clamp(note, 0, 127)),
+              static_cast<std::uint8_t>(std::clamp(channel, 0, 15)),
+              static_cast<std::uint32_t>(std::clamp(sampleOffset, 0, static_cast<int>(kMaxWorkerFrames - 1))));
           std::cout << "{\"ok\":true}" << std::endl;
+          continue;
+        }
+
+        if (command == "midi") {
+          std::string encodedEvents;
+          stream >> encodedEvents;
+          std::vector<PendingMidiMessage> messages;
+          if (!parseMidiEvents(encodedEvents, messages)) {
+            std::cout << "{\"error\":\"invalid_midi_events\"}" << std::endl;
+            continue;
+          }
+          host.sendMidiEvents(messages);
+          std::cout << "{\"ok\":true,\"eventCount\":" << messages.size() << "}" << std::endl;
           continue;
         }
 

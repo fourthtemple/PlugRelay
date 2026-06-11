@@ -62,6 +62,7 @@ constexpr std::uint32_t kMaxWorkerPortIndex = 4096;
 constexpr std::size_t kMaxWorkerPorts = 1024;
 constexpr std::size_t kMaxWorkerParameters = 1024;
 constexpr std::size_t kMaxWorkerParameterChanges = 4096;
+constexpr std::size_t kMaxWorkerMidiEvents = 4096;
 constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
 constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
@@ -154,6 +155,81 @@ bool parseDoubleArg(const char* text, double minValue, double maxValue, double& 
 
 bool parseSampleRateArg(const char* text, double& out) {
   return parseDoubleArg(text, kMinWorkerSampleRate, kMaxWorkerSampleRate, out);
+}
+
+bool validateMidiEventToken(const std::string& token) {
+  std::vector<std::string> parts;
+  std::stringstream stream(token);
+  std::string part;
+  while (std::getline(stream, part, ':')) {
+    parts.push_back(part);
+  }
+  if (parts.empty()) {
+    return false;
+  }
+
+  auto parseChannelAndOffset = [&](std::size_t channelIndex, std::size_t offsetIndex) -> bool {
+    std::uint32_t channel = 0;
+    std::uint32_t sampleOffset = 0;
+    return parseUint32Arg(parts[channelIndex].c_str(), 0, 15, channel) &&
+        parseUint32Arg(parts[offsetIndex].c_str(), 0, kMaxWorkerFrames - 1, sampleOffset);
+  };
+
+  if (parts[0] == "on" || parts[0] == "off" || parts[0] == "poly") {
+    std::uint32_t note = 0;
+    double value = 0.0;
+    return parts.size() == 5 &&
+        parseUint32Arg(parts[1].c_str(), 0, 127, note) &&
+        parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) &&
+        parseChannelAndOffset(3, 4);
+  }
+  if (parts[0] == "cc") {
+    std::uint32_t controller = 0;
+    double value = 0.0;
+    return parts.size() == 5 &&
+        parseUint32Arg(parts[1].c_str(), 0, 127, controller) &&
+        parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) &&
+        parseChannelAndOffset(3, 4);
+  }
+  if (parts[0] == "bend") {
+    double value = 0.0;
+    return parts.size() == 4 &&
+        parseDoubleArg(parts[1].c_str(), -1.0, 1.0, value) &&
+        parseChannelAndOffset(2, 3);
+  }
+  if (parts[0] == "pressure") {
+    double pressure = 0.0;
+    return parts.size() == 4 &&
+        parseDoubleArg(parts[1].c_str(), 0.0, 1.0, pressure) &&
+        parseChannelAndOffset(2, 3);
+  }
+  if (parts[0] == "program") {
+    std::uint32_t program = 0;
+    return parts.size() == 4 &&
+        parseUint32Arg(parts[1].c_str(), 0, 127, program) &&
+        parseChannelAndOffset(2, 3);
+  }
+  return false;
+}
+
+bool validateMidiEvents(const std::string& encoded, std::size_t& eventCount) {
+  eventCount = 0;
+  if (encoded.empty() || encoded == "-") {
+    return true;
+  }
+
+  std::stringstream stream(encoded);
+  std::string token;
+  while (std::getline(stream, token, ';')) {
+    if (token.empty()) {
+      continue;
+    }
+    if (eventCount >= kMaxWorkerMidiEvents || !validateMidiEventToken(token)) {
+      return false;
+    }
+    ++eventCount;
+  }
+  return true;
 }
 
 std::string cappedString(std::string value, std::size_t maxBytes = kMaxWorkerParameterStringBytes) {
@@ -981,13 +1057,9 @@ int runLv2HostWorkerNative(int argc, char** argv) {
           std::string encodedEvents;
           stream >> encodedEvents;
           std::size_t eventCount = 0;
-          if (!encodedEvents.empty() && encodedEvents != "-") {
-            eventCount = 1;
-            for (const auto character : encodedEvents) {
-              if (character == ';') {
-                ++eventCount;
-              }
-            }
+          if (!validateMidiEvents(encodedEvents, eventCount)) {
+            std::cout << "{\"error\":\"invalid_midi_events\"}" << std::endl;
+            continue;
           }
           std::cout << "{\"ok\":true,\"eventCount\":" << eventCount << "}" << std::endl;
           continue;

@@ -309,7 +309,7 @@ Block size is bounded: the daemon clamps the frame count to the instance's `maxB
 
 ### `sendMidiEvents`
 
-Sends MIDI-like events to an instrument, MIDI effect, or native plugin worker that accepts MIDI. The MVP supports bounded note events for example instruments and installed VST3 workers. Audio Units receive note on/off where the CoreAudio unit accepts `MusicDeviceMIDIEvent`. LV2 atom/event MIDI ports are not implemented yet, so the basic LV2 audio/control worker does not deliver MIDI to plugins. Production hosts should preserve event timestamps and support sample-accurate scheduling.
+Sends MIDI-like events to an instrument, MIDI effect, or native plugin worker that accepts MIDI. The reference daemon validates bounded note, control-change, pitch-bend, channel-pressure, poly-pressure, and program-change events before worker dispatch. VST3 workers deliver note and poly-pressure through `IEventList`; control-change, pitch-bend, and channel-pressure use VST3 `IMidiMapping` when the plugin exposes a parameter mapping. Audio Units receive short MIDI messages through `MusicDeviceMIDIEvent` where the CoreAudio unit supports them. LV2 atom/event MIDI ports are not implemented yet, so the basic LV2 audio/control worker validates MIDI batches but does not deliver MIDI to LV2 plugins.
 
 Request:
 
@@ -328,12 +328,25 @@ Request:
       "note": 60,
       "velocity": 0,
       "channel": 0
+    },
+    {
+      "type": "controlChange",
+      "controller": 1,
+      "value": 0.5,
+      "channel": 0,
+      "time": 32
+    },
+    {
+      "type": "pitchBend",
+      "value": 0.1,
+      "channel": 0,
+      "time": 64
     }
   ]
 }
 ```
 
-`events` is bounded to 4096 items per request. Supported MVP event types are `noteOn` and `noteOff`; `note` is `0..127`, `velocity` is `0..1`, `channel` is `0..15`, and `time` is an integer sample offset into the next render block. Daemons must reject malformed or out-of-range MIDI events before dispatching them to a native worker.
+`events` is bounded to 4096 items per request. Supported event types are `noteOn`, `noteOff`, `controlChange`, `pitchBend`, `channelPressure`, `polyPressure`, and `programChange`. `note`, `controller`, and `program` are `0..127`; `velocity`, `value` for control change, and `pressure` are `0..1`; pitch-bend `value` is `-1..1`; `channel` is `0..15`; and `time` is an integer sample offset into the next render block. Daemons must reject malformed or out-of-range MIDI events before dispatching them to a native worker.
 
 Response:
 

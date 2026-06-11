@@ -328,6 +328,11 @@ const nativeVst3Midi = await request(
     instanceId: nativeVst3Instance.instanceId,
     events: [
       { type: "noteOn", note: 64, velocity: 0.5, channel: 0, time: 0 },
+      { type: "polyPressure", note: 64, pressure: 0.35, channel: 0, time: 12 },
+      { type: "controlChange", controller: 1, value: 0.25, channel: 0, time: 16 },
+      { type: "pitchBend", value: 0.1, channel: 0, time: 24 },
+      { type: "channelPressure", pressure: 0.4, channel: 0, time: 32 },
+      { type: "programChange", program: 2, channel: 0, time: 48 },
       { type: "noteOff", note: 64, velocity: 0, channel: 0, time: 64 }
     ]
   },
@@ -335,8 +340,8 @@ const nativeVst3Midi = await request(
   pair.sessionToken
 );
 assert(
-  nativeVst3Midi.accepted === true && nativeVst3Midi.eventCount === 2,
-  "installed VST3 host worker accepts bounded MIDI event lists"
+  nativeVst3Midi.accepted === true && nativeVst3Midi.eventCount === 7,
+  "installed VST3 host worker accepts richer bounded MIDI event lists"
 );
 const nativeVst3Block = await request(
   socket,
@@ -695,6 +700,13 @@ async function runNativeLv2WorkerSmoke() {
     assert(latency.latencySamples === 0, "native LV2 worker reports conservative latency");
     const tail = await requestWorker("tail");
     assert(tail.tailSamples === 0 && tail.infiniteTail === false, "native LV2 worker reports conservative tail time");
+
+    const midi = await requestWorker("midi on:60:0.8:0:0;cc:1:0.5:0:1;bend:0.1:0:2;pressure:0.4:0:3;poly:60:0.2:0:3;program:2:0:3");
+    assert(midi.eventCount === 6, "native LV2 worker validates richer MIDI batches before acknowledging them");
+
+    worker.stdin.write("midi cc:200:0.5:0:0\n", "utf8");
+    const invalidMidi = await readJsonLine();
+    assert(invalidMidi.error === "invalid_midi_events", "native LV2 worker rejects malformed MIDI batches");
   } finally {
     worker.stdin.write("quit\n");
     worker.stdin.end();

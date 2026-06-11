@@ -211,6 +211,30 @@ async function run() {
   );
   check(midiBadChannel.code === "invalid_argument", "sendMidiEvents rejects out-of-range MIDI fields");
 
+  const midiBadController = await request(
+    main,
+    "sendMidiEvents",
+    { instanceId: created.instanceId, events: [{ type: "controlChange", controller: 999, value: 0.5 }] },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(midiBadController.code === "invalid_argument", "sendMidiEvents rejects out-of-range MIDI CC fields");
+
+  const midiBadBend = await request(
+    main,
+    "sendMidiEvents",
+    { instanceId: created.instanceId, events: [{ type: "pitchBend", value: 2 }] },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(midiBadBend.code === "invalid_argument", "sendMidiEvents rejects out-of-range pitch bend fields");
+
   // J. Parameter automation input is bounded before it reaches workers.
   const automation = await request(
     main,
