@@ -1,7 +1,13 @@
 // Focused security regression test for the hardened mock daemon.
 // Exercises only the mock.gain path so it runs without a native build.
 import { spawn } from "node:child_process";
-import { connect, createRequestClient, rawHandshake } from "./security-smoke-client.mjs";
+import {
+  connect,
+  createRequestClient,
+  rawHandshake,
+  sendOversizedTextFrame,
+  waitForClose
+} from "./security-smoke-client.mjs";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.SOUNDBRIDGE_PORT ?? 47991);
@@ -54,6 +60,9 @@ async function run() {
 
   // A2. Origin allowlists must deny unapproved origins while preserving approved origins.
   await checkOriginAllowlist();
+
+  // A3. Oversized frames must be rejected before pairing or command dispatch.
+  await checkPrePairingMessageSizeCap();
 
   // B. Loopback Host header upgrades normally.
   const main = await connect(HOST, PORT, `${HOST}:${PORT}`, ORIGIN);
@@ -1029,6 +1038,29 @@ async function checkOriginAllowlist() {
     approved.socket?.destroy();
   } finally {
     allowlisted.kill("SIGKILL");
+  }
+}
+
+async function checkPrePairingMessageSizeCap() {
+  const cappedPort = PORT + 2;
+  const capped = spawn("node", ["scripts/mock-daemon.mjs"], {
+    env: {
+      ...process.env,
+      SOUNDBRIDGE_HOST: HOST,
+      SOUNDBRIDGE_PORT: String(cappedPort),
+      SOUNDBRIDGE_PAIRING_TOKEN: TOKEN,
+      SOUNDBRIDGE_MAX_WEBSOCKET_MESSAGE_BYTES: "128"
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  capped.stderr.on("data", () => {});
+  try {
+    await waitForListen(capped);
+    const oversized = await connect(HOST, cappedPort, `${HOST}:${cappedPort}`, ORIGIN);
+    sendOversizedTextFrame(oversized, 129);
+    check(await waitForClose(oversized), "oversized pre-pairing WebSocket frames are rejected");
+  } finally {
+    capped.kill("SIGKILL");
   }
 }
 

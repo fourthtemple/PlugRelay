@@ -126,6 +126,32 @@ export function createRequestClient({ idPrefix = "sec", timeoutMs = 3000 } = {})
   };
 }
 
+export function sendOversizedTextFrame(ctx, payloadLength) {
+  const mask = crypto.randomBytes(4);
+  const header = Buffer.alloc(10);
+  header[0] = 0x81;
+  header[1] = 0x80 | 127;
+  header.writeUInt32BE(Math.floor(payloadLength / 2 ** 32), 2);
+  header.writeUInt32BE(payloadLength >>> 0, 6);
+  ctx.socket.write(Buffer.concat([header, mask]));
+}
+
+export function waitForClose(ctx, timeoutMs = 1200) {
+  if (ctx.closed) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    const done = (closed) => {
+      ctx.socket.off("close", onClose);
+      clearTimeout(timer);
+      resolve(closed);
+    };
+    const onClose = () => done(true);
+    const timer = setTimeout(() => done(false), timeoutMs);
+    ctx.socket.on("close", onClose);
+  });
+}
+
 function encodeFrame(payload) {
   const mask = crypto.randomBytes(4);
   const length = payload.length;
