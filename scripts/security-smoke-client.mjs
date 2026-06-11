@@ -5,18 +5,7 @@ export function rawHandshake(host, port, hostHeader, origin) {
   return new Promise((resolve) => {
     const key = crypto.randomBytes(16).toString("base64");
     const socket = net.createConnection({ host, port }, () => {
-      socket.write(
-        [
-          "GET /bridge HTTP/1.1",
-          `Host: ${hostHeader}`,
-          "Upgrade: websocket",
-          "Connection: Upgrade",
-          `Sec-WebSocket-Key: ${key}`,
-          "Sec-WebSocket-Version: 13",
-          `Origin: ${origin}`,
-          "\r\n"
-        ].join("\r\n")
-      );
+      socket.write(handshakeHeaders({ hostHeader, key, origin }));
     });
     let buffer = "";
     let settled = false;
@@ -44,18 +33,7 @@ export function connect(host, port, hostHeader, origin) {
     const key = crypto.randomBytes(16).toString("base64");
     const ctx = { socket: null, closed: false };
     const socket = net.createConnection({ host, port }, () => {
-      socket.write(
-        [
-          "GET /bridge HTTP/1.1",
-          `Host: ${hostHeader}`,
-          "Upgrade: websocket",
-          "Connection: Upgrade",
-          `Sec-WebSocket-Key: ${key}`,
-          "Sec-WebSocket-Version: 13",
-          `Origin: ${origin}`,
-          "\r\n"
-        ].join("\r\n")
-      );
+      socket.write(handshakeHeaders({ hostHeader, key, origin }));
     });
     ctx.socket = socket;
     socket.setNoDelay(true);
@@ -97,6 +75,22 @@ export function connect(host, port, hostHeader, origin) {
       }
     });
   });
+}
+
+function handshakeHeaders({ hostHeader, key, origin }) {
+  const headers = [
+    "GET /bridge HTTP/1.1",
+    `Host: ${hostHeader}`,
+    "Upgrade: websocket",
+    "Connection: Upgrade",
+    `Sec-WebSocket-Key: ${key}`,
+    "Sec-WebSocket-Version: 13"
+  ];
+  if (origin != null) {
+    headers.push(`Origin: ${origin}`);
+  }
+  headers.push("\r\n");
+  return headers.join("\r\n");
 }
 
 export function createRequestClient({ idPrefix = "sec", timeoutMs = 3000 } = {}) {

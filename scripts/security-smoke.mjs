@@ -69,6 +69,14 @@ async function run() {
   check(helloUnpaired.capabilities?.security?.hostHeaderValidation === true, "hello advertises hostHeaderValidation");
 
   // D. Wrong pairing token is rejected, and the connection locks out after the limit.
+  const noOriginSocket = await connect(HOST, PORT, `${HOST}:${PORT}`);
+  const noOriginPair = await request(noOriginSocket, "pair", { pairingToken: TOKEN }, false).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(noOriginPair.code === "origin_required", "pairing without a WebSocket Origin header is rejected");
+  noOriginSocket.socket?.destroy();
+
   const lockSocket = await connect(HOST, PORT, `${HOST}:${PORT}`, ORIGIN);
   const r1 = await pairAttempt(lockSocket, "wrong-1");
   const r2 = await pairAttempt(lockSocket, "wrong-2");
