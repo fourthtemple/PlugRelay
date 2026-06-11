@@ -149,6 +149,19 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("getTailTime", { instanceId });
   }
 
+  getLayout(instanceId: string): Promise<{
+    requestedInputChannels: number;
+    requestedOutputChannels: number;
+    inputChannels: number;
+    outputChannels: number;
+    inputBuses: number;
+    outputBuses: number;
+    sampleRate: number;
+    maxBlockSize: number;
+  }> {
+    return this.request("getLayout", { instanceId });
+  }
+
   heartbeat(): Promise<{ now: number }> {
     return this.request("heartbeat", { now: Date.now() });
   }

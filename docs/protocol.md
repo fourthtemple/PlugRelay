@@ -185,6 +185,27 @@ Example:
 
 Numeric fields are bounded and out-of-range values are rejected with `invalid_argument`: `sampleRate` 8000–384000 Hz, `maxBlockSize` 1–8192, `inputChannels` 0–32, `outputChannels` 1–32. See [Security → Resource Limits And Input Validation](security.md#resource-limits-and-input-validation).
 
+Response payloads include the negotiated layout. Hosts should prefer `layout.inputChannels` and `layout.outputChannels` over the original request when constructing audio nodes or allocating buffers:
+
+```json
+{
+  "instanceId": "inst-1",
+  "layout": {
+    "requestedInputChannels": 2,
+    "requestedOutputChannels": 2,
+    "inputChannels": 2,
+    "outputChannels": 2,
+    "inputBuses": 1,
+    "outputBuses": 1,
+    "sampleRate": 48000,
+    "maxBlockSize": 128
+  },
+  "latencySamples": 0,
+  "tailSamples": 0,
+  "infiniteTail": false
+}
+```
+
 ### `destroyInstance`
 
 Releases an instance.
@@ -194,6 +215,23 @@ Releases an instance.
 Returns parameter metadata and current normalized values. All automatable parameter values are normalized to `0..1`; display mapping is metadata.
 
 Parameter metadata is plugin-controlled and must be bounded before it reaches a host UI. The reference daemon caps native parameters to 1024 items per instance, parameter ids to 64 bytes, parameter names to 160 bytes, and units to 64 bytes. Native VST3 parameters are enumerated from the plugin edit controller after instance creation; native AU parameters are enumerated from CoreAudio parameter metadata.
+
+### `getLayout`
+
+Returns the negotiated channel and bus layout for an instance. `requestedInputChannels` and `requestedOutputChannels` record the bounded host request; `inputChannels` and `outputChannels` are the effective worker layout. All channel and bus counts are clamped to `0..32` for inputs and `1..32` for outputs before they reach the host.
+
+```json
+{
+  "requestedInputChannels": 2,
+  "requestedOutputChannels": 2,
+  "inputChannels": 2,
+  "outputChannels": 2,
+  "inputBuses": 1,
+  "outputBuses": 1,
+  "sampleRate": 48000,
+  "maxBlockSize": 128
+}
+```
 
 ### `setParameter`
 

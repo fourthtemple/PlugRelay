@@ -7,6 +7,8 @@ const PAIRING_TOKEN = process.env.SOUNDBRIDGE_PAIRING_TOKEN ?? "dev-token";
 const ORIGIN = "http://127.0.0.1:5173";
 const MAX_PLUGIN_LATENCY_SAMPLES = 1_048_576;
 const MAX_PLUGIN_TAIL_SAMPLES = 1_048_576;
+const MAX_AUDIO_CHANNELS = 32;
+const MAX_PLUGIN_BUSES = 32;
 
 const socket = await connectWebSocket(HOST, PORT);
 let requestSeq = 0;
@@ -24,6 +26,7 @@ assert(pair.sessionToken, "pair returned sessionToken");
 const hello = await request(socket, "hello", {}, true, pair.sessionToken);
 assert(hello.protocolVersion, "hello returned protocolVersion");
 assert(hello.capabilities?.tail === true, "hello advertises tail-time reporting capability after pairing");
+assert(hello.capabilities?.layout === true, "hello advertises layout reporting capability after pairing");
 const nativeExampleRendererAvailable = hello.capabilities?.nativeExampleRenderer === true;
 const exampleFormats = ["vst3", "au", "lv2"];
 for (const format of exampleFormats) {
@@ -145,6 +148,14 @@ assert(
   Array.isArray(nativeAuInstance.plugin?.parameters) && nativeAuInstance.plugin.parameters.length > 0,
   "installed AU createInstance returns native parameter metadata"
 );
+assertLayoutReport(nativeAuInstance.layout, 2, 2, 48000, 128, "installed AU createInstance returns negotiated layout");
+assert(
+  nativeAuInstance.plugin.inputs === nativeAuInstance.layout.inputChannels &&
+    nativeAuInstance.plugin.outputs === nativeAuInstance.layout.outputChannels,
+  "installed AU instance plugin metadata reflects negotiated layout"
+);
+const nativeAuLayout = await request(socket, "getLayout", { instanceId: nativeAuInstance.instanceId }, true, pair.sessionToken);
+assertSameLayout(nativeAuLayout, nativeAuInstance.layout, "installed AU getLayout matches createInstance layout");
 const nativeAuParameters = await request(socket, "getParameters", { instanceId: nativeAuInstance.instanceId }, true, pair.sessionToken);
 assert(
   Array.isArray(nativeAuParameters.parameters) && nativeAuParameters.parameters.length === nativeAuInstance.plugin.parameters.length,
@@ -212,6 +223,7 @@ const nativeAuBlock = await request(
 );
 assert(nativeAuBlock.renderEngine === "native-au", "installed AU effect rendered through the native AU host worker");
 assert(blockHasSignal(nativeAuBlock.channels), "installed AU effect produced processed audio");
+assert(nativeAuBlock.channels.length === nativeAuLayout.outputChannels, "installed AU render uses negotiated output channels");
 const nativeAuLatency = await request(
   socket,
   "getLatency",
@@ -246,6 +258,14 @@ const nativeVst3Instance = await request(
   true,
   pair.sessionToken
 );
+assertLayoutReport(nativeVst3Instance.layout, 2, 2, 48000, 128, "installed VST3 createInstance returns negotiated layout");
+assert(
+  nativeVst3Instance.plugin.inputs === nativeVst3Instance.layout.inputChannels &&
+    nativeVst3Instance.plugin.outputs === nativeVst3Instance.layout.outputChannels,
+  "installed VST3 instance plugin metadata reflects negotiated layout"
+);
+const nativeVst3Layout = await request(socket, "getLayout", { instanceId: nativeVst3Instance.instanceId }, true, pair.sessionToken);
+assertSameLayout(nativeVst3Layout, nativeVst3Instance.layout, "installed VST3 getLayout matches createInstance layout");
 const nativeVst3Parameters = await request(socket, "getParameters", { instanceId: nativeVst3Instance.instanceId }, true, pair.sessionToken);
 assert(
   Array.isArray(nativeVst3Parameters.parameters),
@@ -331,6 +351,7 @@ const nativeVst3Block = await request(
 );
 assert(nativeVst3Block.renderEngine === "native-vst3", "installed VST3 effect rendered through the native VST3 host worker");
 assert(blockHasSignal(nativeVst3Block.channels), "installed VST3 effect produced processed audio");
+assert(nativeVst3Block.channels.length === nativeVst3Layout.outputChannels, "installed VST3 render uses negotiated output channels");
 const nativeVst3Latency = await request(
   socket,
   "getLatency",
@@ -360,6 +381,9 @@ const created = await request(
   pair.sessionToken
 );
 assert(created.instanceId, "createInstance returned instanceId");
+assertLayoutReport(created.layout, 2, 2, 48000, 128, "mock createInstance returns negotiated layout");
+const mockLayout = await request(socket, "getLayout", { instanceId: created.instanceId }, true, pair.sessionToken);
+assertSameLayout(mockLayout, created.layout, "mock getLayout matches createInstance layout");
 
 const noOriginSocket = await connectWebSocket(HOST, PORT, null);
 await request(noOriginSocket, "pair", { origin: ORIGIN, pairingToken: PAIRING_TOKEN }, false).then(
@@ -436,6 +460,7 @@ const processed = await request(
   pair.sessionToken
 );
 assert(processed.channels[0][1] > 0.25, "processAudioBlock applied gain");
+assert(processed.channels.length === mockLayout.outputChannels, "mock render uses negotiated output channels");
 
 const state = await request(socket, "getState", { instanceId: created.instanceId }, true, pair.sessionToken);
 assert(typeof state.state === "string" && state.state.length > 0, "getState returned opaque state");
@@ -741,6 +766,53 @@ function assertTailReport(tail, message) {
     `${message}: tail samples are bounded`
   );
   assert(typeof tail.infiniteTail === "boolean", `${message}: infinite tail is explicit`);
+}
+
+function assertLayoutReport(layout, requestedInputChannels, requestedOutputChannels, sampleRate, maxBlockSize, message) {
+  assert(layout && typeof layout === "object", `${message}: layout object exists`);
+  assert(layout.requestedInputChannels === requestedInputChannels, `${message}: requested input channels round-trip`);
+  assert(layout.requestedOutputChannels === requestedOutputChannels, `${message}: requested output channels round-trip`);
+  assert(
+    Number.isInteger(layout.inputChannels) &&
+      layout.inputChannels >= 0 &&
+      layout.inputChannels <= MAX_AUDIO_CHANNELS,
+    `${message}: input channels are bounded`
+  );
+  assert(
+    Number.isInteger(layout.outputChannels) &&
+      layout.outputChannels >= 1 &&
+      layout.outputChannels <= MAX_AUDIO_CHANNELS,
+    `${message}: output channels are bounded`
+  );
+  assert(
+    Number.isInteger(layout.inputBuses) &&
+      layout.inputBuses >= 0 &&
+      layout.inputBuses <= MAX_PLUGIN_BUSES,
+    `${message}: input bus count is bounded`
+  );
+  assert(
+    Number.isInteger(layout.outputBuses) &&
+      layout.outputBuses >= 1 &&
+      layout.outputBuses <= MAX_PLUGIN_BUSES,
+    `${message}: output bus count is bounded`
+  );
+  assert(Math.abs(layout.sampleRate - sampleRate) < 0.01, `${message}: sample rate round-trips`);
+  assert(layout.maxBlockSize === maxBlockSize, `${message}: max block size round-trips`);
+}
+
+function assertSameLayout(actual, expected, message) {
+  for (const key of [
+    "requestedInputChannels",
+    "requestedOutputChannels",
+    "inputChannels",
+    "outputChannels",
+    "inputBuses",
+    "outputBuses",
+    "sampleRate",
+    "maxBlockSize"
+  ]) {
+    assert(actual[key] === expected[key], `${message}: ${key} matches`);
+  }
 }
 
 function blockHasSignal(channels) {

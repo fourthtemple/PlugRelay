@@ -572,6 +572,20 @@ public:
     return output.str();
   }
 
+  std::string layoutToJson() const {
+    std::ostringstream output;
+    output << "{\"requestedInputChannels\":" << requestedInputChannels_
+           << ",\"requestedOutputChannels\":" << requestedOutputChannels_
+           << ",\"inputChannels\":" << inputChannels_
+           << ",\"outputChannels\":" << outputChannels_
+           << ",\"inputBuses\":" << std::clamp<Steinberg::int32>(inputBusCount_, 0, static_cast<Steinberg::int32>(kMaxWorkerChannels))
+           << ",\"outputBuses\":" << std::clamp<Steinberg::int32>(outputBusCount_, 0, static_cast<Steinberg::int32>(kMaxWorkerChannels))
+           << ",\"sampleRate\":" << sampleRate_
+           << ",\"maxBlockSize\":" << maxBlockSize_
+           << "}";
+    return output.str();
+  }
+
 private:
   void initializeController() {
     controller_ = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(component_);
@@ -703,7 +717,10 @@ private:
     if (arrangementResult != Steinberg::kResultOk) {
       Steinberg::Vst::SpeakerArrangement currentOutput {};
       if (processor_->getBusArrangement(Steinberg::Vst::kOutput, 0, currentOutput) == Steinberg::kResultOk) {
-        outputChannels_ = std::max<std::uint32_t>(1, channelsForArrangement(currentOutput, requestedOutputChannels_));
+        outputChannels_ = std::clamp<std::uint32_t>(
+            channelsForArrangement(currentOutput, requestedOutputChannels_),
+            1,
+            kMaxWorkerChannels);
         outputArrangement = currentOutput;
       } else if (outputChannels_ != 2) {
         outputChannels_ = 2;
@@ -717,6 +734,17 @@ private:
             "IAudioProcessor::setBusArrangements");
       } else {
         checkResult(arrangementResult, "IAudioProcessor::setBusArrangements");
+      }
+
+      if (inputBusCount_ > 0) {
+        Steinberg::Vst::SpeakerArrangement currentInput {};
+        if (processor_->getBusArrangement(Steinberg::Vst::kInput, 0, currentInput) == Steinberg::kResultOk) {
+          inputChannels_ = std::min<std::uint32_t>(
+              channelsForArrangement(currentInput, requestedInputChannels_),
+              kMaxWorkerChannels);
+        }
+      } else {
+        inputChannels_ = 0;
       }
     }
 
@@ -864,6 +892,11 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
 
         if (command == "tail") {
           std::cout << host.tailTimeToJson() << std::endl;
+          continue;
+        }
+
+        if (command == "layout") {
+          std::cout << host.layoutToJson() << std::endl;
           continue;
         }
 

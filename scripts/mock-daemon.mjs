@@ -18,6 +18,7 @@ const MAX_TOTAL_INSTANCES = envInteger("SOUNDBRIDGE_MAX_TOTAL_INSTANCES", 32);
 const MAX_WEBSOCKET_MESSAGE_BYTES = envInteger("SOUNDBRIDGE_MAX_WEBSOCKET_MESSAGE_BYTES", 1024 * 1024);
 const MAX_TOTAL_SESSIONS = envInteger("SOUNDBRIDGE_MAX_TOTAL_SESSIONS", 64);
 const MAX_AUDIO_CHANNELS = envInteger("SOUNDBRIDGE_MAX_AUDIO_CHANNELS", 32);
+const MAX_PLUGIN_BUSES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_BUSES", 32);
 const MAX_BLOCK_SIZE = envInteger("SOUNDBRIDGE_MAX_BLOCK_SIZE", 8192);
 const MAX_MIDI_EVENTS_PER_REQUEST = envInteger("SOUNDBRIDGE_MAX_MIDI_EVENTS_PER_REQUEST", 4096);
 const MAX_PLUGIN_PARAMETERS = envInteger("SOUNDBRIDGE_MAX_PLUGIN_PARAMETERS", 1024);
@@ -266,6 +267,9 @@ async function dispatchCommand(envelope, context) {
     case "getTailTime":
       return getTailTime(payload, session);
 
+    case "getLayout":
+      return getLayout(payload, session);
+
     case "openEditor":
     case "closeEditor":
       throw protocolError("unsupported_command", `${command} is reserved for a later phase.`);
@@ -304,6 +308,7 @@ function helloResponse(paired) {
             state: true,
             latency: true,
             tail: true,
+            layout: true,
             midi: true,
             nativeExampleRenderer: Boolean(NATIVE_RENDERER),
             nativeEditor: false
@@ -427,6 +432,16 @@ async function createInstance(payload, session) {
 
   const instanceId = `inst-${crypto.randomUUID()}`;
   const parameters = plugin.parameters.map((parameter) => ({ ...parameter }));
+  const requestedLayout = normalizePluginLayout(undefined, {
+    requestedInputChannels: inputChannels,
+    requestedOutputChannels: outputChannels,
+    inputChannels,
+    outputChannels,
+    inputBuses: inputChannels > 0 ? 1 : 0,
+    outputBuses: 1,
+    sampleRate,
+    maxBlockSize
+  });
   const instance = {
     instanceId,
     ownerSessionToken: session.sessionToken,
@@ -441,6 +456,7 @@ async function createInstance(payload, session) {
     maxBlockSize,
     inputChannels,
     outputChannels,
+    layout: requestedLayout,
     parameters,
     nativeParameterIds: new Set(),
     pluginLatencySamples: 0,
@@ -461,6 +477,10 @@ async function createInstance(payload, session) {
         instance.parameters = nativeParameters;
         instance.nativeParameterIds = new Set(nativeParameters.map((parameter) => parameter.id));
       }
+      const nativeLayout = await instance.worker.getLayout();
+      instance.layout = nativeLayout;
+      instance.inputChannels = nativeLayout.inputChannels;
+      instance.outputChannels = nativeLayout.outputChannels;
       instance.pluginLatencySamples = await instance.worker.getLatency();
       const tail = await instance.worker.getTailTime();
       instance.pluginTailSamples = tail.tailSamples;
@@ -481,7 +501,13 @@ async function createInstance(payload, session) {
 
   return {
     instanceId,
-    plugin: clonePluginMetadata({ ...plugin, parameters: instance.parameters }),
+    plugin: clonePluginMetadata({
+      ...plugin,
+      inputs: instance.inputChannels,
+      outputs: instance.outputChannels,
+      parameters: instance.parameters
+    }),
+    layout: clonePluginLayout(instance.layout),
     latencySamples: instance.pluginLatencySamples,
     tailSamples: instance.pluginTailSamples,
     infiniteTail: instance.pluginInfiniteTail
@@ -596,6 +622,11 @@ function getTailTime(payload, session) {
     tailSamples: normalizeTailSamples(instance.pluginTailSamples),
     infiniteTail: Boolean(instance.pluginInfiniteTail)
   };
+}
+
+function getLayout(payload, session) {
+  const instance = getInstance(payload.instanceId, session);
+  return clonePluginLayout(instance.layout);
 }
 
 async function getNativeState(instance) {
@@ -1006,6 +1037,7 @@ class ExampleInstrumentWorker {
 class NativeHostWorker {
   constructor(nativeHost, instance) {
     this.nativeHost = nativeHost;
+    this.fallbackLayout = clonePluginLayout(instance.layout);
     this.renderEngine = nativeHost.renderEngine;
     this.pending = [];
     this.stdoutBuffer = "";
@@ -1129,6 +1161,14 @@ class NativeHostWorker {
     }
     const parsed = await this.request("tail");
     return normalizeTailReport(parsed);
+  }
+
+  async getLayout() {
+    if (!["au", "vst3"].includes(this.nativeHost.format)) {
+      return clonePluginLayout(this.fallbackLayout);
+    }
+    const parsed = await this.request("layout");
+    return normalizePluginLayout(parsed, this.fallbackLayout);
   }
 
   request(command) {
@@ -2083,6 +2123,57 @@ function normalizeTailReport(value) {
     tailSamples: normalizeTailSamples(value?.tailSamples),
     infiniteTail: Boolean(value?.infiniteTail)
   };
+}
+
+function normalizePluginLayout(value, fallback = {}) {
+  const requestedInputChannels = normalizeInt(
+    value?.requestedInputChannels,
+    0,
+    MAX_AUDIO_CHANNELS,
+    fallback.requestedInputChannels ?? fallback.inputChannels ?? 0
+  );
+  const requestedOutputChannels = normalizeInt(
+    value?.requestedOutputChannels,
+    1,
+    MAX_AUDIO_CHANNELS,
+    fallback.requestedOutputChannels ?? fallback.outputChannels ?? 2
+  );
+  const inputChannels = normalizeInt(
+    value?.inputChannels,
+    0,
+    MAX_AUDIO_CHANNELS,
+    fallback.inputChannels ?? requestedInputChannels
+  );
+  const outputChannels = normalizeInt(
+    value?.outputChannels,
+    1,
+    MAX_AUDIO_CHANNELS,
+    fallback.outputChannels ?? requestedOutputChannels
+  );
+  return {
+    requestedInputChannels,
+    requestedOutputChannels,
+    inputChannels,
+    outputChannels,
+    inputBuses: normalizeInt(value?.inputBuses, 0, MAX_PLUGIN_BUSES, fallback.inputBuses ?? (inputChannels > 0 ? 1 : 0)),
+    outputBuses: normalizeInt(value?.outputBuses, 1, MAX_PLUGIN_BUSES, fallback.outputBuses ?? 1),
+    sampleRate: clampSampleRate(value?.sampleRate, fallback.sampleRate ?? 48000),
+    maxBlockSize: normalizeInt(value?.maxBlockSize, 1, MAX_BLOCK_SIZE, fallback.maxBlockSize ?? 128)
+  };
+}
+
+function clonePluginLayout(layout) {
+  return { ...normalizePluginLayout(layout) };
+}
+
+function normalizeInt(value, min, max, fallback) {
+  const fallbackNumber = Math.floor(Number(fallback));
+  const number = Math.floor(Number(value));
+  const candidate = Number.isFinite(number) ? number : fallbackNumber;
+  if (!Number.isFinite(candidate)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, candidate));
 }
 
 function truncateText(value, maxBytes) {

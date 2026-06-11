@@ -235,6 +235,8 @@ public:
       std::uint32_t outputChannels)
       : sampleRate_(sampleRate),
         maxBlockSize_(std::clamp<std::uint32_t>(maxBlockSize, 1, 8192)),
+        requestedInputChannels_(std::min<std::uint32_t>(inputChannels, 32)),
+        requestedOutputChannels_(std::clamp<std::uint32_t>(outputChannels, 1, 32)),
         inputChannels_(std::min<std::uint32_t>(inputChannels, 32)),
         outputChannels_(std::clamp<std::uint32_t>(outputChannels, 1, 32)) {
     AudioComponentDescription description {};
@@ -393,6 +395,20 @@ public:
         static_cast<double>(kMaxWorkerTailSamples)));
     std::ostringstream output;
     output << "{\"tailSamples\":" << tailSamples << ",\"infiniteTail\":false}";
+    return output.str();
+  }
+
+  std::string layoutToJson() const {
+    std::ostringstream output;
+    output << "{\"requestedInputChannels\":" << requestedInputChannels_
+           << ",\"requestedOutputChannels\":" << requestedOutputChannels_
+           << ",\"inputChannels\":" << inputChannels_
+           << ",\"outputChannels\":" << outputChannels_
+           << ",\"inputBuses\":" << (inputChannels_ > 0 ? 1 : 0)
+           << ",\"outputBuses\":1"
+           << ",\"sampleRate\":" << sampleRate_
+           << ",\"maxBlockSize\":" << maxBlockSize_
+           << "}";
     return output.str();
   }
 
@@ -646,6 +662,8 @@ private:
   AudioUnit unit_ = nullptr;
   double sampleRate_ = 48000.0;
   std::uint32_t maxBlockSize_ = 128;
+  std::uint32_t requestedInputChannels_ = 2;
+  std::uint32_t requestedOutputChannels_ = 2;
   std::uint32_t inputChannels_ = 2;
   std::uint32_t outputChannels_ = 2;
   std::vector<std::vector<float>> currentInput_;
@@ -739,6 +757,11 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
 
         if (command == "tail") {
           std::cout << host.tailTimeToJson() << std::endl;
+          continue;
+        }
+
+        if (command == "layout") {
+          std::cout << host.layoutToJson() << std::endl;
           continue;
         }
 

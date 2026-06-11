@@ -111,6 +111,21 @@ async function run() {
   );
   check(typeof created.instanceId === "string", "valid createInstance returns an instanceId");
   check(/^inst-[0-9a-f-]{36}$/.test(created.instanceId), "instanceId is a random UUID (not a guessable counter)");
+  check(
+    created.layout?.inputChannels === 2 &&
+      created.layout?.outputChannels === 2 &&
+      created.layout?.inputBuses <= 32 &&
+      created.layout?.outputBuses <= 32,
+    "createInstance reports bounded negotiated layout"
+  );
+
+  const layout = await request(main, "getLayout", { instanceId: created.instanceId }, true, session);
+  check(
+    layout.inputChannels === created.layout.inputChannels &&
+      layout.outputChannels === created.layout.outputChannels &&
+      layout.maxBlockSize === 128,
+    "getLayout returns session-owned negotiated layout"
+  );
 
   const latency = await request(
     main,
@@ -219,6 +234,17 @@ async function run() {
     (error) => ({ code: error.code })
   );
   check(tailDenied.code === "instance_access_denied", "another session cannot read this instance's tail metadata");
+  const layoutDenied = await request(
+    other,
+    "getLayout",
+    { instanceId: created.instanceId },
+    true,
+    otherPair.sessionToken
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(layoutDenied.code === "instance_access_denied", "another session cannot read this instance's layout metadata");
   other.socket?.destroy();
   main.socket?.destroy();
 }

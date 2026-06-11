@@ -100,6 +100,10 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("getTailTime", { instanceId });
   }
 
+  getLayout(instanceId) {
+    return this.request("getLayout", { instanceId });
+  }
+
   heartbeat() {
     return this.request("heartbeat", { now: Date.now() });
   }

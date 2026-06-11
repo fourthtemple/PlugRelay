@@ -82,7 +82,7 @@ Then create a plugin instance and put it in your Web Audio graph:
 
   const inputChannels = plugin.inputs || 2;
   const outputChannels = plugin.outputs || 2;
-  const { instanceId } = await client.createInstance({
+  const created = await client.createInstance({
     pluginId: plugin.pluginId,
     format: plugin.format,
     sampleRate: audioContext.sampleRate,
@@ -90,11 +90,14 @@ Then create a plugin instance and put it in your Web Audio graph:
     inputChannels,
     outputChannels
   });
+  const { instanceId } = created;
+  const negotiatedInputChannels = created.layout?.inputChannels ?? inputChannels;
+  const negotiatedOutputChannels = created.layout?.outputChannels ?? outputChannels;
 
   const pluginNode = await SoundBridgeAudioNode.create(audioContext, client, {
     instanceId,
-    inputChannels,
-    outputChannels,
+    inputChannels: negotiatedInputChannels,
+    outputChannels: negotiatedOutputChannels,
     workletUrl: "/soundbridge/soundbridge-worklet.js"
   });
 
@@ -121,8 +124,8 @@ Open <http://127.0.0.1:5173>. The demo can select installed VST3/AU plugins, cre
 
 ## What Works Now
 
-- VST3: installed audio effects through the Steinberg VST3 SDK host worker, including parameter metadata, parameter writes, MIDI note events, rendering, bounded latency/tail reporting, and opaque state save/restore.
-- AU: installed macOS Audio Units through the CoreAudio host worker, including parameter metadata, parameter writes, rendering, MIDI note events where supported, bounded latency/tail reporting, and opaque state save/restore.
+- VST3: installed audio effects through the Steinberg VST3 SDK host worker, including parameter metadata, parameter writes, MIDI note events, negotiated layout reporting, rendering, bounded latency/tail reporting, and opaque state save/restore.
+- AU: installed macOS Audio Units through the CoreAudio host worker, including parameter metadata, parameter writes, negotiated layout reporting, rendering, MIDI note events where supported, bounded latency/tail reporting, and opaque state save/restore.
 - LV2: scanning and example bundles only; installed LV2 hosting is not wired yet.
 - VST2: not supported.
 

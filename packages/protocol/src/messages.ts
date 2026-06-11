@@ -13,6 +13,7 @@ export type ProtocolCommand =
   | "sendMidiEvents"
   | "getLatency"
   | "getTailTime"
+  | "getLayout"
   | "openEditor"
   | "closeEditor"
   | "heartbeat";
@@ -42,6 +43,7 @@ export interface HelloResponse {
     state?: boolean;
     latency?: boolean;
     tail?: boolean;
+    layout?: boolean;
     midi?: boolean;
     nativeExampleRenderer?: boolean;
     nativeEditor?: boolean;
@@ -106,6 +108,17 @@ export interface PluginPreset {
   parameters: Record<string, number>;
 }
 
+export interface PluginLayout {
+  requestedInputChannels: number;
+  requestedOutputChannels: number;
+  inputChannels: number;
+  outputChannels: number;
+  inputBuses: number;
+  outputBuses: number;
+  sampleRate: number;
+  maxBlockSize: number;
+}
+
 export interface PluginMetadata {
   pluginId: string;
   format: PluginFormat;
@@ -139,6 +152,7 @@ export interface CreateInstanceRequest {
 export interface CreateInstanceResponse {
   instanceId: string;
   plugin: PluginMetadata;
+  layout: PluginLayout;
   latencySamples: number;
   tailSamples?: number;
   infiniteTail?: boolean;
@@ -224,3 +238,9 @@ export interface GetTailTimeResponse {
   tailSamples: number;
   infiniteTail: boolean;
 }
+
+export interface GetLayoutRequest {
+  instanceId: string;
+}
+
+export type GetLayoutResponse = PluginLayout;

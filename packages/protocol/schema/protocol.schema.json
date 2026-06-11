@@ -26,6 +26,7 @@
         "sendMidiEvents",
         "getLatency",
         "getTailTime",
+        "getLayout",
         "openEditor",
         "closeEditor",
         "heartbeat"
@@ -148,6 +149,10 @@
         {
           "if": { "properties": { "command": { "const": "getTailTime" } }, "required": ["command"] },
           "then": { "properties": { "payload": { "$ref": "#/$defs/getTailTimeRequest" } } }
+        },
+        {
+          "if": { "properties": { "command": { "const": "getLayout" } }, "required": ["command"] },
+          "then": { "properties": { "payload": { "$ref": "#/$defs/getLayoutRequest" } } }
         }
       ]
     },
@@ -234,6 +239,30 @@
           "type": "array",
           "items": { "$ref": "#/$defs/pluginPreset" }
         }
+      }
+    },
+    "pluginLayout": {
+      "type": "object",
+      "required": [
+        "requestedInputChannels",
+        "requestedOutputChannels",
+        "inputChannels",
+        "outputChannels",
+        "inputBuses",
+        "outputBuses",
+        "sampleRate",
+        "maxBlockSize"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "requestedInputChannels": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "requestedOutputChannels": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "inputChannels": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "outputChannels": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "inputBuses": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "outputBuses": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "sampleRate": { "type": "number", "minimum": 8000, "maximum": 384000 },
+        "maxBlockSize": { "type": "integer", "minimum": 1, "maximum": 8192 }
       }
     },
     "pluginPreset": {
@@ -376,6 +405,14 @@
       }
     },
     "getTailTimeRequest": {
+      "type": "object",
+      "required": ["instanceId"],
+      "additionalProperties": true,
+      "properties": {
+        "instanceId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "getLayoutRequest": {
       "type": "object",
       "required": ["instanceId"],
       "additionalProperties": true,

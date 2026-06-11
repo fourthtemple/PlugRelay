@@ -65,7 +65,7 @@ Full VST3/AU/LV2 hosting adds more than audio rendering. MIDI event lists, param
 | Parameter enumeration and automation | Plugin-controlled names/units/ids can break JSON, UI, or automation paths. | Cap counts and string lengths, escape text, normalize values, and enforce per-instance ownership. |
 | State save/restore | Opaque blobs can be huge or maliciously malformed. | VST3/AU now enforce blob-size limits, keep state opaque, bind it to the producing instance/session, and never interpret it as a path or command; keep the same rule for LV2. |
 | Latency and tail reporting | Bogus values can break host scheduling. | Clamp to sane numeric ranges, preserve explicit infinite-tail signals, and treat negative, NaN, or extreme values as invalid. |
-| Bus negotiation | Bad channel/block/sample-rate combinations can trigger large allocations or crashes. | Keep hard resource limits at the daemon boundary and inside each worker before allocation. |
+| Bus and layout negotiation | Bad channel/block/sample-rate combinations can trigger large allocations or crashes. | Keep hard resource limits at the daemon boundary and inside each worker before allocation, and expose only bounded negotiated layout metadata. |
 | Plugin editor/UI hosting | Native editor code can open windows, dialogs, clipboard, drag/drop, and platform UI surfaces. | Run editor code outside the daemon, broker UI actions explicitly, and keep web/local host ownership checks in place. |
 | Presets, samples, caches, licensing | Plugins may expect broad filesystem or network access. | Broker narrow user-approved file access, avoid ambient filesystem access, and deny network access where the OS sandbox permits it. |
 
@@ -87,6 +87,7 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Max block size | 1–8192 frames | `createInstance.maxBlockSize` |
 | Frames per block | clamped to the instance `maxBlockSize` | `processAudioBlock` |
 | Audio channels | 0–32 in, 1–32 out | `createInstance.inputChannels` / `outputChannels` |
+| Plugin buses | 0–32 in, 1–32 out | `getLayout`, `createInstance.layout` |
 | MIDI events per request | 4096 | `sendMidiEvents.events` |
 | Plugin parameters per instance | 1024 | `getParameters`, `listPlugins`, `createInstance.plugin.parameters` |
 | Parameter id/name/unit text | 64 / 160 / 64 bytes | `getParameters`, `setParameter.parameterId` |
