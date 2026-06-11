@@ -30,6 +30,7 @@ const hello = await request(socket, "hello", {}, true, pair.sessionToken);
 assert(hello.protocolVersion, "hello returned protocolVersion");
 assert(hello.capabilities?.tail === true, "hello advertises tail-time reporting capability after pairing");
 assert(hello.capabilities?.layout === true, "hello advertises layout reporting capability after pairing");
+assert(hello.capabilities?.automation === true, "hello advertises bounded parameter automation capability after pairing");
 const nativeExampleRendererAvailable = hello.capabilities?.nativeExampleRenderer === true;
 const exampleFormats = ["vst3", "au", "lv2"];
 for (const format of exampleFormats) {
@@ -385,6 +386,26 @@ assertLayoutReport(created.layout, 2, 2, 48000, 128, "mock createInstance return
 const mockLayout = await request(socket, "getLayout", { instanceId: created.instanceId }, true, pair.sessionToken);
 assertSameLayout(mockLayout, created.layout, "mock getLayout matches createInstance layout");
 
+const automated = await request(
+  socket,
+  "setParameterEvents",
+  {
+    instanceId: created.instanceId,
+    events: [
+      { parameterId: "gain", normalizedValue: 0.25, time: 0 },
+      { parameterId: "gain", normalizedValue: 0.75, time: 32 }
+    ]
+  },
+  true,
+  pair.sessionToken
+);
+assert(
+  automated.accepted === true &&
+    automated.eventCount === 2 &&
+    Math.abs(automated.parameters?.[0]?.normalizedValue - 0.75) < 0.000001,
+  "mock setParameterEvents accepts bounded parameter automation and reports final state"
+);
+
 const noOriginSocket = await connectWebSocket(HOST, PORT, null);
 await request(noOriginSocket, "pair", { origin: ORIGIN, pairingToken: PAIRING_TOKEN }, false).then(
   () => {
@@ -655,6 +676,20 @@ async function runNativeLv2WorkerSmoke() {
     const rendered = await requestWorker("render 4 48000 0.1,0.2,0.3,0.4|0.1,0.1,0.1,0.1");
     assert(rendered.channels?.length === 2, "native LV2 worker rendered stereo output");
     assert(Math.abs(rendered.channels[0][0] - 0.15) < 0.00001, "native LV2 worker processed audio through the plugin");
+
+    const offsetSet = await requestWorker("setParameter gain 0.25 2");
+    assert(
+      offsetSet.parameter?.id === "gain" && Math.abs(offsetSet.parameter.normalizedValue - 0.25) < 0.000001,
+      "native LV2 worker accepts parameter events with sample offsets"
+    );
+    const automated = await requestWorker("render 4 48000 0.2,0.2,0.2,0.2|0.2,0.2,0.2,0.2");
+    assert(
+      Math.abs(automated.channels[0][0] - 0.3) < 0.00001 &&
+        Math.abs(automated.channels[0][1] - 0.3) < 0.00001 &&
+        Math.abs(automated.channels[0][2] - 0.1) < 0.00001 &&
+        Math.abs(automated.channels[0][3] - 0.1) < 0.00001,
+      "native LV2 worker applies queued parameter changes at the requested offset"
+    );
 
     const latency = await requestWorker("latency");
     assert(latency.latencySamples === 0, "native LV2 worker reports conservative latency");

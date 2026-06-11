@@ -288,7 +288,7 @@ public:
     return output.str();
   }
 
-  std::string setParameter(AudioUnitParameterID parameterId, double normalizedValue) {
+  std::string setParameter(AudioUnitParameterID parameterId, double normalizedValue, std::uint32_t sampleOffset) {
     AudioUnitParameterInfo info {};
     UInt32 infoSize = sizeof(info);
     checkStatus(
@@ -303,7 +303,13 @@ public:
 
     const auto value = plainValueForNormalized(info, normalizedValue);
     checkStatus(
-        AudioUnitSetParameter(unit_, parameterId, kAudioUnitScope_Global, 0, value, 0),
+        AudioUnitSetParameter(
+            unit_,
+            parameterId,
+            kAudioUnitScope_Global,
+            0,
+            value,
+            std::min<std::uint32_t>(sampleOffset, maxBlockSize_ - 1)),
         "AudioUnitSetParameter");
     return std::string("{\"parameter\":") + parameterInfoToJson(parameterId, info) + "}";
   }
@@ -770,16 +776,18 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
           std::string valueText;
           std::string sampleOffsetText;
           std::uint32_t parameterId = 0;
+          std::uint32_t sampleOffset = 0;
           double value = 0.0;
           stream >> parameterIdText;
           stream >> valueText;
           stream >> sampleOffsetText;
           if (!parseUint32Arg(parameterIdText.c_str(), 0, 0xFFFFFFFFU, parameterId) ||
-              !parseDoubleArg(valueText.c_str(), 0.0, 1.0, value)) {
+              !parseDoubleArg(valueText.c_str(), 0.0, 1.0, value) ||
+              (!sampleOffsetText.empty() && !parseUint32Arg(sampleOffsetText.c_str(), 0, kMaxWorkerFrames - 1, sampleOffset))) {
             std::cout << "{\"error\":\"invalid_parameter_arguments\"}" << std::endl;
             continue;
           }
-          std::cout << host.setParameter(parameterId, value) << std::endl;
+          std::cout << host.setParameter(parameterId, value, sampleOffset) << std::endl;
           continue;
         }
 

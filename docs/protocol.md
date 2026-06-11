@@ -93,7 +93,8 @@ Example paired capability payload:
       "maxInstancesPerSession": 8,
       "maxTotalInstances": 32
     },
-    "nativeExampleRenderer": true
+    "nativeExampleRenderer": true,
+    "automation": true
   }
 }
 ```
@@ -235,7 +236,31 @@ Returns the negotiated channel and bus layout for an instance. `requestedInputCh
 
 ### `setParameter`
 
-Sets one normalized parameter value. Values outside `0..1` are rejected. For installed VST3 plugins, the reference daemon updates the edit controller and queues a processor-side `IParameterChanges` point for the next render block. For installed Audio Units, the reference daemon maps normalized values onto the CoreAudio parameter range and calls `AudioUnitSetParameter`. For compatible LV2 audio/control plugins, the reference daemon maps normalized values onto bounded LV2 input control ports parsed from bundle TTL. Broader sample-accurate automation curves are still future work.
+Sets one normalized parameter value. Values outside `0..1` are rejected. For installed VST3 plugins, the reference daemon updates the edit controller and queues a processor-side `IParameterChanges` point for the next render block. For installed Audio Units, the reference daemon maps normalized values onto the CoreAudio parameter range and calls `AudioUnitSetParameter`. For compatible LV2 audio/control plugins, the reference daemon maps normalized values onto bounded LV2 input control ports parsed from bundle TTL.
+
+### `setParameterEvents`
+
+Queues a bounded list of normalized parameter events for the next render block. `time` is an integer sample offset into the next block and is clamped by schema/daemon validation to the instance block size. The reference daemon rejects more than 4096 events per request, rejects parameter ids longer than 64 bytes, and enforces instance ownership before dispatching events to workers.
+
+```json
+{
+  "instanceId": "inst-2",
+  "events": [
+    {
+      "parameterId": "gain",
+      "normalizedValue": 0.25,
+      "time": 0
+    },
+    {
+      "parameterId": "gain",
+      "normalizedValue": 0.75,
+      "time": 64
+    }
+  ]
+}
+```
+
+VST3 workers deliver queued values as `IParameterChanges` with sample offsets. Audio Unit workers pass the bounded offset to `AudioUnitSetParameter`. Basic LV2 audio/control workers apply control-port changes by splitting the render block at requested offsets. This is event-list automation; continuous curves, interpolation policies, and higher-density host automation lanes are still future work.
 
 ### `getState` / `setState`
 

@@ -5,6 +5,7 @@ import type {
   CreateInstanceResponse,
   HelloResponse,
   MidiEvent,
+  ParameterAutomationEvent,
   PluginMetadata,
   PluginParameter,
   PluginScanRequest,
@@ -116,6 +117,13 @@ export class SoundBridgeClient extends EventTarget {
 
   setParameter(instanceId: string, parameterId: string, normalizedValue: number): Promise<{ parameter: PluginParameter }> {
     return this.request("setParameter", { instanceId, parameterId, normalizedValue });
+  }
+
+  setParameterEvents(
+    instanceId: string,
+    events: ParameterAutomationEvent[]
+  ): Promise<{ accepted: boolean; eventCount: number; parameters: PluginParameter[] }> {
+    return this.request("setParameterEvents", { instanceId, events });
   }
 
   getState(instanceId: string): Promise<{ state: string }> {

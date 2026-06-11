@@ -7,6 +7,7 @@ export type ProtocolCommand =
   | "destroyInstance"
   | "getParameters"
   | "setParameter"
+  | "setParameterEvents"
   | "getState"
   | "setState"
   | "processAudioBlock"
@@ -45,6 +46,7 @@ export interface HelloResponse {
     tail?: boolean;
     layout?: boolean;
     midi?: boolean;
+    automation?: boolean;
     nativeExampleRenderer?: boolean;
     nativeEditor?: boolean;
     security?: {
@@ -55,6 +57,7 @@ export interface HelloResponse {
       cleanupOnDisconnect?: boolean;
       maxInstancesPerSession?: number;
       maxTotalInstances?: number;
+      maxParameterEventsPerRequest?: number;
     };
     [key: string]: unknown;
   };
@@ -190,6 +193,23 @@ export interface SetStateRequest {
 
 export interface SetStateResponse {
   restored: boolean;
+  parameters: PluginParameter[];
+}
+
+export interface ParameterAutomationEvent {
+  parameterId: string;
+  normalizedValue: number;
+  time?: number;
+}
+
+export interface SetParameterEventsRequest {
+  instanceId: string;
+  events: ParameterAutomationEvent[];
+}
+
+export interface SetParameterEventsResponse {
+  accepted: boolean;
+  eventCount: number;
   parameters: PluginParameter[];
 }
 

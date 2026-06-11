@@ -21,6 +21,7 @@ const MAX_AUDIO_CHANNELS = envInteger("SOUNDBRIDGE_MAX_AUDIO_CHANNELS", 32);
 const MAX_PLUGIN_BUSES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_BUSES", 32);
 const MAX_BLOCK_SIZE = envInteger("SOUNDBRIDGE_MAX_BLOCK_SIZE", 8192);
 const MAX_MIDI_EVENTS_PER_REQUEST = envInteger("SOUNDBRIDGE_MAX_MIDI_EVENTS_PER_REQUEST", 4096);
+const MAX_PARAMETER_EVENTS_PER_REQUEST = envInteger("SOUNDBRIDGE_MAX_PARAMETER_EVENTS_PER_REQUEST", 4096);
 const MAX_PLUGIN_PARAMETERS = envInteger("SOUNDBRIDGE_MAX_PLUGIN_PARAMETERS", 1024);
 const MAX_PLUGIN_PARAMETER_TEXT_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_PARAMETER_TEXT_BYTES", 160);
 const MAX_PLUGIN_STATE_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_STATE_BYTES", 384 * 1024);
@@ -249,6 +250,9 @@ async function dispatchCommand(envelope, context) {
     case "setParameter":
       return setParameter(payload.instanceId, payload.parameterId, payload.normalizedValue, session);
 
+    case "setParameterEvents":
+      return setParameterEvents(payload.instanceId, payload.events, session);
+
     case "getState":
       return getState(payload.instanceId, session);
 
@@ -310,6 +314,7 @@ function helloResponse(paired) {
             tail: true,
             layout: true,
             midi: true,
+            automation: true,
             nativeExampleRenderer: Boolean(NATIVE_RENDERER),
             nativeEditor: false
           }
@@ -325,7 +330,8 @@ function helloResponse(paired) {
         maxTotalInstances: MAX_TOTAL_INSTANCES,
         maxTotalSessions: MAX_TOTAL_SESSIONS,
         maxAudioChannels: MAX_AUDIO_CHANNELS,
-        maxBlockSize: MAX_BLOCK_SIZE
+        maxBlockSize: MAX_BLOCK_SIZE,
+        maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST
       }
     }
   };
@@ -524,29 +530,51 @@ function destroyInstance(instanceId, session) {
 
 async function setParameter(instanceId, parameterId, normalizedValue, session) {
   const instance = getInstance(instanceId, session);
-  const parameterIndex = instance.parameters.findIndex((parameter) => parameter.id === parameterId);
+  const safeParameterId = requireParameterId(parameterId, "parameterId");
+  const parameterIndex = instance.parameters.findIndex((parameter) => parameter.id === safeParameterId);
   if (parameterIndex < 0) {
-    throw protocolError("parameter_not_found", `Unknown parameter: ${parameterId}`);
+    throw protocolError("parameter_not_found", `Unknown parameter: ${safeParameterId}`);
   }
 
   const value = requireNumberInRange(normalizedValue, 0, 1, "normalizedValue");
-  await applyParameterValue(instance, parameterIndex, value);
+  await applyParameterValue(instance, parameterIndex, value, 0);
 
   return {
     parameter: { ...instance.parameters[parameterIndex] }
   };
 }
 
-async function applyParameterValue(instance, parameterIndex, normalizedValue) {
+async function setParameterEvents(instanceId, events, session) {
+  const instance = getInstance(instanceId, session);
+  const acceptedEvents = normalizeParameterEvents(events, instance.maxBlockSize);
+  const updatedParameterIndexes = new Set();
+
+  for (const event of acceptedEvents) {
+    const parameterIndex = instance.parameters.findIndex((parameter) => parameter.id === event.parameterId);
+    if (parameterIndex < 0) {
+      throw protocolError("parameter_not_found", `Unknown parameter: ${event.parameterId}`);
+    }
+    await applyParameterValue(instance, parameterIndex, event.normalizedValue, event.time);
+    updatedParameterIndexes.add(parameterIndex);
+  }
+
+  return {
+    accepted: true,
+    eventCount: acceptedEvents.length,
+    parameters: [...updatedParameterIndexes].map((index) => ({ ...instance.parameters[index] }))
+  };
+}
+
+async function applyParameterValue(instance, parameterIndex, normalizedValue, sampleOffset = 0) {
   const parameter = instance.parameters[parameterIndex];
   if (
     instance.nativeParameterIds.has(parameter.id) &&
     instance.worker &&
     typeof instance.worker.setParameter === "function"
   ) {
-    const nativeParameter = await instance.worker.setParameter(parameter.id, normalizedValue);
+    const nativeParameter = await instance.worker.setParameter(parameter.id, normalizedValue, sampleOffset);
     if (nativeParameter) {
-      instance.parameters[parameterIndex] = nativeParameter;
+      instance.parameters[parameterIndex] = makeNativeUpdatedParameter(nativeParameter, normalizedValue);
       return;
     }
   }
@@ -1114,11 +1142,11 @@ class NativeHostWorker {
     return normalizeWorkerParameters(parsed.parameters);
   }
 
-  async setParameter(parameterId, normalizedValue) {
+  async setParameter(parameterId, normalizedValue, sampleOffset = 0) {
     if (!["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
       return undefined;
     }
-    const parsed = await this.request(`setParameter ${parameterId} ${normalizedValue} 0`);
+    const parsed = await this.request(`setParameter ${parameterId} ${normalizedValue} ${sampleOffset}`);
     if (!parsed.parameter) {
       return undefined;
     }
@@ -1908,6 +1936,17 @@ function makeUpdatedParameter(parameter, normalizedValue) {
   };
 }
 
+function makeNativeUpdatedParameter(parameter, normalizedValue) {
+  const value = clamp01(normalizedValue);
+  const minPlain = finiteNumber(parameter.minPlain, 0);
+  const maxPlain = finiteNumber(parameter.maxPlain, 1);
+  return {
+    ...parameter,
+    normalizedValue: value,
+    plainValue: minPlain + (maxPlain - minPlain) * value
+  };
+}
+
 function makeGainParameter(normalizedValue) {
   const clamped = clamp01(normalizedValue);
   return {
@@ -2258,6 +2297,43 @@ function normalizeMidiEvents(events, maxBlockSize) {
       time
     };
   });
+}
+
+function normalizeParameterEvents(events, maxBlockSize) {
+  if (events == null) {
+    return [];
+  }
+  if (!Array.isArray(events)) {
+    throw protocolError("invalid_argument", "events must be an array.");
+  }
+  if (events.length > MAX_PARAMETER_EVENTS_PER_REQUEST) {
+    throw protocolError("invalid_argument", `events must contain at most ${MAX_PARAMETER_EVENTS_PER_REQUEST} parameter events.`, {
+      maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST
+    });
+  }
+
+  const maxOffset = Math.max(0, Math.min(MAX_BLOCK_SIZE, Number(maxBlockSize) || MAX_BLOCK_SIZE) - 1);
+  return events
+    .map((event, index) => {
+      if (!event || typeof event !== "object") {
+        throw protocolError("invalid_argument", `events[${index}] must be an object.`);
+      }
+      return {
+        parameterId: requireParameterId(event.parameterId, `events[${index}].parameterId`),
+        normalizedValue: requireNumberInRange(event.normalizedValue, 0, 1, `events[${index}].normalizedValue`),
+        time: requireIntInRange(event.time ?? 0, 0, maxOffset, `events[${index}].time`),
+        order: index
+      };
+    })
+    .sort((left, right) => left.time - right.time || left.order - right.order);
+}
+
+function requireParameterId(value, label) {
+  const text = String(value ?? "");
+  if (!text || Buffer.byteLength(text, "utf8") > 64) {
+    throw protocolError("invalid_argument", `${label} must be a non-empty string up to 64 bytes.`);
+  }
+  return text;
 }
 
 function clonePluginMetadata(plugin) {

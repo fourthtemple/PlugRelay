@@ -12,7 +12,7 @@ SoundBridge should feel like an AudioNode plus a plugin-management API.
 6. Create `SoundBridgeAudioNode`.
 7. Connect source nodes into the bridge node and connect the bridge node to the destination.
 8. For instruments, send notes or MIDI clips through `sendMidiEvents()`.
-9. Render generic parameter controls or bind host automation to `setParameter()`.
+9. Render generic parameter controls or bind host automation to `setParameter()` / `setParameterEvents()`.
 10. Store `getState()` output in the DAW project.
 11. Restore using `setState()` when reopening the project.
 
@@ -43,8 +43,8 @@ Hosts should:
 ## Current Prototype Limitations
 
 - JSON audio blocks are for correctness testing, not final latency.
-- Parameter automation is block-rate.
+- Parameter automation supports bounded event lists with sample offsets; continuous curve interpolation and high-density automation lanes are still future work.
 - The mock plugin is a gain effect.
 - The demo uses a `MessagePort` queue between main thread and AudioWorklet for compatibility.
 - Installed VST3 audio effects can instantiate, render, expose parameters, set parameters, report negotiated layout, report bounded plugin latency and tail time, and save/restore opaque state when the Steinberg SDK worker is linked. Installed Audio Units can do the same through the CoreAudio worker. Compatible installed LV2 audio/control effects can instantiate, render, expose TTL-derived control ports as parameters, set parameters, report layout, and report conservative latency/tail metadata through the basic LV2 worker.
-- The website-playable VST3/AU/LV2 instruments are repo-local example bundles rendered by the native example renderer; broader MIDI event types, richer parameter automation, LV2 atom MIDI/state/worker/UI extensions, advanced bus negotiation, plugin UI, and brokered filesystem access are still security-sensitive native milestones.
+- The website-playable VST3/AU/LV2 instruments are repo-local example bundles rendered by the native example renderer; broader MIDI event types, automation curve interpolation, LV2 atom MIDI/state/worker/UI extensions, advanced bus negotiation, plugin UI, and brokered filesystem access are still security-sensitive native milestones.

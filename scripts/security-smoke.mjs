@@ -82,6 +82,8 @@ async function run() {
   const paired = await request(main, "pair", { origin: ORIGIN, pairingToken: TOKEN }, false);
   check(typeof paired.sessionToken === "string" && paired.sessionToken.length > 0, "correct token pairs and returns a session token");
   const session = paired.sessionToken;
+  const pairedHello = await request(main, "hello", {}, true, session);
+  check(pairedHello.capabilities?.automation === true, "paired hello advertises bounded parameter automation");
 
   // F. createInstance rejects out-of-range sizing instead of allocating.
   const huge = await request(main, "createInstance", { pluginId: "mock.gain", outputChannels: 1e9 }, true, session).then(
@@ -209,7 +211,56 @@ async function run() {
   );
   check(midiBadChannel.code === "invalid_argument", "sendMidiEvents rejects out-of-range MIDI fields");
 
-  // J. Cross-session instance access is still denied.
+  // J. Parameter automation input is bounded before it reaches workers.
+  const automation = await request(
+    main,
+    "setParameterEvents",
+    {
+      instanceId: created.instanceId,
+      events: [
+        { parameterId: "gain", normalizedValue: 0.25, time: 0 },
+        { parameterId: "gain", normalizedValue: 0.5, time: 8 }
+      ]
+    },
+    true,
+    session
+  );
+  check(
+    automation.accepted === true &&
+      automation.eventCount === 2 &&
+      Math.abs(automation.parameters?.[0]?.normalizedValue - 0.5) < 0.000001,
+    "setParameterEvents accepts bounded automation and reports final state"
+  );
+
+  const tooManyParameterEvents = Array.from(
+    { length: 4097 },
+    () => ({ parameterId: "gain", normalizedValue: 0.5, time: 0 })
+  );
+  const automationTooLarge = await request(
+    main,
+    "setParameterEvents",
+    { instanceId: created.instanceId, events: tooManyParameterEvents },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(automationTooLarge.code === "invalid_argument", "setParameterEvents rejects oversized automation batches");
+
+  const automationBadTime = await request(
+    main,
+    "setParameterEvents",
+    { instanceId: created.instanceId, events: [{ parameterId: "gain", normalizedValue: 0.5, time: 999999 }] },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(automationBadTime.code === "invalid_argument", "setParameterEvents rejects out-of-range event timing");
+
+  // K. Cross-session instance access is still denied.
   const other = await connect(HOST, PORT, `${HOST}:${PORT}`, ORIGIN);
   const otherPair = await request(other, "pair", { origin: ORIGIN, pairingToken: TOKEN }, false);
   const denied = await request(
@@ -245,6 +296,20 @@ async function run() {
     (error) => ({ code: error.code })
   );
   check(layoutDenied.code === "instance_access_denied", "another session cannot read this instance's layout metadata");
+  const automationDenied = await request(
+    other,
+    "setParameterEvents",
+    {
+      instanceId: created.instanceId,
+      events: [{ parameterId: "gain", normalizedValue: 0.2, time: 0 }]
+    },
+    true,
+    otherPair.sessionToken
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(automationDenied.code === "instance_access_denied", "another session cannot automate this instance's parameters");
   other.socket?.destroy();
   main.socket?.destroy();
 }

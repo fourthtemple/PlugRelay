@@ -20,6 +20,7 @@
         "destroyInstance",
         "getParameters",
         "setParameter",
+        "setParameterEvents",
         "getState",
         "setState",
         "processAudioBlock",
@@ -95,9 +96,11 @@
                 "instanceOwnership": { "type": "boolean" },
                 "cleanupOnDisconnect": { "type": "boolean" },
                 "maxInstancesPerSession": { "type": "number" },
-                "maxTotalInstances": { "type": "number" }
+                "maxTotalInstances": { "type": "number" },
+                "maxParameterEventsPerRequest": { "type": "number" }
               }
-            }
+            },
+            "automation": { "type": "boolean" }
           }
         }
       }
@@ -129,6 +132,10 @@
         {
           "if": { "properties": { "command": { "const": "setParameter" } }, "required": ["command"] },
           "then": { "properties": { "payload": { "$ref": "#/$defs/setParameterRequest" } } }
+        },
+        {
+          "if": { "properties": { "command": { "const": "setParameterEvents" } }, "required": ["command"] },
+          "then": { "properties": { "payload": { "$ref": "#/$defs/setParameterEventsRequest" } } }
         },
         {
           "if": { "properties": { "command": { "const": "getState" } }, "required": ["command"] },
@@ -313,6 +320,16 @@
         }
       }
     },
+    "parameterAutomationEvent": {
+      "type": "object",
+      "required": ["parameterId", "normalizedValue"],
+      "additionalProperties": true,
+      "properties": {
+        "parameterId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "normalizedValue": { "type": "number", "minimum": 0, "maximum": 1 },
+        "time": { "type": "integer", "minimum": 0, "maximum": 8191 }
+      }
+    },
     "pairRequest": {
       "type": "object",
       "additionalProperties": true,
@@ -363,6 +380,19 @@
         "instanceId": { "type": "string", "minLength": 1 },
         "parameterId": { "type": "string", "minLength": 1, "maxLength": 64 },
         "normalizedValue": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "setParameterEventsRequest": {
+      "type": "object",
+      "required": ["instanceId", "events"],
+      "additionalProperties": true,
+      "properties": {
+        "instanceId": { "type": "string", "minLength": 1 },
+        "events": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/parameterAutomationEvent" }
+        }
       }
     },
     "getStateRequest": {

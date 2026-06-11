@@ -61,6 +61,7 @@ constexpr std::uint32_t kMaxWorkerAudioPorts = 32;
 constexpr std::uint32_t kMaxWorkerPortIndex = 4096;
 constexpr std::size_t kMaxWorkerPorts = 1024;
 constexpr std::size_t kMaxWorkerParameters = 1024;
+constexpr std::size_t kMaxWorkerParameterChanges = 4096;
 constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
 constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
@@ -92,6 +93,12 @@ struct Lv2BundleMetadata {
   std::string pluginUri;
   std::filesystem::path binaryPath;
   std::vector<Lv2Port> ports;
+};
+
+struct PendingParameterChange {
+  std::string parameterId;
+  double normalizedValue = 0.0;
+  std::uint32_t sampleOffset = 0;
 };
 
 struct DlCloser {
@@ -644,8 +651,7 @@ public:
       output.assign(frames, 0.0F);
     }
 
-    connectPorts();
-    descriptor_->run(handle_, frames);
+    renderSegments(frames);
     for (auto& channel : outputBuffers_) {
       for (auto& sample : channel) {
         sample = sanitizeSample(sample);
@@ -666,7 +672,7 @@ public:
       if (!first) {
         output << ",";
       }
-      output << parameterInfoToJson(ports_[portIndex]);
+      output << parameterInfoToJson(ports_[portIndex], ports_[portIndex].value);
       first = false;
       ++emitted;
     }
@@ -674,19 +680,26 @@ public:
     return output.str();
   }
 
-  std::string setParameter(const std::string& parameterId, double value) {
+  std::string setParameter(const std::string& parameterId, double value, std::uint32_t sampleOffset) {
     for (const auto portIndex : inputControlPortIndexes_) {
       auto& port = ports_[portIndex];
       if (parameterIdForPort(port) != parameterId && std::to_string(port.index) != parameterId) {
         continue;
       }
       const auto normalized = std::clamp(value, 0.0, 1.0);
-      const auto range = static_cast<double>(port.maximum) - static_cast<double>(port.minimum);
-      port.value = static_cast<float>(std::clamp(
-          static_cast<double>(port.minimum) + range * normalized,
-          static_cast<double>(port.minimum),
-          static_cast<double>(port.maximum)));
-      return std::string("{\"parameter\":") + parameterInfoToJson(port) + "}";
+      const auto plainValue = plainValueForPort(port, normalized);
+      if (sampleOffset == 0) {
+        port.value = plainValue;
+      } else {
+        if (pendingParameterChanges_.size() >= kMaxWorkerParameterChanges) {
+          throw std::runtime_error("too_many_queued_parameter_changes");
+        }
+        pendingParameterChanges_.push_back(PendingParameterChange{
+            parameterIdForPort(port),
+            normalized,
+            std::clamp<std::uint32_t>(sampleOffset, 0, maxBlockSize_ - 1)});
+      }
+      return std::string("{\"parameter\":") + parameterInfoToJson(port, plainValue) + "}";
     }
     throw std::runtime_error("unknown_parameter");
   }
@@ -773,14 +786,62 @@ private:
     }
     inputBuffers_.assign(inputPortIndexes_.size(), std::vector<float>(1, 0.0F));
     outputBuffers_.assign(outputPortIndexes_.size(), std::vector<float>(1, 0.0F));
-    connectPorts();
+    connectPorts(0);
     if (descriptor_->activate != nullptr) {
       descriptor_->activate(handle_);
       activated_ = true;
     }
   }
 
-  void connectPorts() {
+  void renderSegments(std::uint32_t frames) {
+    if (pendingParameterChanges_.empty()) {
+      runSegment(0, frames);
+      return;
+    }
+
+    auto parameterEvents = std::move(pendingParameterChanges_);
+    pendingParameterChanges_.clear();
+    std::stable_sort(parameterEvents.begin(), parameterEvents.end(), [](const auto& left, const auto& right) {
+      return left.sampleOffset < right.sampleOffset;
+    });
+
+    std::size_t eventIndex = 0;
+    std::uint32_t frameOffset = 0;
+    while (frameOffset < frames) {
+      while (eventIndex < parameterEvents.size() &&
+          std::clamp<std::uint32_t>(parameterEvents[eventIndex].sampleOffset, 0, frames - 1) <= frameOffset) {
+        applyParameterChange(parameterEvents[eventIndex]);
+        ++eventIndex;
+      }
+
+      std::uint32_t nextOffset = frames;
+      if (eventIndex < parameterEvents.size()) {
+        nextOffset = std::clamp<std::uint32_t>(parameterEvents[eventIndex].sampleOffset, 0, frames - 1);
+      }
+      runSegment(frameOffset, nextOffset - frameOffset);
+      frameOffset = nextOffset;
+    }
+  }
+
+  void runSegment(std::uint32_t frameOffset, std::uint32_t frames) {
+    if (frames == 0) {
+      return;
+    }
+    connectPorts(frameOffset);
+    descriptor_->run(handle_, frames);
+  }
+
+  void applyParameterChange(const PendingParameterChange& change) {
+    for (const auto portIndex : inputControlPortIndexes_) {
+      auto& port = ports_[portIndex];
+      if (parameterIdForPort(port) == change.parameterId || std::to_string(port.index) == change.parameterId) {
+        port.value = plainValueForPort(port, change.normalizedValue);
+        return;
+      }
+    }
+  }
+
+  void connectPorts(std::uint32_t frameOffset) {
     if (handle_ == nullptr || descriptor_ == nullptr) {
       return;
     }
@@ -789,13 +850,13 @@ private:
       descriptor_->connect_port(
           handle_,
           ports_[inputPortIndexes_[channel]].index,
-          inputBuffers_.empty() ? nullptr : inputBuffers_[channel].data());
+          inputBuffers_.empty() ? nullptr : inputBuffers_[channel].data() + frameOffset);
     }
     for (std::size_t channel = 0; channel < outputPortIndexes_.size(); ++channel) {
       descriptor_->connect_port(
           handle_,
           ports_[outputPortIndexes_[channel]].index,
-          outputBuffers_.empty() ? nullptr : outputBuffers_[channel].data());
+          outputBuffers_.empty() ? nullptr : outputBuffers_[channel].data() + frameOffset);
     }
     for (const auto portIndex : inputControlPortIndexes_) {
       descriptor_->connect_port(handle_, ports_[portIndex].index, &ports_[portIndex].value);
@@ -809,13 +870,21 @@ private:
     return port.symbol.empty() ? std::to_string(port.index) : port.symbol;
   }
 
-  double normalizedValueForPort(const Lv2Port& port) const {
+  float plainValueForPort(const Lv2Port& port, double normalizedValue) const {
+    const auto range = static_cast<double>(port.maximum) - static_cast<double>(port.minimum);
+    return static_cast<float>(std::clamp(
+        static_cast<double>(port.minimum) + range * std::clamp(normalizedValue, 0.0, 1.0),
+        static_cast<double>(port.minimum),
+        static_cast<double>(port.maximum)));
+  }
+
+  double normalizedValueForPort(const Lv2Port& port, float plainValue) const {
     const auto minValue = static_cast<double>(port.minimum);
     const auto maxValue = static_cast<double>(port.maximum);
     if (std::abs(maxValue - minValue) < 0.000001) {
       return 0.0;
     }
-    return std::clamp((static_cast<double>(port.value) - minValue) / (maxValue - minValue), 0.0, 1.0);
+    return std::clamp((static_cast<double>(plainValue) - minValue) / (maxValue - minValue), 0.0, 1.0);
   }
 
   double defaultNormalizedValueForPort(const Lv2Port& port) const {
@@ -827,13 +896,13 @@ private:
     return std::clamp((static_cast<double>(port.defaultValue) - minValue) / (maxValue - minValue), 0.0, 1.0);
   }
 
-  std::string parameterInfoToJson(const Lv2Port& port) const {
+  std::string parameterInfoToJson(const Lv2Port& port, float plainValue) const {
     std::ostringstream output;
     output << "{\"id\":\"" << jsonEscape(parameterIdForPort(port)) << "\""
            << ",\"name\":\"" << jsonEscape(port.name.empty() ? parameterIdForPort(port) : port.name) << "\""
-           << ",\"normalizedValue\":" << normalizedValueForPort(port)
+           << ",\"normalizedValue\":" << normalizedValueForPort(port, plainValue)
            << ",\"defaultNormalizedValue\":" << defaultNormalizedValueForPort(port)
-           << ",\"plainValue\":" << port.value
+           << ",\"plainValue\":" << plainValue
            << ",\"minPlain\":" << port.minimum
            << ",\"maxPlain\":" << port.maximum
            << ",\"automatable\":true"
@@ -862,6 +931,7 @@ private:
   std::vector<std::size_t> outputControlPortIndexes_;
   std::vector<std::vector<float>> inputBuffers_;
   std::vector<std::vector<float>> outputBuffers_;
+  std::vector<PendingParameterChange> pendingParameterChanges_;
   bool activated_ = false;
 };
 
@@ -957,15 +1027,18 @@ int runLv2HostWorkerNative(int argc, char** argv) {
           std::string parameterId;
           std::string valueText;
           std::string sampleOffsetText;
+          std::uint32_t sampleOffset = 0;
           double value = 0.0;
           stream >> parameterId;
           stream >> valueText;
           stream >> sampleOffsetText;
-          if (parameterId.empty() || !parseDoubleArg(valueText.c_str(), 0.0, 1.0, value)) {
+          if (parameterId.empty() ||
+              !parseDoubleArg(valueText.c_str(), 0.0, 1.0, value) ||
+              (!sampleOffsetText.empty() && !parseUint32Arg(sampleOffsetText.c_str(), 0, kMaxWorkerFrames - 1, sampleOffset))) {
             std::cout << "{\"error\":\"invalid_parameter_arguments\"}" << std::endl;
             continue;
           }
-          std::cout << host.setParameter(parameterId, value) << std::endl;
+          std::cout << host.setParameter(parameterId, value, sampleOffset) << std::endl;
           continue;
         }
 

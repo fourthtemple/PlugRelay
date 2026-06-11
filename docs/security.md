@@ -62,7 +62,7 @@ Full VST3/AU/LV2 hosting adds more than audio rendering. MIDI event lists, param
 | Feature | Added risk | Required control |
 | --- | --- | --- |
 | MIDI event lists | Oversized or malformed event batches can stress workers or confuse adapters. | Bound event count, byte size, timing offsets, channel/note ranges, and reject malformed events. |
-| Parameter enumeration and automation | Plugin-controlled names/units/ids can break JSON, UI, or automation paths. | Cap counts and string lengths, escape text, normalize values, and enforce per-instance ownership. |
+| Parameter enumeration and automation | Plugin-controlled names/units/ids and oversized automation bursts can break JSON, UI, logs, or automation paths. | Cap counts and string lengths, escape text, normalize values, bound automation event lists, and enforce per-instance ownership. |
 | State save/restore | Opaque blobs can be huge or maliciously malformed. | VST3/AU now enforce blob-size limits, keep state opaque, bind it to the producing instance/session, and never interpret it as a path or command; LV2 state extension support must follow the same rule before it is enabled. |
 | Latency and tail reporting | Bogus values can break host scheduling. | Clamp to sane numeric ranges, preserve explicit infinite-tail signals, and treat negative, NaN, or extreme values as invalid. |
 | Bus and layout negotiation | Bad channel/block/sample-rate combinations can trigger large allocations or crashes. | Keep hard resource limits at the daemon boundary and inside each worker before allocation, and expose only bounded negotiated layout metadata. |
@@ -90,8 +90,9 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Audio channels | 0–32 in, 1–32 out | `createInstance.inputChannels` / `outputChannels` |
 | Plugin buses | 0–32 in, 1–32 out | `getLayout`, `createInstance.layout` |
 | MIDI events per request | 4096 | `sendMidiEvents.events` |
+| Parameter automation events per request | 4096 | `setParameterEvents.events` |
 | Plugin parameters per instance | 1024 | `getParameters`, `listPlugins`, `createInstance.plugin.parameters` |
-| Parameter id/name/unit text | 64 / 160 / 64 bytes | `getParameters`, `setParameter.parameterId` |
+| Parameter id/name/unit text | 64 / 160 / 64 bytes | `getParameters`, `setParameter.parameterId`, `setParameterEvents.events[].parameterId` |
 | Native plugin state bytes / state envelope | 384 KiB / 1 MiB | `getState`, `setState` |
 | Plugin/transport latency samples | 0–1048576 | `getLatency`, `processAudioBlock.latencySamples` |
 | Plugin tail samples | 0–1048576 | `getTailTime`, `processAudioBlock.tailSamples` |
