@@ -67,6 +67,17 @@ async function run() {
     "unpaired hello does not disclose plugin host adapters"
   );
   check(helloUnpaired.capabilities?.security?.hostHeaderValidation === true, "hello advertises hostHeaderValidation");
+  for (const [command, payload] of [
+    ["scanPlugins", {}],
+    ["listPlugins", {}],
+    ["createInstance", { pluginId: "mock.gain" }]
+  ]) {
+    const blocked = await request(main, command, payload, false).then(
+      () => ({ ok: true }),
+      (error) => ({ code: error.code })
+    );
+    check(blocked.code === "not_paired", `unpaired ${command} is rejected`);
+  }
 
   // D. Wrong pairing token is rejected, and the connection locks out after the limit.
   const noOriginSocket = await connect(HOST, PORT, `${HOST}:${PORT}`);
