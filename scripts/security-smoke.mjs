@@ -407,6 +407,67 @@ async function run() {
   );
   check(badTransportInteger.code === "invalid_argument", "processAudioBlock rejects non-integer transport sample positions");
 
+  const badInputBusesType = await request(
+    main,
+    "processAudioBlock",
+    { instanceId: created.instanceId, blockId: 7, sampleRate: 48000, inputBuses: {} },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(badInputBusesType.code === "invalid_argument", "processAudioBlock rejects non-array input bus blocks");
+
+  const badInputBusIndex = await request(
+    main,
+    "processAudioBlock",
+    { instanceId: created.instanceId, blockId: 8, sampleRate: 48000, inputBuses: [{ index: 1.5, channels: [[]] }] },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(badInputBusIndex.code === "invalid_argument", "processAudioBlock rejects non-integer input bus indexes");
+
+  const duplicateInputBusIndex = await request(
+    main,
+    "processAudioBlock",
+    {
+      instanceId: created.instanceId,
+      blockId: 9,
+      sampleRate: 48000,
+      inputBuses: [
+        { index: 0, channels: [[0.1]] },
+        { index: 0, channels: [[0.2]] }
+      ]
+    },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(duplicateInputBusIndex.code === "invalid_argument", "processAudioBlock rejects duplicate input bus indexes");
+
+  const tooManyInputBuses = await request(
+    main,
+    "processAudioBlock",
+    {
+      instanceId: created.instanceId,
+      blockId: 10,
+      sampleRate: 48000,
+      inputBuses: Array.from({ length: 33 }, (_, index) => ({ index: index % 32, channels: [[]] }))
+    },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(tooManyInputBuses.code === "invalid_argument", "processAudioBlock rejects oversized input bus lists");
+
   // I. MIDI input is bounded even when the target plugin is not MIDI-capable.
   const tooManyMidiEvents = Array.from({ length: 4097 }, () => ({ type: "noteOn", note: 60, velocity: 0.8 }));
   const midiTooLarge = await request(

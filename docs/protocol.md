@@ -410,7 +410,7 @@ Request:
 }
 ```
 
-`channels` is the backwards-compatible main input bus. `inputBuses` is optional and carries explicit indexed input bus buffers for sidechain-style routing. When both are present, bus index `0` is the main input bus. All bus indices are clamped to `0..31`; all channel counts are capped to 32; all frame counts are capped to the instance `maxBlockSize`.
+`channels` is the backwards-compatible main input bus. `inputBuses` is optional and carries explicit indexed input bus buffers for sidechain-style routing. When both are present, bus index `0` is the main input bus. Explicit `inputBuses` must be an array of at most 32 bus blocks with unique integer indexes in `0..31`; malformed, duplicate, non-integer, or out-of-range indexes are rejected. All channel counts are capped to 32, and all frame counts are capped to the instance `maxBlockSize`.
 
 `transport` is optional bounded host timeline context. Supported fields are `playing`, `recording`, `loopActive`, `tempo`, `timeSignatureNumerator`, `timeSignatureDenominator`, `projectTimeMusic`, `barPositionMusic`, `cycleStartMusic`, `cycleEndMusic`, and `samplePosition`. Tempo is `1..960` BPM, time-signature denominators must be powers of two in `1..64`, musical positions are quarter-note values in `0..1000000000`, sample positions are integers in `0..9007199254740991`, and cycle start/end must be supplied together with `cycleEndMusic >= cycleStartMusic`. VST3 workers map accepted values into Steinberg `ProcessContext`; AU workers map accepted values into `AudioTimeStamp` sample time plus `kAudioUnitProperty_HostCallbacks`; LV2 workers map supported timeline values into bounded atom `time:Position` events for compatible atom/event input ports.
 

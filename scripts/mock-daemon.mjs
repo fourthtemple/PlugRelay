@@ -879,7 +879,10 @@ async function processAudioBlock(payload, session) {
   const frames = boundedFrames(firstAudioFrameCount(payload, instance.maxBlockSize), instance.maxBlockSize);
   const blockSampleRate = clampSampleRate(payload.sampleRate, instance.sampleRate);
   const mainInputChannels = normalizeAudioChannels(payload.channels, MAX_AUDIO_CHANNELS, frames);
-  const inputBuses = normalizeAudioBusBlocks(payload.inputBuses, mainInputChannels, instance.layout?.inputBusLayouts, frames);
+  const inputBuses = normalizeAudioBusBlocks(payload.inputBuses, mainInputChannels, instance.layout?.inputBusLayouts, frames, {
+    strictRequest: true,
+    label: "inputBuses"
+  });
   const channels = inputBuses.find((bus) => bus.index === 0)?.channels ?? mainInputChannels;
   const transport = normalizeTransportState(payload.transport);
 
@@ -977,14 +980,37 @@ function normalizeAudioChannels(channels, maxChannels, frames) {
   );
 }
 
-function normalizeAudioBusBlocks(value, mainChannels, busLayouts = [], frames) {
+function normalizeAudioBusBlocks(value, mainChannels, busLayouts = [], frames, options = {}) {
   const byIndex = new Map();
   if (Array.isArray(mainChannels) && mainChannels.length > 0) {
     byIndex.set(0, { index: 0, channels: mainChannels });
   }
+  if (value != null && !Array.isArray(value)) {
+    if (options.strictRequest) {
+      throw protocolError("invalid_argument", `${options.label ?? "audioBuses"} must be an array.`);
+    }
+    return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
+  }
   if (Array.isArray(value)) {
-    for (const bus of value.slice(0, MAX_PLUGIN_BUSES)) {
-      const index = normalizeInt(bus?.index, 0, MAX_PLUGIN_BUSES - 1, 0);
+    if (options.strictRequest && value.length > MAX_PLUGIN_BUSES) {
+      throw protocolError("invalid_argument", `${options.label ?? "audioBuses"} must contain at most ${MAX_PLUGIN_BUSES} bus blocks.`, {
+        maxPluginBuses: MAX_PLUGIN_BUSES
+      });
+    }
+    const seenExplicitIndexes = new Set();
+    for (const [position, bus] of value.slice(0, MAX_PLUGIN_BUSES).entries()) {
+      if ((!bus || typeof bus !== "object" || Array.isArray(bus)) && options.strictRequest) {
+        throw protocolError("invalid_argument", `${options.label ?? "audioBuses"}[${position}] must be an object.`);
+      }
+      const index = options.strictRequest
+        ? requireIntegerInRange(bus?.index, 0, MAX_PLUGIN_BUSES - 1, `${options.label ?? "audioBuses"}[${position}].index`)
+        : normalizeInt(bus?.index, 0, MAX_PLUGIN_BUSES - 1, 0);
+      if (options.strictRequest && seenExplicitIndexes.has(index)) {
+        throw protocolError("invalid_argument", `${options.label ?? "audioBuses"} must not contain duplicate bus index ${index}.`, {
+          index
+        });
+      }
+      seenExplicitIndexes.add(index);
       const layoutChannels = busLayouts.find((layout) => layout.index === index)?.channels ?? MAX_AUDIO_CHANNELS;
       byIndex.set(index, {
         index,

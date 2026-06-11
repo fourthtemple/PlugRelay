@@ -9,7 +9,7 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | Area | Status | Notes |
 | --- | --- | --- |
 | Original findings #1-#9 | Fixed | Remediated in the daemon (`scripts/mock-daemon.mjs`), native C++ workers, protocol schema, and docs. |
-| Regression coverage | Passing | `npm run smoke:security` exercises the fixes against a live daemon. Last recorded result: 66/66 checks passing. |
+| Regression coverage | Passing | `npm run smoke:security` exercises the fixes against a live daemon. Last recorded result: 70/70 checks passing. |
 | Installed-plugin compatibility probe | Added | `npm run probe:installed` starts a temporary paired loopback daemon with an explicit origin allowlist and bounded request sizes so real VST3/AU/LV2 create/state/MIDI/render/layout checks can be repeated without weakening the production security model. |
 | Example render argument hardening | Fixed | Example render entry points reject unknown example plugin ids before numeric argument parsing. |
 | VST3/AU opaque state | Fixed | Native state is bounded, opaque, plugin-id bound, and restored through worker processes. |
@@ -33,6 +33,7 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | Bounded preset snapshot application | Fixed | `setPreset` applies only daemon-listed bounded parameter snapshots by preset id, skips unknown live parameters, enforces instance ownership, and does not accept browser-supplied preset files or arbitrary parameter maps. |
 | Bounded richer MIDI events | Fixed | The protocol and daemon reject oversized MIDI batches and validate note, CC, pitch-bend, pressure, program, channel, and timing fields before worker dispatch; native workers keep per-format MIDI behavior bounded. |
 | VST3 bus-aware audio blocks | Fixed | The protocol accepts bounded indexed input bus buffers, the VST3 worker routes them into active SDK buses, and responses include bounded indexed output bus buffers. |
+| Explicit input-bus validation | Fixed | `processAudioBlock.inputBuses` rejects non-arrays, oversized lists, non-object bus blocks, duplicate indexes, and non-integer/out-of-range indexes before routing data reaches workers. |
 | Bounded host transport context | Fixed | `processAudioBlock.transport` accepts bounded optional play state, tempo, time-signature, musical-position, cycle, and sample-position fields; the daemon rejects malformed values, VST3 workers re-validate before mapping to SDK `ProcessContext`, AU workers re-validate before exposing CoreAudio host callbacks, and LV2 workers re-validate before emitting atom `time:Position` events. |
 | Full plugin-hosting surface | Open roadmap | High-density automation lanes, AU/LV2 sidechain and multi-output routing, deeper VST3 bus negotiation, LV2 worker/UI support, plugin UI, and broader file access need feature-specific controls as they are implemented. |
 | Third-party worker sandboxing | Last-stage hardening | Worker processes isolate crashes today, but OS-level sandboxing for malicious third-party plugin code is intentionally tracked after the core host features. |
