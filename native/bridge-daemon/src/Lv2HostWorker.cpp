@@ -1,5 +1,6 @@
 #include "SoundBridge/Lv2HostWorker.h"
 
+#include "SoundBridge/Base64.h"
 #include "SoundBridge/ExampleInstrumentRenderer.h"
 #include "SoundBridge/NativePlugin.h"
 
@@ -13,6 +14,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <memory>
@@ -64,9 +66,11 @@ constexpr std::size_t kMaxWorkerParameters = 1024;
 constexpr std::size_t kMaxWorkerParameterChanges = 4096;
 constexpr std::size_t kMaxWorkerMidiEvents = 4096;
 constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
+constexpr std::size_t kMaxWorkerStateBytes = 384 * 1024;
 constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
 constexpr double kMaxWorkerSampleRate = 384000.0;
+constexpr const char* kLv2ControlStateMagic = "soundbridge-lv2-control-state-v1";
 
 enum class Lv2PortDirection {
   Input,
@@ -117,6 +121,13 @@ float sanitizeSample(float value) {
   return std::clamp(value, -16.0F, 16.0F);
 }
 
+float sanitizeStateValue(float value) {
+  if (!std::isfinite(value)) {
+    return 0.0F;
+  }
+  return std::clamp(value, -1.0e9F, 1.0e9F);
+}
+
 float sanitizeSampleText(const std::string& text) {
   char* end = nullptr;
   const double value = std::strtod(text.c_str(), &end);
@@ -151,6 +162,10 @@ bool parseDoubleArg(const char* text, double minValue, double maxValue, double& 
   }
   out = value;
   return true;
+}
+
+bool parseStateValue(const std::string& text, double& out) {
+  return parseDoubleArg(text.c_str(), -1.0e9, 1.0e9, out);
 }
 
 bool parseSampleRateArg(const char* text, double& out) {
@@ -788,6 +803,19 @@ public:
     return "{\"tailSamples\":0,\"infiniteTail\":false}";
   }
 
+  std::string stateToJson() const {
+    const auto state = controlStateBase64();
+    return std::string("{\"state\":\"") + state + "\"}";
+  }
+
+  std::string setState(const std::string& stateText) {
+    if (stateText == "-") {
+      return "{\"ok\":true}";
+    }
+    restoreControlState(stateText);
+    return "{\"ok\":true}";
+  }
+
   std::string layoutToJson() const {
     std::ostringstream output;
     output << "{\"requestedInputChannels\":" << requestedInputChannels_
@@ -820,6 +848,70 @@ private:
            << ",\"active\":" << (active ? "true" : "false")
            << "}]";
     return output.str();
+  }
+
+  std::string controlStateBase64() const {
+    std::ostringstream state;
+    state << kLv2ControlStateMagic << "\n";
+    state << std::setprecision(9);
+    for (const auto portIndex : inputControlPortIndexes_) {
+      const auto& port = ports_[portIndex];
+      state << "p " << port.index << " " << sanitizeStateValue(port.value) << "\n";
+    }
+    const auto text = state.str();
+    if (text.size() > kMaxWorkerStateBytes) {
+      throw std::runtime_error("state_too_large");
+    }
+    return base64Encode(reinterpret_cast<const std::uint8_t*>(text.data()), text.size());
+  }
+
+  void restoreControlState(const std::string& encodedState) {
+    const auto decoded = base64Decode(encodedState, kMaxWorkerStateBytes);
+    const std::string text(decoded.begin(), decoded.end());
+    std::stringstream lines(text);
+    std::string line;
+    if (!std::getline(lines, line) || line != kLv2ControlStateMagic) {
+      throw std::runtime_error("invalid_lv2_state");
+    }
+
+    std::size_t restored = 0;
+    while (std::getline(lines, line)) {
+      if (line.empty()) {
+        continue;
+      }
+      if (++restored > kMaxWorkerParameters) {
+        throw std::runtime_error("state_too_large");
+      }
+
+      std::stringstream entry(line);
+      std::string prefix;
+      std::string portIndexText;
+      std::string valueText;
+      entry >> prefix;
+      entry >> portIndexText;
+      entry >> valueText;
+      std::string extra;
+      entry >> extra;
+      std::uint32_t portIndex = 0;
+      double value = 0.0;
+      if (prefix != "p" ||
+          !extra.empty() ||
+          !parseUint32Arg(portIndexText.c_str(), 0, kMaxWorkerPortIndex, portIndex) ||
+          !parseStateValue(valueText, value)) {
+        throw std::runtime_error("invalid_lv2_state");
+      }
+
+      for (const auto controlPortIndex : inputControlPortIndexes_) {
+        auto& port = ports_[controlPortIndex];
+        if (port.index == portIndex) {
+          port.value = static_cast<float>(std::clamp(
+              value,
+              static_cast<double>(port.minimum),
+              static_cast<double>(port.maximum)));
+          break;
+        }
+      }
+    }
   }
 
   void classifyPorts() {
@@ -1090,12 +1182,18 @@ int runLv2HostWorkerNative(int argc, char** argv) {
         }
 
         if (command == "getState") {
-          std::cout << "{\"state\":\"\"}" << std::endl;
+          std::cout << host.stateToJson() << std::endl;
           continue;
         }
 
         if (command == "setState") {
-          std::cout << "{\"ok\":true}" << std::endl;
+          std::string stateText;
+          stream >> stateText;
+          if (stateText.empty()) {
+            std::cout << "{\"error\":\"invalid_state_arguments\"}" << std::endl;
+            continue;
+          }
+          std::cout << host.setState(stateText) << std::endl;
           continue;
         }
 
@@ -1178,7 +1276,7 @@ bool lv2HostWorkerAvailable() {
 
 std::string lv2HostWorkerStatus() {
 #ifndef _WIN32
-  return "Basic LV2 audio/control host worker is available; LV2 atom MIDI, state, worker, and UI extensions remain disabled.";
+  return "Basic LV2 audio/control host worker is available; LV2 atom MIDI, extension state, worker, and UI extensions remain disabled.";
 #else
   return "LV2 host worker is not available on this platform build.";
 #endif

@@ -704,7 +704,7 @@ function normalizeNativeState(nativeState, format) {
     throw protocolError("bad_state", "State belongs to a different native plugin format.");
   }
 
-  if (format === "au") {
+  if (format === "au" || format === "lv2") {
     return {
       format,
       state: normalizeStatePart(nativeState.state, "nativeState.state")
@@ -1226,7 +1226,7 @@ class NativeHostWorker {
   }
 
   async getState() {
-    if (!["au", "vst3"].includes(this.nativeHost.format)) {
+    if (!["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
       return undefined;
     }
     const parsed = await this.request("getState");
@@ -1234,14 +1234,14 @@ class NativeHostWorker {
   }
 
   async setState(nativeState) {
-    if (!["au", "vst3"].includes(this.nativeHost.format)) {
+    if (!["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
       return undefined;
     }
     const state = normalizeNativeState(nativeState, this.nativeHost.format);
     if (!state) {
       return undefined;
     }
-    if (this.nativeHost.format === "au") {
+    if (this.nativeHost.format === "au" || this.nativeHost.format === "lv2") {
       return this.request(`setState ${state.state || "-"}`);
     }
     return this.request(`setState ${state.component || "-"} ${state.controller || "-"}`);
@@ -2212,7 +2212,7 @@ function normalizeWorkerParameter(parameter) {
 }
 
 function normalizeWorkerState(format, state) {
-  if (format === "au") {
+  if (format === "au" || format === "lv2") {
     return {
       format,
       state: normalizeStatePart(state, "worker.state")

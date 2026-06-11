@@ -81,7 +81,7 @@ Example paired capability payload:
         "scan": true,
         "host": true,
         "exampleHost": true,
-        "notes": "Basic LV2 audio/control host worker is available; LV2 atom MIDI, state, worker, and UI extensions remain disabled."
+        "notes": "Basic LV2 audio/control host worker is available; LV2 atom MIDI, extension state, worker, and UI extensions remain disabled."
       }
     },
     "security": {
@@ -290,9 +290,9 @@ VST3 workers deliver queued values as `IParameterChanges` with sample offsets. A
 
 State is opaque base64. Hosts store it without interpreting it.
 
-The reference daemon wraps state in a bounded base64 JSON envelope that records the producing `pluginId`, `format`, normalized parameter snapshot, and, for installed VST3/AU instances, a `nativeState` payload. `setState` rejects state produced by a different plugin id. Native state is bounded before it is returned to the host or restored into a worker.
+The reference daemon wraps state in a bounded base64 JSON envelope that records the producing `pluginId`, `format`, normalized parameter snapshot, and, for installed VST3/AU/LV2 instances that expose native worker state, a `nativeState` payload. `setState` rejects state produced by a different plugin id. Native state is bounded before it is returned to the host or restored into a worker.
 
-Installed VST3 state stores the component and edit-controller state streams. Installed Audio Unit state stores the CoreAudio `kAudioUnitProperty_ClassInfo` property list. LV2 state extension support is not implemented yet, so compatible LV2 plugins currently round-trip SoundBridge's normalized parameter snapshot only. Hosts should treat native state payloads as opaque bytes.
+Installed VST3 state stores the component and edit-controller state streams. Installed Audio Unit state stores the CoreAudio `kAudioUnitProperty_ClassInfo` property list. Compatible basic LV2 audio/control plugins store bounded control-port state keyed by LV2 port index. Full LV2 state extension support, including file-backed state, is still future work and must go through the same state and file-broker rules before it is enabled. Hosts should treat native state payloads as opaque bytes.
 
 ### `processAudioBlock`
 

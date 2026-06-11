@@ -128,6 +128,65 @@ if (firstScanOnly) {
   );
 }
 
+const nativeLv2Effect = plugins.find((plugin) => plugin.pluginId === "lv2:soundbridge-example-gain.lv2" && plugin.hostable === true);
+if (nativeLv2Effect) {
+  const nativeLv2Instance = await request(
+    socket,
+    "createInstance",
+    {
+      pluginId: nativeLv2Effect.pluginId,
+      format: nativeLv2Effect.format,
+      sampleRate: 48000,
+      maxBlockSize: 128,
+      inputChannels: 2,
+      outputChannels: 2
+    },
+    true,
+    pair.sessionToken
+  );
+  const nativeLv2Gain = nativeLv2Instance.plugin?.parameters?.find((parameter) => parameter.id === "gain");
+  assert(nativeLv2Gain?.automatable === true, "installed LV2 effect exposes control ports through the daemon");
+  await request(
+    socket,
+    "setParameter",
+    {
+      instanceId: nativeLv2Instance.instanceId,
+      parameterId: "gain",
+      normalizedValue: 0.8
+    },
+    true,
+    pair.sessionToken
+  );
+  const nativeLv2SavedState = await request(socket, "getState", { instanceId: nativeLv2Instance.instanceId }, true, pair.sessionToken);
+  assert(typeof nativeLv2SavedState.state === "string" && nativeLv2SavedState.state.length > 0, "getState returns installed LV2 native control state");
+  await request(
+    socket,
+    "setParameter",
+    {
+      instanceId: nativeLv2Instance.instanceId,
+      parameterId: "gain",
+      normalizedValue: 0.2
+    },
+    true,
+    pair.sessionToken
+  );
+  const nativeLv2Restored = await request(
+    socket,
+    "setState",
+    { instanceId: nativeLv2Instance.instanceId, state: nativeLv2SavedState.state },
+    true,
+    pair.sessionToken
+  );
+  const restoredLv2Gain = nativeLv2Restored.parameters?.find((parameter) => parameter.id === "gain");
+  assert(
+    nativeLv2Restored.restored === true &&
+      restoredLv2Gain &&
+      Math.abs(restoredLv2Gain.normalizedValue - 0.8) < 0.000001,
+    "setState restores installed LV2 native control state"
+  );
+  await request(socket, "destroyInstance", { instanceId: nativeLv2Instance.instanceId }, true, pair.sessionToken);
+}
+
 const nativeAuEffect = plugins.find((plugin) => plugin.pluginId === "au-reg:appl:aufx:lpas");
 assert(nativeAuEffect?.hostable === true, "listPlugins exposes an installed Apple AU effect as hostable");
 assert(!("diagnostics" in nativeAuEffect), "hostable AU metadata does not expose scanner diagnostics");
@@ -707,6 +766,17 @@ async function runNativeLv2WorkerSmoke() {
     assert(
       set.parameter?.id === "gain" && Math.abs(set.parameter.normalizedValue - 0.75) < 0.000001,
       "native LV2 worker updates a control port"
+    );
+
+    const savedState = await requestWorker("getState");
+    assert(typeof savedState.state === "string" && savedState.state.length > 0, "native LV2 worker returns bounded control state");
+    await requestWorker("setParameter gain 0.1 0");
+    await requestWorker(`setState ${savedState.state}`);
+    const restoredParameters = await requestWorker("parameters");
+    const restoredGain = restoredParameters.parameters?.find((parameter) => parameter.id === "gain");
+    assert(
+      restoredGain && Math.abs(restoredGain.normalizedValue - 0.75) < 0.000001,
+      "native LV2 worker restores bounded control state"
     );
 
     const rendered = await requestWorker("render 4 48000 0.1,0.2,0.3,0.4|0.1,0.1,0.1,0.1");
