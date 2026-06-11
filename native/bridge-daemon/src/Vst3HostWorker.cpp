@@ -9,6 +9,7 @@
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstevents.h"
+#include "pluginterfaces/vst/ivstmessage.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/module.h"
@@ -330,6 +331,7 @@ public:
     checkResult(component_->initialize(&hostApplication_), "IComponent::initialize");
     initialized_ = true;
     initializeController();
+    connectController();
     configure();
   }
 
@@ -340,6 +342,7 @@ public:
     if (processor_) {
       processor_->setProcessing(false);
     }
+    disconnectController();
     if (component_) {
       if (active_) {
         component_->setActive(false);
@@ -533,6 +536,38 @@ private:
     }
   }
 
+  void connectController() {
+    if (!component_ || !controller_) {
+      return;
+    }
+
+    componentConnection_ = Steinberg::FUnknownPtr<Steinberg::Vst::IConnectionPoint>(component_);
+    controllerConnection_ = Steinberg::FUnknownPtr<Steinberg::Vst::IConnectionPoint>(controller_);
+    if (!componentConnection_ || !controllerConnection_) {
+      componentConnection_ = nullptr;
+      controllerConnection_ = nullptr;
+      return;
+    }
+
+    componentConnected_ = componentConnection_->connect(controllerConnection_) == Steinberg::kResultTrue;
+    controllerConnected_ = controllerConnection_->connect(componentConnection_) == Steinberg::kResultTrue;
+  }
+
+  void disconnectController() {
+    if (componentConnection_ && controllerConnection_) {
+      if (controllerConnected_) {
+        controllerConnection_->disconnect(componentConnection_);
+      }
+      if (componentConnected_) {
+        componentConnection_->disconnect(controllerConnection_);
+      }
+    }
+    componentConnection_ = nullptr;
+    controllerConnection_ = nullptr;
+    componentConnected_ = false;
+    controllerConnected_ = false;
+  }
+
   std::string parameterInfoToJson(const Steinberg::Vst::ParameterInfo& info) const {
     const auto normalizedValue = std::clamp(controller_->getParamNormalized(info.id), 0.0, 1.0);
     const auto defaultValue = std::clamp(info.defaultNormalizedValue, 0.0, 1.0);
@@ -618,6 +653,8 @@ private:
   Steinberg::Vst::HostApplication hostApplication_;
   Steinberg::IPtr<Steinberg::Vst::IComponent> component_;
   Steinberg::IPtr<Steinberg::Vst::IEditController> controller_;
+  Steinberg::IPtr<Steinberg::Vst::IConnectionPoint> componentConnection_;
+  Steinberg::IPtr<Steinberg::Vst::IConnectionPoint> controllerConnection_;
   Steinberg::IPtr<Steinberg::Vst::IAudioProcessor> processor_;
   double sampleRate_ = 48000.0;
   std::uint32_t maxBlockSize_ = 128;
@@ -632,6 +669,8 @@ private:
   double sampleTime_ = 0.0;
   bool initialized_ = false;
   bool controllerInitialized_ = false;
+  bool componentConnected_ = false;
+  bool controllerConnected_ = false;
   bool active_ = false;
 };
 
