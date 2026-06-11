@@ -94,6 +94,8 @@ export interface PluginParameter {
   maxPlain?: number;
   plainValue?: number;
   automatable: boolean;
+  stepCount?: number;
+  readOnly?: boolean;
 }
 
 export interface PluginPreset {

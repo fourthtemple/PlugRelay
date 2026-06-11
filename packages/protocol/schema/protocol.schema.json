@@ -171,15 +171,17 @@
       "required": ["id", "name", "normalizedValue", "defaultNormalizedValue", "automatable"],
       "additionalProperties": true,
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 160 },
         "normalizedValue": { "type": "number", "minimum": 0, "maximum": 1 },
         "defaultNormalizedValue": { "type": "number", "minimum": 0, "maximum": 1 },
-        "unit": { "type": "string" },
+        "unit": { "type": "string", "maxLength": 64 },
         "minPlain": { "type": "number" },
         "maxPlain": { "type": "number" },
         "plainValue": { "type": "number" },
-        "automatable": { "type": "boolean" }
+        "automatable": { "type": "boolean" },
+        "stepCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "readOnly": { "type": "boolean" }
       }
     },
     "pluginMetadata": {
@@ -206,6 +208,7 @@
         "outputs": { "type": "integer", "minimum": 0 },
         "parameters": {
           "type": "array",
+          "maxItems": 1024,
           "items": { "$ref": "#/$defs/pluginParameter" }
         },
         "presets": {
@@ -310,7 +313,7 @@
       "additionalProperties": true,
       "properties": {
         "instanceId": { "type": "string", "minLength": 1 },
-        "parameterId": { "type": "string", "minLength": 1 },
+        "parameterId": { "type": "string", "minLength": 1, "maxLength": 64 },
         "normalizedValue": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },

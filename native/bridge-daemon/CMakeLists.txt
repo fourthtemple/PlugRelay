@@ -66,6 +66,7 @@ if(APPLE AND SOUNDBRIDGE_VST3_SDK_PATH AND EXISTS "${SOUNDBRIDGE_VST3_SDK_PATH}/
     "${SOUNDBRIDGE_VST3_SDK_PATH}/public.sdk/source/vst/hosting/hostclasses.cpp"
     "${SOUNDBRIDGE_VST3_SDK_PATH}/public.sdk/source/vst/hosting/module.cpp"
     "${SOUNDBRIDGE_VST3_SDK_PATH}/public.sdk/source/vst/hosting/module_mac.mm"
+    "${SOUNDBRIDGE_VST3_SDK_PATH}/public.sdk/source/vst/hosting/parameterchanges.cpp"
     "${SOUNDBRIDGE_VST3_SDK_PATH}/public.sdk/source/vst/hosting/stringconvert.cpp"
     "${SOUNDBRIDGE_VST3_SDK_PATH}/public.sdk/source/vst/vstinitiids.cpp"
   )

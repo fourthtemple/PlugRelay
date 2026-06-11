@@ -193,9 +193,11 @@ Releases an instance.
 
 Returns parameter metadata and current normalized values. All automatable parameter values are normalized to `0..1`; display mapping is metadata.
 
+Parameter metadata is plugin-controlled and must be bounded before it reaches a host UI. The reference daemon caps native parameters to 1024 items per instance, parameter ids to 64 bytes, parameter names to 160 bytes, and units to 64 bytes. Native VST3 parameters are enumerated from the plugin edit controller after instance creation; native AU parameters are enumerated from CoreAudio parameter metadata.
+
 ### `setParameter`
 
-Sets one normalized parameter value. The daemon applies sample-accurate automation later; the MVP applies values before the next block.
+Sets one normalized parameter value. Values outside `0..1` are rejected. For installed VST3 plugins, the reference daemon updates the edit controller and queues a processor-side `IParameterChanges` point for the next render block. For installed Audio Units, the reference daemon maps normalized values onto the CoreAudio parameter range and calls `AudioUnitSetParameter`. Broader sample-accurate automation curves are still future work.
 
 ### `getState` / `setState`
 

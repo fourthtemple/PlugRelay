@@ -138,6 +138,34 @@ const nativeAuInstance = await request(
   true,
   pair.sessionToken
 );
+assert(
+  Array.isArray(nativeAuInstance.plugin?.parameters) && nativeAuInstance.plugin.parameters.length > 0,
+  "installed AU createInstance returns native parameter metadata"
+);
+const nativeAuParameters = await request(socket, "getParameters", { instanceId: nativeAuInstance.instanceId }, true, pair.sessionToken);
+assert(
+  Array.isArray(nativeAuParameters.parameters) && nativeAuParameters.parameters.length === nativeAuInstance.plugin.parameters.length,
+  "getParameters returns installed AU native parameter metadata"
+);
+const nativeAuParameter = nativeAuParameters.parameters.find((parameter) => parameter.automatable);
+assert(nativeAuParameter, "installed AU exposes at least one automatable parameter");
+const nextAuValue = nativeAuParameter.normalizedValue > 0.5 ? 0.25 : 0.75;
+const nativeAuSetParameter = await request(
+  socket,
+  "setParameter",
+  {
+    instanceId: nativeAuInstance.instanceId,
+    parameterId: nativeAuParameter.id,
+    normalizedValue: nextAuValue
+  },
+  true,
+  pair.sessionToken
+);
+assert(
+  nativeAuSetParameter.parameter?.id === nativeAuParameter.id &&
+    Math.abs(nativeAuSetParameter.parameter.normalizedValue - nextAuValue) < 0.000001,
+  "setParameter round-trips through the installed AU host worker"
+);
 const auInput = Array.from({ length: 128 }, (_, index) => Math.sin(index / 8));
 const nativeAuBlock = await request(
   socket,
@@ -174,6 +202,31 @@ const nativeVst3Instance = await request(
   true,
   pair.sessionToken
 );
+const nativeVst3Parameters = await request(socket, "getParameters", { instanceId: nativeVst3Instance.instanceId }, true, pair.sessionToken);
+assert(
+  Array.isArray(nativeVst3Parameters.parameters),
+  "getParameters returns a bounded installed VST3 parameter array"
+);
+const nativeVst3Parameter = nativeVst3Parameters.parameters.find((parameter) => parameter.automatable);
+if (nativeVst3Parameter) {
+  const nextVst3Value = nativeVst3Parameter.normalizedValue > 0.5 ? 0.25 : 0.75;
+  const nativeVst3SetParameter = await request(
+    socket,
+    "setParameter",
+    {
+      instanceId: nativeVst3Instance.instanceId,
+      parameterId: nativeVst3Parameter.id,
+      normalizedValue: nextVst3Value
+    },
+    true,
+    pair.sessionToken
+  );
+  assert(
+    nativeVst3SetParameter.parameter?.id === nativeVst3Parameter.id &&
+      Math.abs(nativeVst3SetParameter.parameter.normalizedValue - nextVst3Value) < 0.000001,
+    "setParameter round-trips through an installed VST3 host worker parameter when exposed"
+  );
+}
 const vst3Input = Array.from({ length: 128 }, (_, index) => Math.sin(index / 8));
 const nativeVst3Midi = await request(
   socket,

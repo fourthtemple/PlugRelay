@@ -7,10 +7,14 @@
 #include "pluginterfaces/base/funknown.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
+#include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/module.h"
+#include "public.sdk/source/vst/hosting/parameterchanges.h"
+#include "public.sdk/source/vst/hosting/stringconvert.h"
+#include "public.sdk/source/vst/hosting/uid.h"
 #endif
 
 #include <algorithm>
@@ -36,6 +40,9 @@ namespace {
 constexpr std::uint32_t kMaxWorkerFrames = 8192;
 constexpr std::uint32_t kMaxWorkerChannels = 32;
 constexpr std::size_t kMaxWorkerMidiEvents = 4096;
+constexpr std::size_t kMaxWorkerParameters = 1024;
+constexpr std::size_t kMaxWorkerParameterChanges = 4096;
+constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
 constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
 constexpr double kMaxWorkerSampleRate = 384000.0;
@@ -45,6 +52,12 @@ struct PendingMidiEvent {
   std::uint8_t note = 60;
   float velocity = 0.8F;
   std::uint8_t channel = 0;
+  std::uint32_t sampleOffset = 0;
+};
+
+struct PendingParameterChange {
+  Steinberg::Vst::ParamID id = 0;
+  Steinberg::Vst::ParamValue value = 0.0;
   std::uint32_t sampleOffset = 0;
 };
 
@@ -67,6 +80,19 @@ bool parseUint32Arg(const char* text, std::uint32_t minValue, std::uint32_t maxV
     return false;
   }
   out = static_cast<std::uint32_t>(value);
+  return true;
+}
+
+bool parseParamIdArg(const char* text, Steinberg::Vst::ParamID& out) {
+  if (text == nullptr || *text == '\0') {
+    return false;
+  }
+  char* end = nullptr;
+  const unsigned long value = std::strtoul(text, &end, 10);
+  if (end == text || *end != '\0' || value > 0xFFFFFFFFUL) {
+    return false;
+  }
+  out = static_cast<Steinberg::Vst::ParamID>(value);
   return true;
 }
 
@@ -96,6 +122,13 @@ bool parseDoubleArg(const char* text, double minValue, double maxValue, double& 
   }
   out = value;
   return true;
+}
+
+std::string cappedString(std::string value, std::size_t maxBytes = kMaxWorkerParameterStringBytes) {
+  if (value.size() > maxBytes) {
+    value.resize(maxBytes);
+  }
+  return value;
 }
 
 std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::uint32_t frames) {
@@ -212,6 +245,11 @@ Steinberg::Vst::Event makeVst3Event(const PendingMidiEvent& pending, std::uint32
   return event;
 }
 
+bool parameterIsAutomatable(const Steinberg::Vst::ParameterInfo& info) {
+  return (info.flags & Steinberg::Vst::ParameterInfo::kCanAutomate) != 0 &&
+      (info.flags & Steinberg::Vst::ParameterInfo::kIsReadOnly) == 0;
+}
+
 void checkResult(Steinberg::tresult result, const std::string& operation) {
   if (result != Steinberg::kResultOk) {
     std::ostringstream message;
@@ -291,6 +329,7 @@ public:
 
     checkResult(component_->initialize(&hostApplication_), "IComponent::initialize");
     initialized_ = true;
+    initializeController();
     configure();
   }
 
@@ -308,6 +347,9 @@ public:
       if (initialized_) {
         component_->terminate();
       }
+    }
+    if (controller_ && controllerInitialized_) {
+      controller_->terminate();
     }
   }
 
@@ -357,6 +399,29 @@ public:
     processData.numOutputs = outputChannels_ > 0 ? 1 : 0;
     processData.inputs = inputChannels_ > 0 ? &inputBus : nullptr;
     processData.outputs = outputChannels_ > 0 ? &outputBus : nullptr;
+
+    auto parameterEvents = std::move(pendingParameterChanges_);
+    pendingParameterChanges_.clear();
+    std::stable_sort(parameterEvents.begin(), parameterEvents.end(), [](const auto& left, const auto& right) {
+      return left.sampleOffset < right.sampleOffset;
+    });
+    Steinberg::Vst::ParameterChanges inputParameterChanges(static_cast<Steinberg::int32>(parameterEvents.size()));
+    for (const auto& parameterEvent : parameterEvents) {
+      Steinberg::int32 queueIndex = 0;
+      auto* queue = inputParameterChanges.addParameterData(parameterEvent.id, queueIndex);
+      if (queue == nullptr) {
+        continue;
+      }
+      Steinberg::int32 pointIndex = 0;
+      queue->addPoint(
+          static_cast<Steinberg::int32>(
+              std::clamp<std::uint32_t>(parameterEvent.sampleOffset, 0, frames > 0 ? frames - 1 : 0)),
+          parameterEvent.value,
+          pointIndex);
+    }
+    processData.inputParameterChanges = inputParameterChanges.getParameterCount() > 0 ? &inputParameterChanges : nullptr;
+    processData.outputParameterChanges = nullptr;
+
     auto midiEvents = std::move(pendingMidiEvents_);
     pendingMidiEvents_.clear();
     std::stable_sort(midiEvents.begin(), midiEvents.end(), [](const auto& left, const auto& right) {
@@ -385,7 +450,117 @@ public:
     pendingMidiEvents_.insert(pendingMidiEvents_.end(), events.begin(), events.end());
   }
 
+  std::vector<std::string> parameterJsonList() const {
+    std::vector<std::string> parameters;
+    if (!controller_) {
+      return parameters;
+    }
+
+    const auto count = std::clamp<Steinberg::int32>(
+        controller_->getParameterCount(),
+        0,
+        static_cast<Steinberg::int32>(kMaxWorkerParameters));
+    parameters.reserve(static_cast<std::size_t>(count));
+    for (Steinberg::int32 index = 0; index < count; ++index) {
+      Steinberg::Vst::ParameterInfo info {};
+      if (controller_->getParameterInfo(index, info) != Steinberg::kResultOk) {
+        continue;
+      }
+      parameters.push_back(parameterInfoToJson(info));
+    }
+    return parameters;
+  }
+
+  std::string parametersToJson() const {
+    const auto parameters = parameterJsonList();
+    std::ostringstream output;
+    output << "{\"parameters\":[";
+    for (std::size_t index = 0; index < parameters.size(); ++index) {
+      if (index > 0) {
+        output << ",";
+      }
+      output << parameters[index];
+    }
+    output << "]}";
+    return output.str();
+  }
+
+  std::string setParameter(Steinberg::Vst::ParamID id, double value, std::uint32_t sampleOffset) {
+    if (!controller_) {
+      throw std::runtime_error("VST3 plugin does not expose an edit controller.");
+    }
+    const auto normalizedValue = std::clamp(value, 0.0, 1.0);
+    if (controller_->setParamNormalized(id, normalizedValue) != Steinberg::kResultOk) {
+      throw std::runtime_error("VST3 controller rejected parameter value.");
+    }
+    if (pendingParameterChanges_.size() >= kMaxWorkerParameterChanges) {
+      throw std::runtime_error("too_many_queued_parameter_changes");
+    }
+    pendingParameterChanges_.push_back(PendingParameterChange{
+        id,
+        normalizedValue,
+        std::clamp<std::uint32_t>(sampleOffset, 0, kMaxWorkerFrames - 1)});
+
+    Steinberg::Vst::ParameterInfo info {};
+    const auto count = std::clamp<Steinberg::int32>(
+        controller_->getParameterCount(),
+        0,
+        static_cast<Steinberg::int32>(kMaxWorkerParameters));
+    for (Steinberg::int32 index = 0; index < count; ++index) {
+      if (controller_->getParameterInfo(index, info) == Steinberg::kResultOk && info.id == id) {
+        return std::string("{\"parameter\":") + parameterInfoToJson(info) + "}";
+      }
+    }
+    throw std::runtime_error("unknown_parameter");
+  }
+
 private:
+  void initializeController() {
+    controller_ = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(component_);
+    if (controller_) {
+      return;
+    }
+
+    Steinberg::TUID controllerClassId {};
+    if (component_->getControllerClassId(controllerClassId) != Steinberg::kResultOk) {
+      return;
+    }
+
+    controller_ = module_->getFactory().createInstance<Steinberg::Vst::IEditController>(VST3::UID(controllerClassId));
+    if (controller_) {
+      checkResult(controller_->initialize(&hostApplication_), "IEditController::initialize");
+      controllerInitialized_ = true;
+    }
+  }
+
+  std::string parameterInfoToJson(const Steinberg::Vst::ParameterInfo& info) const {
+    const auto normalizedValue = std::clamp(controller_->getParamNormalized(info.id), 0.0, 1.0);
+    const auto defaultValue = std::clamp(info.defaultNormalizedValue, 0.0, 1.0);
+    const auto name = cappedString(VST3::StringConvert::convert(info.title));
+    const auto shortName = cappedString(VST3::StringConvert::convert(info.shortTitle));
+    const auto unit = cappedString(VST3::StringConvert::convert(info.units), 64);
+    const auto plainValue = controller_->normalizedParamToPlain(info.id, normalizedValue);
+    const auto minPlain = controller_->normalizedParamToPlain(info.id, 0.0);
+    const auto maxPlain = controller_->normalizedParamToPlain(info.id, 1.0);
+
+    std::ostringstream output;
+    output << "{\"id\":\"" << info.id << "\""
+           << ",\"name\":\"" << jsonEscape(name.empty() ? shortName : name) << "\""
+           << ",\"normalizedValue\":" << normalizedValue
+           << ",\"defaultNormalizedValue\":" << defaultValue
+           << ",\"plainValue\":" << (std::isfinite(plainValue) ? plainValue : normalizedValue)
+           << ",\"minPlain\":" << (std::isfinite(minPlain) ? minPlain : 0.0)
+           << ",\"maxPlain\":" << (std::isfinite(maxPlain) ? maxPlain : 1.0)
+           << ",\"automatable\":" << (parameterIsAutomatable(info) ? "true" : "false");
+    if (!unit.empty()) {
+      output << ",\"unit\":\"" << jsonEscape(unit) << "\"";
+    }
+    output << ",\"stepCount\":" << std::max<Steinberg::int32>(0, info.stepCount)
+           << ",\"readOnly\":" << ((info.flags & Steinberg::Vst::ParameterInfo::kIsReadOnly) ? "true" : "false")
+           << "}";
+    return output.str();
+  }
+
   void configure() {
     inputBusCount_ = std::max<Steinberg::int32>(0, component_->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput));
     outputBusCount_ = std::max<Steinberg::int32>(0, component_->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput));
@@ -442,6 +617,7 @@ private:
   std::shared_ptr<VST3::Hosting::Module> module_;
   Steinberg::Vst::HostApplication hostApplication_;
   Steinberg::IPtr<Steinberg::Vst::IComponent> component_;
+  Steinberg::IPtr<Steinberg::Vst::IEditController> controller_;
   Steinberg::IPtr<Steinberg::Vst::IAudioProcessor> processor_;
   double sampleRate_ = 48000.0;
   std::uint32_t maxBlockSize_ = 128;
@@ -452,8 +628,10 @@ private:
   Steinberg::int32 inputBusCount_ = 0;
   Steinberg::int32 outputBusCount_ = 0;
   std::vector<PendingMidiEvent> pendingMidiEvents_;
+  std::vector<PendingParameterChange> pendingParameterChanges_;
   double sampleTime_ = 0.0;
   bool initialized_ = false;
+  bool controllerInitialized_ = false;
   bool active_ = false;
 };
 
@@ -524,6 +702,31 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
           }
           host.enqueueMidiEvents(events);
           std::cout << "{\"ok\":true,\"eventCount\":" << events.size() << "}" << std::endl;
+          continue;
+        }
+
+        if (command == "parameters") {
+          std::cout << host.parametersToJson() << std::endl;
+          continue;
+        }
+
+        if (command == "setParameter") {
+          std::string parameterIdText;
+          std::string valueText;
+          std::string sampleOffsetText;
+          Steinberg::Vst::ParamID parameterId = 0;
+          double value = 0.0;
+          std::uint32_t sampleOffset = 0;
+          stream >> parameterIdText;
+          stream >> valueText;
+          stream >> sampleOffsetText;
+          if (!parseParamIdArg(parameterIdText.c_str(), parameterId) ||
+              !parseDoubleArg(valueText.c_str(), 0.0, 1.0, value) ||
+              (!sampleOffsetText.empty() && !parseUint32Arg(sampleOffsetText.c_str(), 0, kMaxWorkerFrames - 1, sampleOffset))) {
+            std::cout << "{\"error\":\"invalid_parameter_arguments\"}" << std::endl;
+            continue;
+          }
+          std::cout << host.setParameter(parameterId, value, sampleOffset) << std::endl;
           continue;
         }
 

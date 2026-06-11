@@ -20,6 +20,8 @@ const MAX_TOTAL_SESSIONS = envInteger("SOUNDBRIDGE_MAX_TOTAL_SESSIONS", 64);
 const MAX_AUDIO_CHANNELS = envInteger("SOUNDBRIDGE_MAX_AUDIO_CHANNELS", 32);
 const MAX_BLOCK_SIZE = envInteger("SOUNDBRIDGE_MAX_BLOCK_SIZE", 8192);
 const MAX_MIDI_EVENTS_PER_REQUEST = envInteger("SOUNDBRIDGE_MAX_MIDI_EVENTS_PER_REQUEST", 4096);
+const MAX_PLUGIN_PARAMETERS = envInteger("SOUNDBRIDGE_MAX_PLUGIN_PARAMETERS", 1024);
+const MAX_PLUGIN_PARAMETER_TEXT_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_PARAMETER_TEXT_BYTES", 160);
 const MAX_PAIR_ATTEMPTS_PER_CONNECTION = envInteger("SOUNDBRIDGE_MAX_PAIR_ATTEMPTS", 5);
 const MIN_SAMPLE_RATE = 8000;
 const MAX_SAMPLE_RATE = 384000;
@@ -437,15 +439,22 @@ async function createInstance(payload, session) {
     inputChannels,
     outputChannels,
     parameters,
+    nativeParameterIds: new Set(),
     voices: new Map(),
     renderEngine: undefined,
     worker: undefined
   };
   if (plugin.nativeHost) {
+    instance.nativeHost = plugin.nativeHost;
     instance.worker = new NativeHostWorker(plugin.nativeHost, instance);
     instance.renderEngine = instance.worker.renderEngine;
     try {
       await instance.worker.ready;
+      const nativeParameters = await instance.worker.getParameters();
+      if (nativeParameters.length > 0) {
+        instance.parameters = nativeParameters;
+        instance.nativeParameterIds = new Set(nativeParameters.map((parameter) => parameter.id));
+      }
     } catch (error) {
       instance.worker.destroy();
       throw protocolError("plugin_host_failed", `${formatNativeHostName(plugin.nativeHost.format)} host worker failed for ${plugin.name}.`, {
@@ -475,18 +484,36 @@ function destroyInstance(instanceId, session) {
   };
 }
 
-function setParameter(instanceId, parameterId, normalizedValue, session) {
+async function setParameter(instanceId, parameterId, normalizedValue, session) {
   const instance = getInstance(instanceId, session);
   const parameterIndex = instance.parameters.findIndex((parameter) => parameter.id === parameterId);
   if (parameterIndex < 0) {
     throw protocolError("parameter_not_found", `Unknown parameter: ${parameterId}`);
   }
 
-  const value = clamp01(Number(normalizedValue));
-  instance.parameters[parameterIndex] = makeUpdatedParameter(instance.parameters[parameterIndex], value);
+  const value = requireNumberInRange(normalizedValue, 0, 1, "normalizedValue");
+  await applyParameterValue(instance, parameterIndex, value);
+
   return {
     parameter: { ...instance.parameters[parameterIndex] }
   };
+}
+
+async function applyParameterValue(instance, parameterIndex, normalizedValue) {
+  const parameter = instance.parameters[parameterIndex];
+  if (
+    instance.nativeParameterIds.has(parameter.id) &&
+    instance.worker &&
+    typeof instance.worker.setParameter === "function"
+  ) {
+    const nativeParameter = await instance.worker.setParameter(parameter.id, normalizedValue);
+    if (nativeParameter) {
+      instance.parameters[parameterIndex] = nativeParameter;
+      return;
+    }
+  }
+
+  instance.parameters[parameterIndex] = makeUpdatedParameter(parameter, normalizedValue);
 }
 
 function getState(instanceId, session) {
@@ -506,7 +533,7 @@ function getState(instanceId, session) {
   return { state };
 }
 
-function setState(instanceId, state, session) {
+async function setState(instanceId, state, session) {
   const instance = getInstance(instanceId, session);
   let parsed;
   try {
@@ -519,10 +546,10 @@ function setState(instanceId, state, session) {
     throw protocolError("state_plugin_mismatch", "State belongs to a different plugin.");
   }
 
-  for (const parameter of instance.parameters) {
+  for (const [parameterIndex, parameter] of instance.parameters.entries()) {
     if (parsed.parameters && Object.hasOwn(parsed.parameters, parameter.id)) {
       const value = clamp01(Number(parsed.parameters[parameter.id]));
-      Object.assign(parameter, makeUpdatedParameter(parameter, value));
+      await applyParameterValue(instance, parameterIndex, value);
     }
   }
   return {
@@ -926,6 +953,25 @@ class NativeHostWorker {
         await this.request(`noteOff ${event.note} ${event.velocity} ${event.channel} ${event.time}`);
       }
     }
+  }
+
+  async getParameters() {
+    if (!["au", "vst3"].includes(this.nativeHost.format)) {
+      return [];
+    }
+    const parsed = await this.request("parameters");
+    return normalizeWorkerParameters(parsed.parameters);
+  }
+
+  async setParameter(parameterId, normalizedValue) {
+    if (!["au", "vst3"].includes(this.nativeHost.format)) {
+      return undefined;
+    }
+    const parsed = await this.request(`setParameter ${parameterId} ${normalizedValue} 0`);
+    if (!parsed.parameter) {
+      return undefined;
+    }
+    return normalizeWorkerParameter(parsed.parameter);
   }
 
   request(command) {
@@ -1750,6 +1796,58 @@ function encodeMidiEvents(events) {
       return [type, event.note, event.velocity, event.channel, event.time].join(":");
     })
     .join(";");
+}
+
+function normalizeWorkerParameters(parameters) {
+  if (!Array.isArray(parameters)) {
+    return [];
+  }
+  return parameters
+    .slice(0, MAX_PLUGIN_PARAMETERS)
+    .map((parameter) => normalizeWorkerParameter(parameter))
+    .filter(Boolean);
+}
+
+function normalizeWorkerParameter(parameter) {
+  if (!parameter || typeof parameter !== "object") {
+    return undefined;
+  }
+  const id = truncateText(parameter.id, 64);
+  if (!id) {
+    return undefined;
+  }
+  const normalizedValue = clamp01(Number(parameter.normalizedValue));
+  const defaultNormalizedValue = clamp01(Number(parameter.defaultNormalizedValue ?? normalizedValue));
+  const minPlain = finiteNumber(parameter.minPlain, 0);
+  const maxPlain = finiteNumber(parameter.maxPlain, 1);
+  const plainValue = finiteNumber(parameter.plainValue, minPlain + (maxPlain - minPlain) * normalizedValue);
+
+  return {
+    id,
+    name: truncateText(parameter.name, MAX_PLUGIN_PARAMETER_TEXT_BYTES) || id,
+    normalizedValue,
+    defaultNormalizedValue,
+    unit: truncateText(parameter.unit, 64) || undefined,
+    minPlain,
+    maxPlain,
+    plainValue,
+    automatable: parameter.automatable !== false,
+    stepCount: Math.max(0, Math.min(1_000_000, Math.floor(Number(parameter.stepCount ?? 0)))),
+    readOnly: Boolean(parameter.readOnly)
+  };
+}
+
+function finiteNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function truncateText(value, maxBytes) {
+  const text = String(value ?? "");
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) {
+    return text;
+  }
+  return Buffer.from(text, "utf8").subarray(0, maxBytes).toString("utf8").replace(/\uFFFD+$/u, "");
 }
 
 function normalizeMidiEvents(events, maxBlockSize) {

@@ -29,6 +29,8 @@ namespace {
 // The parent daemon enforces its own caps, but the worker must not trust it.
 constexpr std::uint32_t kMaxWorkerFrames = 8192;
 constexpr std::uint32_t kMaxWorkerChannels = 32;
+constexpr std::size_t kMaxWorkerParameters = 1024;
+constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
 constexpr std::size_t kMaxWorkerLineBytes = 16 * 1024 * 1024;
 constexpr double kMinWorkerSampleRate = 8000.0;
 constexpr double kMaxWorkerSampleRate = 384000.0;
@@ -55,6 +57,20 @@ bool parseUint32Arg(const char* text, std::uint32_t minValue, std::uint32_t maxV
   return true;
 }
 
+bool parseDoubleArg(const char* text, double minValue, double maxValue, double& out) {
+  if (text == nullptr || *text == '\0') {
+    return false;
+  }
+  char* end = nullptr;
+  const double value = std::strtod(text, &end);
+  if (end == text || *end != '\0' || !std::isfinite(value) ||
+      value < minValue || value > maxValue) {
+    return false;
+  }
+  out = value;
+  return true;
+}
+
 bool parseSampleRateArg(const char* text, double& out) {
   if (text == nullptr || *text == '\0') {
     return false;
@@ -67,6 +83,31 @@ bool parseSampleRateArg(const char* text, double& out) {
   }
   out = value;
   return true;
+}
+
+std::string cappedString(std::string value, std::size_t maxBytes = kMaxWorkerParameterStringBytes) {
+  if (value.size() > maxBytes) {
+    value.resize(maxBytes);
+  }
+  return value;
+}
+
+std::string cfStringToUtf8(CFStringRef value) {
+  if (value == nullptr) {
+    return "";
+  }
+  char buffer[512] {};
+  if (CFStringGetCString(value, buffer, sizeof(buffer), kCFStringEncodingUTF8)) {
+    return cappedString(buffer);
+  }
+  const auto length = CFStringGetLength(value);
+  const auto maxSize = CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
+  std::string output(static_cast<std::size_t>(std::max<CFIndex>(0, maxSize)), '\0');
+  if (CFStringGetCString(value, output.data(), maxSize, kCFStringEncodingUTF8)) {
+    output.resize(std::strlen(output.c_str()));
+    return cappedString(output);
+  }
+  return "";
 }
 
 OSType fourCharCodeFromString(const std::string& value) {
@@ -226,6 +267,40 @@ public:
     checkStatus(MusicDeviceMIDIEvent(unit_, 0x80, note, 0, 0), "MusicDeviceMIDIEvent noteOff");
   }
 
+  std::string parametersToJson() const {
+    const auto parameters = parameterJsonList();
+    std::ostringstream output;
+    output << "{\"parameters\":[";
+    for (std::size_t index = 0; index < parameters.size(); ++index) {
+      if (index > 0) {
+        output << ",";
+      }
+      output << parameters[index];
+    }
+    output << "]}";
+    return output.str();
+  }
+
+  std::string setParameter(AudioUnitParameterID parameterId, double normalizedValue) {
+    AudioUnitParameterInfo info {};
+    UInt32 infoSize = sizeof(info);
+    checkStatus(
+        AudioUnitGetProperty(
+            unit_,
+            kAudioUnitProperty_ParameterInfo,
+            kAudioUnitScope_Global,
+            parameterId,
+            &info,
+            &infoSize),
+        "AudioUnitGetProperty ParameterInfo");
+
+    const auto value = plainValueForNormalized(info, normalizedValue);
+    checkStatus(
+        AudioUnitSetParameter(unit_, parameterId, kAudioUnitScope_Global, 0, value, 0),
+        "AudioUnitSetParameter");
+    return std::string("{\"parameter\":") + parameterInfoToJson(parameterId, info) + "}";
+  }
+
   std::vector<std::vector<float>> render(
       std::uint32_t frames,
       double sampleRate,
@@ -254,6 +329,106 @@ public:
   }
 
 private:
+  std::vector<std::string> parameterJsonList() const {
+    UInt32 propertySize = 0;
+    Boolean writable = false;
+    const auto status = AudioUnitGetPropertyInfo(
+        unit_,
+        kAudioUnitProperty_ParameterList,
+        kAudioUnitScope_Global,
+        0,
+        &propertySize,
+        &writable);
+    if (status != noErr || propertySize == 0) {
+      return {};
+    }
+
+    std::vector<AudioUnitParameterID> parameterIds(propertySize / sizeof(AudioUnitParameterID));
+    if (parameterIds.empty()) {
+      return {};
+    }
+    parameterIds.resize(std::min<std::size_t>(parameterIds.size(), kMaxWorkerParameters));
+    propertySize = static_cast<UInt32>(parameterIds.size() * sizeof(AudioUnitParameterID));
+    checkStatus(
+        AudioUnitGetProperty(
+            unit_,
+            kAudioUnitProperty_ParameterList,
+            kAudioUnitScope_Global,
+            0,
+            parameterIds.data(),
+            &propertySize),
+        "AudioUnitGetProperty ParameterList");
+
+    std::vector<std::string> parameters;
+    parameters.reserve(parameterIds.size());
+    for (const auto parameterId : parameterIds) {
+      AudioUnitParameterInfo info {};
+      UInt32 infoSize = sizeof(info);
+      if (AudioUnitGetProperty(
+              unit_,
+              kAudioUnitProperty_ParameterInfo,
+              kAudioUnitScope_Global,
+              parameterId,
+              &info,
+              &infoSize) != noErr) {
+        continue;
+      }
+      parameters.push_back(parameterInfoToJson(parameterId, info));
+    }
+    return parameters;
+  }
+
+  AudioUnitParameterValue plainValueForNormalized(const AudioUnitParameterInfo& info, double normalizedValue) const {
+    const auto clamped = std::clamp(normalizedValue, 0.0, 1.0);
+    const auto minValue = std::isfinite(info.minValue) ? info.minValue : 0.0F;
+    const auto maxValue = std::isfinite(info.maxValue) ? info.maxValue : 1.0F;
+    return static_cast<AudioUnitParameterValue>(minValue + (maxValue - minValue) * clamped);
+  }
+
+  double normalizedValueForPlain(const AudioUnitParameterInfo& info, AudioUnitParameterValue value) const {
+    const auto minValue = std::isfinite(info.minValue) ? info.minValue : 0.0F;
+    const auto maxValue = std::isfinite(info.maxValue) ? info.maxValue : 1.0F;
+    if (std::abs(maxValue - minValue) < 0.000001F) {
+      return 0.0;
+    }
+    return std::clamp((static_cast<double>(value) - minValue) / (maxValue - minValue), 0.0, 1.0);
+  }
+
+  std::string parameterInfoToJson(AudioUnitParameterID parameterId, const AudioUnitParameterInfo& info) const {
+    AudioUnitParameterValue plainValue = info.defaultValue;
+    if (AudioUnitGetParameter(unit_, parameterId, kAudioUnitScope_Global, 0, &plainValue) != noErr) {
+      plainValue = info.defaultValue;
+    }
+
+    auto name = info.cfNameString != nullptr ? cfStringToUtf8(info.cfNameString) : cappedString(info.name);
+    if ((info.flags & kAudioUnitParameterFlag_CFNameRelease) != 0 && info.cfNameString != nullptr) {
+      CFRelease(info.cfNameString);
+    }
+    if (name.empty()) {
+      name = std::to_string(parameterId);
+    }
+    const auto unit = cfStringToUtf8(info.unitName);
+    const auto readOnly = (info.flags & kAudioUnitParameterFlag_MeterReadOnly) != 0 ||
+        ((info.flags & kAudioUnitParameterFlag_IsWritable) == 0 && (info.flags & kAudioUnitParameterFlag_IsReadable) != 0);
+
+    std::ostringstream output;
+    output << "{\"id\":\"" << parameterId << "\""
+           << ",\"name\":\"" << jsonEscape(name) << "\""
+           << ",\"normalizedValue\":" << normalizedValueForPlain(info, plainValue)
+           << ",\"defaultNormalizedValue\":" << normalizedValueForPlain(info, info.defaultValue)
+           << ",\"plainValue\":" << (std::isfinite(plainValue) ? plainValue : info.defaultValue)
+           << ",\"minPlain\":" << (std::isfinite(info.minValue) ? info.minValue : 0.0F)
+           << ",\"maxPlain\":" << (std::isfinite(info.maxValue) ? info.maxValue : 1.0F)
+           << ",\"automatable\":" << (readOnly ? "false" : "true");
+    if (!unit.empty()) {
+      output << ",\"unit\":\"" << jsonEscape(cappedString(unit, 64)) << "\"";
+    }
+    output << ",\"stepCount\":0"
+           << ",\"readOnly\":" << (readOnly ? "true" : "false")
+           << "}";
+    return output.str();
+  }
+
   static OSStatus inputCallback(
       void* refCon,
       AudioUnitRenderActionFlags* /* actionFlags */,
@@ -399,6 +574,29 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
           stream >> note;
           host.noteOff(static_cast<std::uint8_t>(std::clamp(note, 0, 127)));
           std::cout << "{\"ok\":true}" << std::endl;
+          continue;
+        }
+
+        if (command == "parameters") {
+          std::cout << host.parametersToJson() << std::endl;
+          continue;
+        }
+
+        if (command == "setParameter") {
+          std::string parameterIdText;
+          std::string valueText;
+          std::string sampleOffsetText;
+          std::uint32_t parameterId = 0;
+          double value = 0.0;
+          stream >> parameterIdText;
+          stream >> valueText;
+          stream >> sampleOffsetText;
+          if (!parseUint32Arg(parameterIdText.c_str(), 0, 0xFFFFFFFFU, parameterId) ||
+              !parseDoubleArg(valueText.c_str(), 0.0, 1.0, value)) {
+            std::cout << "{\"error\":\"invalid_parameter_arguments\"}" << std::endl;
+            continue;
+          }
+          std::cout << host.setParameter(parameterId, value) << std::endl;
           continue;
         }
 

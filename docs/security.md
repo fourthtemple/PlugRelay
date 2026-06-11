@@ -88,6 +88,8 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Frames per block | clamped to the instance `maxBlockSize` | `processAudioBlock` |
 | Audio channels | 0–32 in, 1–32 out | `createInstance.inputChannels` / `outputChannels` |
 | MIDI events per request | 4096 | `sendMidiEvents.events` |
+| Plugin parameters per instance | 1024 | `getParameters`, `listPlugins`, `createInstance.plugin.parameters` |
+| Parameter id/name/unit text | 64 / 160 / 64 bytes | `getParameters`, `setParameter.parameterId` |
 | Sessions per origin | 8 | `pair` |
 | Total sessions | 64 | `pair` |
 | Instances per session / total | 8 / 32 | `createInstance` |

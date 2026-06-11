@@ -47,9 +47,9 @@ native/bridge-daemon/build/soundbridge-daemon --host-status
 
 `--scan-au` combines `.component` bundle discovery with the macOS AudioComponent registry. Bundle hits are enriched with registry metadata when the component names match; registry-only built-in Audio Units are returned with `diagnostics.isRegistry: true` and no bundle path.
 
-`--host-au-worker` runs the native Audio Unit host worker used by the browser daemon. It instantiates one AudioComponent, accepts newline-delimited `noteOn`, `noteOff`, `render`, and `quit` commands, and renders JSON float audio blocks back to the daemon process.
+`--host-au-worker` runs the native Audio Unit host worker used by the browser daemon. It instantiates one AudioComponent, accepts newline-delimited `parameters`, `setParameter`, `noteOn`, `noteOff`, `render`, and `quit` commands, and renders JSON float audio blocks back to the daemon process. Bounded parameter metadata is read from CoreAudio and normalized parameter writes are mapped back to each AU parameter range.
 
-`--host-vst3-worker` runs the native VST3 host worker used by the browser daemon when the SDK is linked. It loads one `.vst3` bundle through Steinberg's module loader, creates the audio component, configures a realtime 32-bit stereo processing setup, accepts newline-delimited `render`, `midi`, `noteOn`, `noteOff`, and `quit` commands, and renders JSON float audio blocks back to the daemon process. Bounded note events are queued in the worker and delivered to the plugin as a VST3 `IEventList` on the next render block.
+`--host-vst3-worker` runs the native VST3 host worker used by the browser daemon when the SDK is linked. It loads one `.vst3` bundle through Steinberg's module loader, creates the audio component and edit controller, configures a realtime 32-bit stereo processing setup, accepts newline-delimited `parameters`, `setParameter`, `render`, `midi`, `noteOn`, `noteOff`, and `quit` commands, and renders JSON float audio blocks back to the daemon process. Bounded note events are queued in the worker and delivered to the plugin as a VST3 `IEventList` on the next render block. Bounded parameter changes update the edit controller and are delivered to DSP as VST3 `IParameterChanges` on the next render block.
 
 `--scan-examples` returns the repo-local AU/VST/LV2 example bundles used by the browser demo:
 
@@ -103,7 +103,7 @@ Arguments are plugin id, frame count, sample rate, normalized gain, normalized t
 Full VST3/AU/LV2 hosting should land as feature and security work together. Each new host feature expands the native plugin attack surface, even for local desktop hosts, so it must stay behind worker isolation, session ownership, bounded payloads, and eventually OS-level worker sandboxing.
 
 - Broaden VST3 MIDI beyond bounded `noteOn`/`noteOff` event lists. Add additional event types only with event-count, byte-size, timing-offset, channel/note, and worker-queue limits.
-- Expand VST3 and AU parameter enumeration/automation. Cap parameter counts and string lengths, escape plugin-controlled text, keep parameter writes normalized, and rate-limit automation bursts per instance.
+- Broaden VST3/AU parameter automation beyond one bounded value point per block, and add LV2 parameter enumeration/automation. Cap parameter counts and string lengths, escape plugin-controlled text, keep parameter writes normalized, and rate-limit automation bursts per instance.
 - Add opaque state save/restore for VST3 and AU. Enforce blob-size limits, bind state to the owning instance/session, and never treat plugin state as a filesystem path or executable input.
 - Report plugin latency through the shared protocol. Clamp plugin-reported latency to sane numeric ranges before hosts use it for scheduling.
 - Strengthen bus and format negotiation for VST3 and AU. Keep hard channel, block-size, sample-rate, and allocation limits at the daemon boundary and again inside workers.

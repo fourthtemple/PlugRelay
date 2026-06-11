@@ -11,7 +11,7 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | Original findings #1-#9 | Fixed | Remediated in the daemon (`scripts/mock-daemon.mjs`), native C++ workers, protocol schema, and docs. |
 | Regression coverage | Passing | `npm run smoke:security` exercises the fixes against a live daemon. Last recorded result: 21/21 checks passing. |
 | Example render argument hardening | Fixed | Example render entry points reject unknown example plugin ids before numeric argument parsing. |
-| Full plugin-hosting surface | Open roadmap | MIDI, parameters, state, latency, bus negotiation, plugin UI, and file access need feature-specific controls as they are implemented. |
+| Full plugin-hosting surface | Open roadmap | Broader MIDI, richer parameter automation, state, latency, bus negotiation, plugin UI, and file access need feature-specific controls as they are implemented. |
 | Third-party worker sandboxing | Open roadmap | Worker processes isolate crashes today, but OS-level sandboxing for malicious third-party plugin code is not complete. |
 
 ## Open Roadmap Items
