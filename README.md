@@ -35,7 +35,7 @@ Start the local bridge daemon:
 npm run bridge
 ```
 
-The dev pairing token is `dev-token` unless `SOUNDBRIDGE_PAIRING_TOKEN` is set.
+The daemon prints an ephemeral pairing token. Your page needs that token before it can scan or instantiate local plugins.
 
 ## Use It From Your Website
 
@@ -61,7 +61,11 @@ Then create a plugin instance and put it in your Web Audio graph:
   });
 
   await client.connect();
-  await client.pair("dev-token");
+  const pairingToken = window.prompt("SoundBridge pairing token")?.trim();
+  if (!pairingToken) {
+    throw new Error("SoundBridge pairing token is required.");
+  }
+  await client.pair(pairingToken);
 
   const { plugins } = await client.scanPlugins({
     formats: ["vst3", "au"]
@@ -135,13 +139,15 @@ The local bridge can serve more than one browser host, but plugin instances are 
 - closing the WebSocket destroys that session's plugin workers
 - the daemon enforces per-session and total instance limits
 
-The development daemon still uses a simple pairing token. A production app should replace that with a native approval prompt or one-time user confirmation.
+The development daemon generates a new pairing token each time it starts. A production app should replace the token prompt with a native approval prompt that shows the requesting origin.
 
 You can restrict pairing to known origins during development:
 
 ```sh
 SOUNDBRIDGE_ALLOWED_ORIGINS=https://your-site.example npm run bridge
 ```
+
+The bridge and demo bind to loopback only by default. Non-loopback binds require an explicit unsafe test opt-in with `SOUNDBRIDGE_ALLOW_NON_LOOPBACK=1` or `SOUNDBRIDGE_DEMO_ALLOW_NON_LOOPBACK=1`.
 
 ## Common Problems
 
@@ -177,7 +183,7 @@ The browser cannot connect:
 
 - Make sure `npm run bridge` is running.
 - Use `ws://127.0.0.1:47370/bridge`.
-- Pair with the correct token.
+- Pair with the token printed by the bridge terminal.
 - Serve your page over `http://` or `https://`, not `file://`.
 
 ## Useful Commands

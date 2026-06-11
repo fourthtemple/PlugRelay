@@ -43,7 +43,7 @@ export class SoundBridgeClient extends EventTarget {
   }
 
   hello() {
-    return this.request("hello", {}, false);
+    return this.request("hello", {});
   }
 
   async pair(pairingToken) {

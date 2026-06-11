@@ -81,7 +81,7 @@ export class SoundBridgeClient extends EventTarget {
   }
 
   async hello(): Promise<HelloResponse> {
-    return this.request("hello", {}, false);
+    return this.request("hello", {});
   }
 
   async pair(pairingToken: string): Promise<{ sessionToken: string; expiresAt: number }> {

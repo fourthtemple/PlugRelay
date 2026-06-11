@@ -7,13 +7,19 @@ import { fileURLToPath } from "node:url";
 
 const HOST = process.env.SOUNDBRIDGE_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.SOUNDBRIDGE_PORT ?? 47370);
-const PAIRING_TOKEN = process.env.SOUNDBRIDGE_PAIRING_TOKEN ?? "dev-token";
+const CONFIGURED_PAIRING_TOKEN = process.env.SOUNDBRIDGE_PAIRING_TOKEN?.trim();
+const PAIRING_TOKEN = CONFIGURED_PAIRING_TOKEN || crypto.randomBytes(18).toString("base64url");
+const PAIRING_TOKEN_IS_EPHEMERAL = !CONFIGURED_PAIRING_TOKEN;
 const PROTOCOL_VERSION = "0.1.0";
 const SESSION_TTL_MS = envInteger("SOUNDBRIDGE_SESSION_TTL_MS", 30 * 60 * 1000);
 const MAX_SESSIONS_PER_ORIGIN = envInteger("SOUNDBRIDGE_MAX_SESSIONS_PER_ORIGIN", 8);
 const MAX_INSTANCES_PER_SESSION = envInteger("SOUNDBRIDGE_MAX_INSTANCES_PER_SESSION", 8);
 const MAX_TOTAL_INSTANCES = envInteger("SOUNDBRIDGE_MAX_TOTAL_INSTANCES", 32);
+const MAX_WEBSOCKET_MESSAGE_BYTES = envInteger("SOUNDBRIDGE_MAX_WEBSOCKET_MESSAGE_BYTES", 1024 * 1024);
 const ALLOWED_ORIGINS = envList("SOUNDBRIDGE_ALLOWED_ORIGINS");
+
+assertLoopbackHost(HOST, "SOUNDBRIDGE_HOST", "SOUNDBRIDGE_ALLOW_NON_LOOPBACK");
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NATIVE_RENDERER = resolveNativeRenderer();
 const NATIVE_HOST_STATUS = loadNativeHostStatus();
@@ -29,9 +35,7 @@ const server = http.createServer((request, response) => {
 
   if (url.pathname === "/health") {
     writeJson(response, 200, {
-      ok: true,
-      name: "soundbridge-mock-daemon",
-      protocolVersion: PROTOCOL_VERSION
+      ok: true
     });
     return;
   }
@@ -75,7 +79,11 @@ server.on("upgrade", (request, socket) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`SoundBridge mock daemon listening on ws://${HOST}:${PORT}/bridge`);
-  console.log(`Development pairing token: ${PAIRING_TOKEN}`);
+  if (PAIRING_TOKEN_IS_EPHEMERAL) {
+    console.log(`Ephemeral pairing token: ${PAIRING_TOKEN}`);
+  } else {
+    console.log("Using pairing token from SOUNDBRIDGE_PAIRING_TOKEN.");
+  }
 });
 
 function attachWebSocket(socket, requestOrigin) {
@@ -92,10 +100,18 @@ function attachWebSocket(socket, requestOrigin) {
 
   socket.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
+    if (buffer.length > MAX_WEBSOCKET_MESSAGE_BYTES + 14) {
+      socket.destroy();
+      return;
+    }
 
     while (buffer.length > 0) {
       const parsed = decodeWebSocketFrame(buffer);
       if (!parsed) {
+        return;
+      }
+      if (parsed.tooLarge) {
+        socket.destroy();
         return;
       }
 
@@ -160,45 +176,15 @@ async function dispatchCommand(envelope, context) {
   const { command, payload = {} } = envelope;
   let session;
 
-  if (!["hello", "pair", "heartbeat"].includes(command)) {
+  if (command === "hello" && envelope.sessionToken) {
+    session = assertPaired(envelope.sessionToken, command, context);
+  } else if (!["hello", "pair", "heartbeat"].includes(command)) {
     session = assertPaired(envelope.sessionToken, command, context);
   }
 
   switch (command) {
     case "hello":
-      return {
-        name: "soundbridge-mock-daemon",
-        protocolVersion: PROTOCOL_VERSION,
-        pairingRequired: true,
-        transports: [
-          {
-            kind: "websocket",
-            url: `ws://${HOST}:${PORT}/bridge`,
-            audioEncoding: "json-float32-arrays"
-          }
-        ],
-        capabilities: {
-          pluginFormats: createPluginFormatCapabilities(),
-          vst3: true,
-          au: true,
-          lv2: true,
-          mockPlugins: true,
-          state: true,
-          latency: true,
-          midi: true,
-          nativeExampleRenderer: Boolean(NATIVE_RENDERER),
-          nativeEditor: false,
-          security: {
-            originAllowlist: ALLOWED_ORIGINS.length > 0,
-            sessionBoundToConnection: true,
-            sessionBoundToOrigin: true,
-            instanceOwnership: true,
-            cleanupOnDisconnect: true,
-            maxInstancesPerSession: MAX_INSTANCES_PER_SESSION,
-            maxTotalInstances: MAX_TOTAL_INSTANCES
-          }
-        }
-      };
+      return helloResponse(Boolean(session));
 
     case "pair":
       return pair(payload, context);
@@ -264,9 +250,52 @@ async function dispatchCommand(envelope, context) {
   }
 }
 
+function helloResponse(paired) {
+  return {
+    name: "soundbridge-mock-daemon",
+    protocolVersion: PROTOCOL_VERSION,
+    pairingRequired: true,
+    transports: [
+      {
+        kind: "websocket",
+        url: `ws://${HOST}:${PORT}/bridge`,
+        audioEncoding: "json-float32-arrays"
+      }
+    ],
+    capabilities: {
+      pluginFormats: paired ? createPluginFormatCapabilities() : {},
+      ...(paired
+        ? {
+            vst3: true,
+            au: true,
+            lv2: true,
+            mockPlugins: true,
+            state: true,
+            latency: true,
+            midi: true,
+            nativeExampleRenderer: Boolean(NATIVE_RENDERER),
+            nativeEditor: false
+          }
+        : {}),
+      security: {
+        originAllowlist: ALLOWED_ORIGINS.length > 0,
+        sessionBoundToConnection: true,
+        sessionBoundToOrigin: true,
+        instanceOwnership: true,
+        cleanupOnDisconnect: true,
+        maxInstancesPerSession: MAX_INSTANCES_PER_SESSION,
+        maxTotalInstances: MAX_TOTAL_INSTANCES
+      }
+    }
+  };
+}
+
 function pair(payload, context) {
   cleanupExpiredSessions();
   const requestedOrigin = String(payload.origin ?? context.requestOrigin);
+  if (context.requestOrigin === "unknown-origin") {
+    throw protocolError("origin_required", "Pairing requires a WebSocket Origin header.");
+  }
   if (payload.pairingToken !== PAIRING_TOKEN) {
     throw protocolError("pairing_denied", "Invalid pairing token.");
   }
@@ -1498,6 +1527,22 @@ function envList(name) {
     .filter(Boolean);
 }
 
+function assertLoopbackHost(host, hostEnvName, allowEnvName) {
+  if (isLoopbackHost(host) || process.env[allowEnvName] === "1") {
+    return;
+  }
+
+  console.error(
+    `${hostEnvName}=${host} would expose SoundBridge off this machine. ` +
+      `Use 127.0.0.1, localhost, or ::1, or set ${allowEnvName}=1 if you are intentionally testing a non-loopback bind.`
+  );
+  process.exit(1);
+}
+
+function isLoopbackHost(host) {
+  return host === "127.0.0.1" || host === "localhost" || host === "::1";
+}
+
 function makeInstrumentParameters(values) {
   return [
     makeGainParameter(values.gain),
@@ -1759,6 +1804,12 @@ function decodeWebSocketFrame(buffer) {
   }
 
   const maskLength = masked ? 4 : 0;
+  if (payloadLength > MAX_WEBSOCKET_MESSAGE_BYTES) {
+    return {
+      tooLarge: true
+    };
+  }
+
   const frameLength = offset + maskLength + payloadLength;
   if (buffer.length < frameLength) {
     return null;

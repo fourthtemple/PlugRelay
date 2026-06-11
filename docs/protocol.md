@@ -57,9 +57,9 @@ Events:
 
 ### `hello`
 
-Returns daemon name, protocol version, supported transports, format capabilities, and whether pairing is required.
+Returns daemon name, protocol version, supported transports, and whether pairing is required. Before pairing, `hello` returns only protocol and security basics; detailed VST3/AU/LV2 host capabilities require a valid session token.
 
-Example capability payload:
+Example paired capability payload:
 
 ```json
 {
@@ -100,7 +100,7 @@ Example capability payload:
 
 `host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. `notes` is optional human-readable status text from the native backend.
 
-`capabilities.security` describes local multi-host protections. Production hosts should require `sessionBoundToOrigin` and `instanceOwnership` before exposing installed plugins to arbitrary web origins.
+`capabilities.security` describes local multi-host protections and is safe to expose before pairing. Production hosts should require `sessionBoundToOrigin` and `instanceOwnership` before exposing installed plugins to arbitrary web origins.
 
 ### `pair`
 
@@ -109,7 +109,7 @@ Request:
 ```json
 {
   "origin": "http://127.0.0.1:5173",
-  "pairingToken": "dev-token"
+  "pairingToken": "token-printed-by-daemon"
 }
 ```
 
@@ -122,7 +122,7 @@ Response:
 }
 ```
 
-The native daemon should show a confirmation prompt for unknown origins. The development daemon accepts a pairing token, binds the resulting session to the WebSocket connection and Origin header that paired it, and destroys session-owned plugin instances when that connection closes.
+The native daemon should show a confirmation prompt for unknown origins. The development daemon requires the WebSocket `Origin` header, prints an ephemeral pairing token at startup, binds the resulting session to the WebSocket connection and Origin header that paired it, and destroys session-owned plugin instances when that connection closes.
 
 ### `scanPlugins`
 

@@ -161,9 +161,13 @@ async function connectToDaemon() {
       origin: window.location.origin
     });
     await client.connect();
+    const pairingToken = elements.pairingToken.value.trim();
+    if (!pairingToken) {
+      throw new Error("Paste the pairing token printed by npm run bridge.");
+    }
+    await client.pair(pairingToken);
     const hello = await client.hello();
     setCapabilityStatus(hello?.capabilities);
-    await client.pair(elements.pairingToken.value.trim());
     const { plugins } = await client.scanPlugins();
     renderPluginOptions(plugins);
 

@@ -9,7 +9,17 @@ const ORIGIN = "http://127.0.0.1:5173";
 const socket = await connectWebSocket(HOST, PORT);
 let requestSeq = 0;
 
-const hello = await request(socket, "hello", {}, false);
+const unpairedHello = await request(socket, "hello", {}, false);
+assert(unpairedHello.protocolVersion, "unpaired hello returned protocolVersion");
+assert(
+  Object.keys(unpairedHello.capabilities?.pluginFormats ?? {}).length === 0,
+  "unpaired hello does not disclose plugin host adapters"
+);
+
+const pair = await request(socket, "pair", { origin: ORIGIN, pairingToken: PAIRING_TOKEN }, false);
+assert(pair.sessionToken, "pair returned sessionToken");
+
+const hello = await request(socket, "hello", {}, true, pair.sessionToken);
 assert(hello.protocolVersion, "hello returned protocolVersion");
 const nativeExampleRendererAvailable = hello.capabilities?.nativeExampleRenderer === true;
 const exampleFormats = ["vst3", "au", "lv2"];
@@ -30,9 +40,6 @@ for (const format of exampleFormats) {
   }
 }
 const expectedExampleSource = nativeExampleRendererAvailable ? "example-bundle" : "builtin-example";
-
-const pair = await request(socket, "pair", { origin: ORIGIN, pairingToken: PAIRING_TOKEN }, false);
-assert(pair.sessionToken, "pair returned sessionToken");
 
 const { plugins } = await request(socket, "listPlugins", {}, true, pair.sessionToken);
 assert(Array.isArray(plugins) && plugins.length >= 3, "listPlugins returned mock and example native-format plugins");
@@ -198,6 +205,17 @@ const created = await request(
   pair.sessionToken
 );
 assert(created.instanceId, "createInstance returned instanceId");
+
+const noOriginSocket = await connectWebSocket(HOST, PORT, null);
+await request(noOriginSocket, "pair", { origin: ORIGIN, pairingToken: PAIRING_TOKEN }, false).then(
+  () => {
+    throw new Error("pairing unexpectedly worked without a WebSocket Origin header");
+  },
+  (error) => {
+    assert(error.message.includes("origin_required"), "pairing requires a WebSocket Origin header");
+  }
+);
+noOriginSocket.destroy();
 
 const secondSocket = await connectWebSocket(HOST, PORT, ORIGIN);
 await request(secondSocket, "listPlugins", {}, true, pair.sessionToken).then(
@@ -415,18 +433,19 @@ function connectWebSocket(host, port, origin = ORIGIN) {
   return new Promise((resolve, reject) => {
     const key = crypto.randomBytes(16).toString("base64");
     const socket = net.createConnection({ host, port }, () => {
-      socket.write(
-        [
-          "GET /bridge HTTP/1.1",
-          `Host: ${host}:${port}`,
-          "Upgrade: websocket",
-          "Connection: Upgrade",
-          `Sec-WebSocket-Key: ${key}`,
-          "Sec-WebSocket-Version: 13",
-          `Origin: ${origin}`,
-          "\r\n"
-        ].join("\r\n")
-      );
+      const headers = [
+        "GET /bridge HTTP/1.1",
+        `Host: ${host}:${port}`,
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        `Sec-WebSocket-Key: ${key}`,
+        "Sec-WebSocket-Version: 13"
+      ];
+      if (origin !== null) {
+        headers.push(`Origin: ${origin}`);
+      }
+      headers.push("\r\n");
+      socket.write(headers.join("\r\n"));
     });
 
     socket.setNoDelay(true);

@@ -25,12 +25,15 @@ Non-goals for the MVP:
 
 - Bind to `127.0.0.1` and `::1` only by default.
 - Require pairing before scan, list, instantiate, parameter, state, or audio commands.
+- Keep unpaired `hello` responses minimal; detailed plugin-host capabilities require pairing.
+- Require a WebSocket `Origin` header before pairing.
 - Maintain an origin allowlist.
 - Use short-lived session tokens.
 - Bind session tokens to the origin and browser connection that paired them.
 - Make plugin instances session-owned and reject cross-session `instanceId` access.
 - Destroy session-owned plugin instances when the browser connection closes.
 - Enforce per-session and daemon-wide plugin instance limits.
+- Cap WebSocket message size before pairing.
 - Prompt natively for new origins in the production daemon.
 - Do not expose arbitrary filesystem access.
 - Do not expose plugin paths unless diagnostics are explicitly enabled.
@@ -42,7 +45,7 @@ Non-goals for the MVP:
 
 ## Development Token
 
-The mock daemon uses `SOUNDBRIDGE_PAIRING_TOKEN` or `dev-token`. That is intentionally convenient and intentionally not production security. The real macOS daemon should generate a one-time token or show a native confirmation prompt with the requesting origin.
+The mock daemon generates an ephemeral pairing token each time it starts and prints it to the local terminal. `SOUNDBRIDGE_PAIRING_TOKEN` exists for controlled automation and test fixtures; do not ship a public static token. The real macOS daemon should show a native confirmation prompt with the requesting origin.
 
 The development daemon now enforces the important multi-host boundaries even with the simple token flow:
 
@@ -52,13 +55,15 @@ The development daemon now enforces the important multi-host boundaries even wit
 - disconnecting a WebSocket destroys its session-owned plugin workers
 - quotas default to 8 instances per session and 32 instances total
 
-Those defaults can be adjusted for testing with `SOUNDBRIDGE_MAX_INSTANCES_PER_SESSION`, `SOUNDBRIDGE_MAX_TOTAL_INSTANCES`, `SOUNDBRIDGE_MAX_SESSIONS_PER_ORIGIN`, and `SOUNDBRIDGE_SESSION_TTL_MS`.
+Those defaults can be adjusted for testing with `SOUNDBRIDGE_MAX_INSTANCES_PER_SESSION`, `SOUNDBRIDGE_MAX_TOTAL_INSTANCES`, `SOUNDBRIDGE_MAX_SESSIONS_PER_ORIGIN`, `SOUNDBRIDGE_SESSION_TTL_MS`, and `SOUNDBRIDGE_MAX_WEBSOCKET_MESSAGE_BYTES`.
 
 Set `SOUNDBRIDGE_ALLOWED_ORIGINS` to a comma-separated list to restrict pairing to known sites:
 
 ```sh
 SOUNDBRIDGE_ALLOWED_ORIGINS=https://your-daw.example,http://127.0.0.1:5173 npm run bridge
 ```
+
+The daemon refuses non-loopback binds unless `SOUNDBRIDGE_ALLOW_NON_LOOPBACK=1` is set. The demo server has the same guard through `SOUNDBRIDGE_DEMO_ALLOW_NON_LOOPBACK=1` and only serves the browser demo plus the built web-client bundle.
 
 ## Browser Headers
 
