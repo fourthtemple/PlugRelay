@@ -840,10 +840,12 @@ async function processAudioBlock(payload, session) {
 
   if (instance.kind === "instrument") {
     const processed = await processInstrumentBlock(instance, frames, blockSampleRate);
+    const processedChannels = normalizeAudioChannels(processed.channels, instance.outputChannels, frames);
     return {
       blockId: payload.blockId,
       ...processed,
-      outputBuses: normalizeOutputBusBlocks(processed.outputBuses, processed.channels, instance.layout, frames),
+      channels: processedChannels,
+      outputBuses: normalizeOutputBusBlocks(processed.outputBuses, processedChannels, instance.layout, frames),
       ...(transport ? { transport } : {}),
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
@@ -1157,15 +1159,17 @@ async function sendMidiEvents(instanceId, events, session) {
 async function processInstrumentBlock(instance, frames, sampleRate) {
   if (instance.worker) {
     try {
+      const rendered = await instance.worker.render({
+        frames,
+        sampleRate,
+        channels: [],
+        gain: parameterValue(instance, "gain", 0.5),
+        tone: parameterValue(instance, "tone", 0.5),
+        detune: parameterValue(instance, "detune", 0.5)
+      });
       return {
-        channels: await instance.worker.render({
-          frames,
-          sampleRate,
-          channels: [],
-          gain: parameterValue(instance, "gain", 0.5),
-          tone: parameterValue(instance, "tone", 0.5),
-          detune: parameterValue(instance, "detune", 0.5)
-        }),
+        channels: Array.isArray(rendered) ? rendered : rendered.channels,
+        outputBuses: Array.isArray(rendered?.outputBuses) ? rendered.outputBuses : undefined,
         renderEngine: instance.renderEngine ?? instance.worker.renderEngine ?? "bundle-worker"
       };
     } catch (error) {

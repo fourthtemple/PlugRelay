@@ -66,6 +66,14 @@ native/bridge-daemon/build/soundbridge-daemon --host-status
 
 `--host-status` reports `exampleHostAvailable` separately from real binary plugin `hostAvailable`. On macOS, AU reports `hostAvailable: true`; VST3 reports `hostAvailable: true` when the SDK worker is linked; LV2 reports `hostAvailable: true` when the basic LV2 audio/control worker is available.
 
+For installed-plugin compatibility checks, run:
+
+```sh
+SOUNDBRIDGE_PROBE_FILTER=Cymatics SOUNDBRIDGE_PROBE_FORMATS=vst3,au npm run probe:installed
+```
+
+The probe starts a temporary paired loopback daemon with an explicit origin allowlist and runs bounded create, parameter, state, latency, tail, render, and destroy checks against matching installed plugins. It is intended for compatibility evidence and debugging; it does not replace OS-level worker sandboxing.
+
 The example bundles live at:
 
 - `native/example-plugins/VST3/soundbridge-example-polysynth.vst3`

@@ -18,10 +18,11 @@
     "scan:lv2": "native/bridge-daemon/build-current/soundbridge-daemon --scan-lv2",
     "mock:daemon": "node scripts/mock-daemon.mjs",
     "demo": "node scripts/demo-server.mjs",
+    "probe:installed": "node scripts/installed-plugin-probe.mjs",
     "smoke:mock": "node scripts/smoke-test.mjs",
     "smoke:browser": "node scripts/browser-smoke.mjs",
     "smoke:security": "node scripts/security-smoke.mjs",
-    "check": "node --check scripts/mock-daemon.mjs && node --check scripts/demo-server.mjs && node --check scripts/smoke-test.mjs && node --check scripts/browser-smoke.mjs && node --check scripts/security-smoke.mjs && node --check examples/browser-demo/src/app.js && node --check packages/web-client/dist/soundbridge-client.js && node --check packages/web-client/dist/soundbridge-worklet.js"
+    "check": "node --check scripts/mock-daemon.mjs && node --check scripts/demo-server.mjs && node --check scripts/installed-plugin-probe.mjs && node --check scripts/smoke-test.mjs && node --check scripts/browser-smoke.mjs && node --check scripts/security-smoke.mjs && node --check examples/browser-demo/src/app.js && node --check packages/web-client/dist/soundbridge-client.js && node --check packages/web-client/dist/soundbridge-worklet.js"
   },
   "license": "MIT",
   "engines": {
