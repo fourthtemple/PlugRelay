@@ -9,19 +9,14 @@ export function createDaemonEditors({
   getInstance,
   limits,
   makeProtocolError,
+  nativeEditorBroker,
   resolvePlugin
 }) {
-  function openEditor(payload, session) {
+  async function openEditor(payload, session) {
     cleanupExpiredEditors();
     const instance = getInstance(payload.instanceId, session);
     const mode = payload.mode == null ? "generic" : String(payload.mode);
-    if (mode === "native") {
-      throw makeProtocolError(
-        "unsupported_command",
-        "Native plugin editors require a future UI worker or broker process."
-      );
-    }
-    if (mode !== "generic") {
+    if (mode !== "generic" && mode !== "native") {
       throw makeProtocolError("invalid_argument", "openEditor.mode must be generic or native.");
     }
 
@@ -40,6 +35,13 @@ export function createDaemonEditors({
       );
     }
 
+    if (mode === "native") {
+      return openNativeEditor(instance, session);
+    }
+    return openGenericEditor(instance, session);
+  }
+
+  function openGenericEditor(instance, session) {
     const editorId = `editor-${crypto.randomUUID()}`;
     const expiresAt = Math.min(Date.now() + limits.editorSessionTtlMs, session.expiresAt);
     const editor = {
@@ -49,12 +51,63 @@ export function createDaemonEditors({
       ownerOrigin: session.origin,
       kind: "generic-parameters",
       native: false,
+      transport: "web",
       createdAt: Date.now(),
-      expiresAt
+      expiresAt,
+      capabilities: {
+        parameterEditing: true,
+        nativeWindow: false,
+        fileDialogs: false,
+        clipboard: false,
+        dragAndDrop: false
+      }
     };
     editors.set(editorId, editor);
     session.editors.add(editorId);
 
+    return editorResponse(editor, instance);
+  }
+
+  async function openNativeEditor(instance, session) {
+    if (!nativeEditorBroker?.available) {
+      throw makeProtocolError("unsupported_command", "Native plugin editors require a configured UI broker process.");
+    }
+    if (!instance.nativeHost) {
+      throw makeProtocolError("unsupported_command", "Native plugin editors require an installed native plugin instance.");
+    }
+
+    const editorId = `editor-${crypto.randomUUID()}`;
+    const expiresAt = Math.min(Date.now() + limits.editorSessionTtlMs, session.expiresAt);
+    const editor = {
+      editorId,
+      instanceId: instance.instanceId,
+      ownerSessionToken: session.sessionToken,
+      ownerOrigin: session.origin,
+      kind: "native-window",
+      native: true,
+      transport: "native-broker",
+      createdAt: Date.now(),
+      expiresAt,
+      capabilities: {
+        parameterEditing: false,
+        nativeWindow: true,
+        fileDialogs: false,
+        clipboard: false,
+        dragAndDrop: false
+      }
+    };
+
+    try {
+      const opened = await nativeEditorBroker.openEditor({ editor, instance });
+      editor.brokerSessionId = opened.brokerSessionId;
+      editor.capabilities = opened.capabilities;
+      editor.close = () => opened.brokerSession?.close(editor.editorId);
+    } catch {
+      throw makeProtocolError("editor_broker_failed", "Native plugin editor broker failed to open this editor.");
+    }
+
+    editors.set(editorId, editor);
+    session.editors.add(editorId);
     return editorResponse(editor, instance);
   }
 
@@ -90,7 +143,7 @@ export function createDaemonEditors({
       instanceId: editor.instanceId,
       kind: editor.kind,
       native: editor.native,
-      transport: "web",
+      transport: editor.transport,
       expiresAt: editor.expiresAt,
       plugin: clonePluginMetadata({
         ...plugin,
@@ -107,13 +160,7 @@ export function createDaemonEditors({
         hostable: true
       }),
       parameters: instance.parameters.map((parameter) => ({ ...parameter })),
-      capabilities: {
-        parameterEditing: true,
-        nativeWindow: false,
-        fileDialogs: false,
-        clipboard: false,
-        dragAndDrop: false
-      }
+      capabilities: { ...editor.capabilities }
     };
   }
 

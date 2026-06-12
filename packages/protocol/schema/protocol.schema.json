@@ -129,7 +129,8 @@
                 "workerReadyTimeoutMs": { "type": "number" },
                 "workerTerminationGraceMs": { "type": "number" },
                 "exampleWorkerCommandTimeoutMs": { "type": "number" },
-                "nativeWorkerCommandTimeoutMs": { "type": "number" }
+                "nativeWorkerCommandTimeoutMs": { "type": "number" },
+                "nativeEditorBroker": { "type": "boolean" }
               }
             },
             "automation": { "type": "boolean" },

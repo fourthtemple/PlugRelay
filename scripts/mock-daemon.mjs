@@ -8,6 +8,7 @@ import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { createPluginCatalogSupport, loadNativeHostStatus, resolveNativeRenderer } from "./daemon-plugin-catalog.mjs";
 import { createDaemonRuntimePayloads } from "./daemon-runtime-payloads.mjs";
 import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
+import { createConfiguredNativeEditorBroker } from "./native-editor-broker-process.mjs";
 import {
   assertLoopbackHost,
   createDaemonValidators,
@@ -207,6 +208,9 @@ const {
   nativeRenderer: NATIVE_RENDERER,
   normalizers
 });
+const nativeEditorBroker = createConfiguredNativeEditorBroker({
+  limits: workerSecurityLimits
+});
 
 const sessions = new Map();
 const instances = new Map();
@@ -238,6 +242,7 @@ const { openEditor, closeEditor } = createDaemonEditors({
     maxTotalEditors: MAX_TOTAL_EDITORS
   },
   makeProtocolError: protocolError,
+  nativeEditorBroker,
   resolvePlugin: getPlugin
 });
 const {
@@ -451,7 +456,7 @@ function helloResponse(paired) {
             transport: true,
             genericEditor: true,
             nativeExampleRenderer: Boolean(NATIVE_RENDERER),
-            nativeEditor: false
+            nativeEditor: Boolean(nativeEditorBroker?.available)
           }
         : {}),
       security: {
@@ -461,6 +466,7 @@ function helloResponse(paired) {
         instanceOwnership: true,
         cleanupOnDisconnect: true,
         hostHeaderValidation: true,
+        nativeEditorBroker: Boolean(nativeEditorBroker?.available),
         maxInstancesPerSession: MAX_INSTANCES_PER_SESSION,
         maxTotalInstances: MAX_TOTAL_INSTANCES,
         maxEditorsPerSession: MAX_EDITORS_PER_SESSION,

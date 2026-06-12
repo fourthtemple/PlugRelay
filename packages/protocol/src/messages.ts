@@ -92,6 +92,7 @@ export interface HelloResponse {
       workerTerminationGraceMs?: number;
       exampleWorkerCommandTimeoutMs?: number;
       nativeWorkerCommandTimeoutMs?: number;
+      nativeEditorBroker?: boolean;
     };
     [key: string]: unknown;
   };
@@ -265,7 +266,7 @@ export interface CreateInstanceResponse {
   infiniteTail?: boolean;
 }
 
-export type PluginEditorKind = "generic-parameters";
+export type PluginEditorKind = "generic-parameters" | "native-window";
 
 export interface PluginEditorCapabilities {
   parameterEditing: boolean;
@@ -285,7 +286,7 @@ export interface OpenEditorResponse {
   instanceId: string;
   kind: PluginEditorKind;
   native: boolean;
-  transport: "web";
+  transport: "web" | "native-broker";
   expiresAt: number;
   plugin: PluginMetadata;
   parameters: PluginParameter[];

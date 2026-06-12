@@ -159,6 +159,8 @@ The bridge and demo bind to loopback only by default. Non-loopback binds require
 
 Browser-to-native plugin bridges are powerful enough to need public review. SoundBridge documents its protocol and security model so this category can move toward an auditable open standard instead of opaque localhost helpers.
 
+Native plugin editor windows are intentionally not loaded into the daemon. Generic parameter editors work today; native editor sessions require an explicitly configured separate UI broker process, and remain disabled by default.
+
 ## Common Problems
 
 `vst3.hostAvailable` is false:

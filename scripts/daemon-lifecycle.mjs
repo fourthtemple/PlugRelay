@@ -80,6 +80,12 @@ export function createDaemonLifecycle({ sessions, instances, editors, makeProtoc
   }
 
   function destroyEditorRecord(editor) {
+    const close = editor.close;
+    editor.close = undefined;
+    try {
+      close?.();
+    } catch {
+    }
     editors.delete(editor.editorId);
     const owner = sessions.get(editor.ownerSessionToken);
     owner?.editors.delete(editor.editorId);

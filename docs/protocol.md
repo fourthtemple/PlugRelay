@@ -638,7 +638,7 @@ instance sample rate. Daemons must clamp reported tail samples to `0..1048576`.
 
 ### `openEditor` / `closeEditor`
 
-`openEditor` opens a bounded editor session for an existing plugin instance. The reference daemon supports `mode: "generic"` today and returns a `generic-parameters` editor that a web or desktop host can render using the bounded parameter metadata from the owning instance.
+`openEditor` opens a bounded editor session for an existing plugin instance. The reference daemon supports `mode: "generic"` today and returns a `generic-parameters` editor that a web or desktop host can render using the bounded parameter metadata from the owning instance. `mode: "native"` is disabled by default and is only advertised when the daemon is started with an explicit native editor UI broker process.
 
 ```json
 {
@@ -647,9 +647,9 @@ instance sample rate. Daemons must clamp reported tail samples to `0..1048576`.
 }
 ```
 
-The response includes an `editorId`, the owning `instanceId`, `expiresAt`, a path-free plugin snapshot, current parameter metadata, and editor capabilities. Generic editor sessions are owned by the same paired session as the plugin instance, are capped per session and globally, expire automatically, and close when the instance or WebSocket session is destroyed.
+The response includes an `editorId`, the owning `instanceId`, `kind`, `transport`, `expiresAt`, a path-free plugin snapshot, current parameter metadata, and editor capabilities. Generic editor sessions are owned by the same paired session as the plugin instance, are capped per session and globally, expire automatically, and close when the instance or WebSocket session is destroyed.
 
-`closeEditor` takes `{ "editorId": "editor-..." }` and requires the same session that opened the editor. Native plugin editor windows remain disabled until they can run in a separate UI worker or broker process with explicit handling for windows, focus, clipboard, drag/drop, file dialogs, and ownership.
+`closeEditor` takes `{ "editorId": "editor-..." }` and requires the same session that opened the editor. Native editor sessions, when enabled, use `kind: "native-window"` and `transport: "native-broker"` and are opened only through a separate broker process spawned without a shell. The reference daemon enables this only when `SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH` names an absolute executable path; optional broker arguments must be supplied as a bounded JSON string array in `SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS`. Broker stdout, stderr, command size, readiness, command timeouts, and cleanup share the daemon's worker limits. Native editor broker responses still return only path-free plugin snapshots to the browser; local bundle paths and AudioComponent launch details stay inside daemon-to-broker IPC.
 
 ### `heartbeat`
 

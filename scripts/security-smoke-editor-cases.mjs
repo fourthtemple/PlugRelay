@@ -21,7 +21,7 @@ export function createSecurityEditorCases({ check, request }) {
       () => ({ ok: true }),
       (error) => ({ code: error.code })
     );
-    check(nativeEditor.code === "unsupported_command", "openEditor refuses native editors until a UI worker is available");
+    check(nativeEditor.code === "unsupported_command", "openEditor refuses native editors until a UI broker is configured");
     return editor;
   }
 
