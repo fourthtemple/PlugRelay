@@ -362,7 +362,11 @@ Lv2UridMapper::Lv2UridMapper() {
   addKnown(kUridTimeBeatUnit, kLv2TimeBeatUnitUri);
   addKnown(kUridTimeBeatsPerBar, kLv2TimeBeatsPerBarUri);
   addKnown(kUridTimeBeatsPerMinute, kLv2TimeBeatsPerMinuteUri);
-  nextUrid_ = kUridTimeBeatsPerMinute + 1;
+  addKnown(kUridBufSizeMaxBlockLength, kLv2BufSizeMaxBlockLengthUri);
+  addKnown(kUridBufSizeMinBlockLength, kLv2BufSizeMinBlockLengthUri);
+  addKnown(kUridBufSizeNominalBlockLength, kLv2BufSizeNominalBlockLengthUri);
+  addKnown(kUridBufSizeSequenceSize, kLv2BufSizeSequenceSizeUri);
+  nextUrid_ = kUridBufSizeSequenceSize + 1;
 }
 
 LV2_URID Lv2UridMapper::map(const char* uri) {

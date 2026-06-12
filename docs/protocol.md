@@ -81,7 +81,7 @@ Example paired capability payload:
         "scan": true,
         "host": true,
         "exampleHost": true,
-        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI extensions remain disabled."
+        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, bounded buf-size/options host data, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled."
       }
     },
     "security": {
@@ -114,7 +114,7 @@ Example paired capability payload:
 }
 ```
 
-`host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. The reference LV2 host currently means compatible basic audio/control LV2 plugins with optional atom/event MIDI input ports, bounded portable POD `state:interface` properties, and brokered file-backed state through LV2 state path features, not every LV2 extension profile. `notes` is optional human-readable status text from the native backend.
+`host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. The reference LV2 host currently means compatible basic audio/control LV2 plugins with optional atom/event MIDI input ports, bounded `buf-size:boundedBlockLength` and `options#options` host data, bounded portable POD `state:interface` properties, and brokered file-backed state through LV2 state path features, not every LV2 extension profile. `notes` is optional human-readable status text from the native backend.
 
 `capabilities.security` describes local multi-host protections and is safe to expose before pairing. Production hosts should require `sessionBoundToOrigin` and `instanceOwnership` before exposing installed plugins to arbitrary web origins.
 

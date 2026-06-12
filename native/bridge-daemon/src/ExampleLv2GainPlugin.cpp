@@ -14,8 +14,11 @@ using namespace soundbridge::lv2_abi;
 
 constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
 constexpr const char* kLv2AtomFloatUri = "http://lv2plug.in/ns/ext/atom#Float";
+constexpr const char* kLv2AtomIntUri = "http://lv2plug.in/ns/ext/atom#Int";
 constexpr const char* kLv2AtomPathUri = "http://lv2plug.in/ns/ext/atom#Path";
 constexpr const char* kLv2MidiEventUri = "http://lv2plug.in/ns/ext/midi#MidiEvent";
+constexpr const char* kLv2OptionsOptionsUri = "http://lv2plug.in/ns/ext/options#options";
+constexpr const char* kLv2BufSizeMaxBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#maxBlockLength";
 constexpr const char* kLv2StateFreePathUri = "http://lv2plug.in/ns/ext/state#freePath";
 constexpr const char* kLv2StateInterfaceUri = "http://lv2plug.in/ns/ext/state#interface";
 constexpr const char* kLv2StateMakePathUri = "http://lv2plug.in/ns/ext/state#makePath";
@@ -57,10 +60,13 @@ struct GainPlugin {
   LV2_URID midiGainFileKeyUrid = 0;
   LV2_URID midiGainKeyUrid = 0;
   LV2_URID atomFloatUrid = 0;
+  LV2_URID atomIntUrid = 0;
+  LV2_URID maxBlockLengthUrid = 0;
   LV2_URID atomPathUrid = 0;
   const LV2_Worker_Schedule* workerSchedule = nullptr;
   float midiGain = 1.0F;
   float workerGain = 1.0F;
+  std::uint32_t maxBlockLength = 0;
 };
 
 std::size_t alignAtomSize(std::size_t size) {
@@ -73,9 +79,14 @@ LV2_Handle instantiate(
     const char* /* bundlePath */,
     const LV2_Feature* const* features) {
   auto* plugin = new GainPlugin();
+  const LV2_Options_Option* options = nullptr;
   if (features != nullptr) {
     for (const LV2_Feature* const* feature = features; *feature != nullptr; ++feature) {
       if ((*feature)->URI == nullptr || (*feature)->data == nullptr) {
+        continue;
+      }
+      if (std::strcmp((*feature)->URI, kLv2OptionsOptionsUri) == 0) {
+        options = static_cast<const LV2_Options_Option*>((*feature)->data);
         continue;
       }
       if (std::strcmp((*feature)->URI, kLv2WorkerScheduleUri) == 0) {
@@ -91,9 +102,30 @@ LV2_Handle instantiate(
         plugin->midiGainFileKeyUrid = uridMap->map(uridMap->handle, kMidiGainFileStateUri);
         plugin->midiGainKeyUrid = uridMap->map(uridMap->handle, kMidiGainStateUri);
         plugin->atomFloatUrid = uridMap->map(uridMap->handle, kLv2AtomFloatUri);
+        plugin->atomIntUrid = uridMap->map(uridMap->handle, kLv2AtomIntUri);
+        plugin->maxBlockLengthUrid = uridMap->map(uridMap->handle, kLv2BufSizeMaxBlockLengthUri);
         plugin->atomPathUrid = uridMap->map(uridMap->handle, kLv2AtomPathUri);
       }
     }
+  }
+  if (options == nullptr || plugin->atomIntUrid == 0 || plugin->maxBlockLengthUrid == 0) {
+    delete plugin;
+    return nullptr;
+  }
+  for (const auto* option = options; option->key != 0; ++option) {
+    if (option->key != plugin->maxBlockLengthUrid || option->type != plugin->atomIntUrid ||
+        option->size != sizeof(std::int32_t) || option->value == nullptr) {
+      continue;
+    }
+    std::int32_t value = 0;
+    std::memcpy(&value, option->value, sizeof(value));
+    if (value > 0 && value <= 8192) {
+      plugin->maxBlockLength = static_cast<std::uint32_t>(value);
+    }
+  }
+  if (plugin->maxBlockLength == 0) {
+    delete plugin;
+    return nullptr;
   }
   return plugin;
 }
@@ -163,6 +195,9 @@ void applyMidi(GainPlugin& plugin) {
 
 void run(LV2_Handle instance, std::uint32_t sampleCount) {
   auto* plugin = static_cast<GainPlugin*>(instance);
+  if (plugin->maxBlockLength > 0 && sampleCount > plugin->maxBlockLength) {
+    return;
+  }
   if (plugin->latency != nullptr) {
     *plugin->latency = kExampleLatencyFrames;
   }

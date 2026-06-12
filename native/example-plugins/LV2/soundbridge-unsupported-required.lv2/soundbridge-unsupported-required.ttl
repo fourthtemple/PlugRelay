@@ -5,7 +5,7 @@
 <urn:soundbridge:example:unsupported-required>
   a lv2:Plugin ;
   doap:name "SoundBridge Unsupported Required LV2" ;
-  lv2:requiredFeature buf-size:boundedBlockLength ;
+  lv2:requiredFeature buf-size:powerOf2BlockLength ;
   lv2:port [
     a lv2:InputPort, lv2:AudioPort ;
     lv2:index 0 ;

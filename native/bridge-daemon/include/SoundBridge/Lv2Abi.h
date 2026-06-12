@@ -38,6 +38,22 @@ using LV2_State_Make_Path_Handle = void*;
 using LV2_Worker_Respond_Handle = void*;
 using LV2_Worker_Schedule_Handle = void*;
 
+enum LV2_Options_Context : std::uint32_t {
+  LV2_OPTIONS_INSTANCE = 0,
+  LV2_OPTIONS_RESOURCE = 1,
+  LV2_OPTIONS_BLANK = 2,
+  LV2_OPTIONS_PORT = 3,
+};
+
+struct LV2_Options_Option {
+  LV2_Options_Context context;
+  std::uint32_t subject;
+  LV2_URID key;
+  std::uint32_t size;
+  LV2_URID type;
+  const void* value;
+};
+
 struct LV2_URID_Map {
   LV2_URID_Map_Handle handle;
   LV2_URID (*map)(LV2_URID_Map_Handle handle, const char* uri);

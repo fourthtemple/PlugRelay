@@ -7,5 +7,5 @@
   a lv2:Plugin ;
   doap:name "SoundBridge Unsupported Required LV2" ;
   lv2:binary <soundbridge-unsupported-required.so> ;
-  lv2:requiredFeature buf-size:boundedBlockLength ;
+  lv2:requiredFeature buf-size:powerOf2BlockLength ;
   rdfs:seeAlso <soundbridge-unsupported-required.ttl> .

@@ -17,6 +17,8 @@ namespace {
 constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
 constexpr const char* kLv2UridUnmapUri = "http://lv2plug.in/ns/ext/urid#unmap";
 constexpr const char* kLv2WorkerScheduleUri = "http://lv2plug.in/ns/ext/worker#schedule";
+constexpr const char* kLv2OptionsOptionsUri = "http://lv2plug.in/ns/ext/options#options";
+constexpr const char* kLv2BufSizeBoundedBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#boundedBlockLength";
 constexpr std::uint32_t kMaxLv2UiDeclarations = 32;
 
 struct Lv2UiType {
@@ -263,6 +265,7 @@ std::map<std::string, std::string> turtlePrefixes(const std::string& text) {
       {"state", "http://lv2plug.in/ns/ext/state#"},
       {"worker", "http://lv2plug.in/ns/ext/worker#"},
       {"buf-size", "http://lv2plug.in/ns/ext/buf-size#"},
+      {"opts", "http://lv2plug.in/ns/ext/options#"},
       {"atom", "http://lv2plug.in/ns/ext/atom#"},
       {"midi", "http://lv2plug.in/ns/ext/midi#"},
       {"time", "http://lv2plug.in/ns/ext/time#"},
@@ -357,7 +360,11 @@ std::set<std::string> requiredFeatureUris(const std::string& text) {
 }
 
 bool lv2RequiredFeatureSupported(const std::string& uri) {
-  return uri == kLv2UridMapUri || uri == kLv2UridUnmapUri || uri == kLv2WorkerScheduleUri;
+  return uri == kLv2UridMapUri ||
+      uri == kLv2UridUnmapUri ||
+      uri == kLv2WorkerScheduleUri ||
+      uri == kLv2OptionsOptionsUri ||
+      uri == kLv2BufSizeBoundedBlockLengthUri;
 }
 
 std::filesystem::path canonicalPathOrInput(const std::filesystem::path& path) {

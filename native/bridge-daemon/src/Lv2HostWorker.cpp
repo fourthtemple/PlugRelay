@@ -572,8 +572,17 @@ private:
     LV2_URID_Unmap uridUnmap {&uridMapper_, &unmapLv2Urid};
     LV2_Feature uridMapFeature {kLv2UridMapUri, &uridMap};
     LV2_Feature uridUnmapFeature {kLv2UridUnmapUri, &uridUnmap};
+    maxBlockLengthOption_ = static_cast<std::int32_t>(maxBlockSize_);
+    nominalBlockLengthOption_ = static_cast<std::int32_t>(maxBlockSize_);
+    options_ = {
+        LV2_Options_Option{LV2_OPTIONS_INSTANCE, 0, kUridBufSizeMinBlockLength, sizeof(minBlockLengthOption_), kUridAtomInt, &minBlockLengthOption_},
+        LV2_Options_Option{LV2_OPTIONS_INSTANCE, 0, kUridBufSizeMaxBlockLength, sizeof(maxBlockLengthOption_), kUridAtomInt, &maxBlockLengthOption_},
+        LV2_Options_Option{LV2_OPTIONS_INSTANCE, 0, kUridBufSizeNominalBlockLength, sizeof(nominalBlockLengthOption_), kUridAtomInt, &nominalBlockLengthOption_},
+        LV2_Options_Option{LV2_OPTIONS_INSTANCE, 0, kUridBufSizeSequenceSize, sizeof(sequenceSizeOption_), kUridAtomInt, &sequenceSizeOption_},
+        LV2_Options_Option{}};
+    LV2_Feature optionsFeature {kLv2OptionsOptionsUri, options_.data()};
     LV2_Feature workerScheduleFeature {kLv2WorkerScheduleUri, &workerSchedule_};
-    std::vector<const LV2_Feature*> features {&uridMapFeature, &uridUnmapFeature};
+    std::vector<const LV2_Feature*> features {&uridMapFeature, &uridUnmapFeature, &optionsFeature};
     if (workerInterface_ != nullptr) {
       features.push_back(&workerScheduleFeature);
     }
@@ -893,6 +902,11 @@ private:
   LV2_Worker_Schedule workerSchedule_ {};
   LV2_Handle handle_ = nullptr;
   Lv2UridMapper uridMapper_;
+  std::int32_t minBlockLengthOption_ = 1;
+  std::int32_t maxBlockLengthOption_ = 128;
+  std::int32_t nominalBlockLengthOption_ = 128;
+  std::int32_t sequenceSizeOption_ = kMaxWorkerAtomSequenceBytes;
+  std::vector<LV2_Options_Option> options_;
   double sampleRate_ = 48000.0;
   double sampleTime_ = 0.0;
   std::uint32_t maxBlockSize_ = 128;
@@ -1104,7 +1118,7 @@ bool lv2HostWorkerAvailable() {
 
 std::string lv2HostWorkerStatus() {
 #ifndef _WIN32
-  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI extensions remain disabled.";
+  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, bounded buf-size/options host data, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled.";
 #else
   return "LV2 host worker is not available on this platform build.";
 #endif
