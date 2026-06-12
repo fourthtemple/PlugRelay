@@ -229,25 +229,7 @@ public:
   }
 
   std::string outputAudioToJson(const std::vector<std::vector<float>>& channels) const {
-    const auto channelsJson = audioChannelsToJson(channels);
-    std::ostringstream output;
-    output << "{\"channels\":" << channelsJson << ",\"outputBuses\":[";
-    for (std::size_t busIndex = 0; busIndex < outputBusGroups_.size(); ++busIndex) {
-      const auto& bus = outputBusGroups_[busIndex];
-      if (busIndex > 0) {
-        output << ",";
-      }
-      std::vector<std::vector<float>> busChannels;
-      for (const auto portIndex : bus.portIndexes) {
-        const auto channelOffset = outputChannelOffsetForPort(portIndex);
-        if (channelOffset && *channelOffset < channels.size()) {
-          busChannels.push_back(channels[*channelOffset]);
-        }
-      }
-      output << "{\"index\":" << bus.index << ",\"channels\":" << audioChannelsToJson(busChannels) << "}";
-    }
-    output << "]}";
-    return output.str();
+    return lv2RenderedAudioToJson(channels, outputBusGroups_, outputPortIndexes_);
   }
 
 private:
@@ -260,31 +242,11 @@ private:
   }
 
   std::string inputBusLayoutsToJson() const {
-    return busLayoutsToJson(inputBusGroups_, "input");
+    return lv2BusLayoutsToJson(inputBusGroups_, "input");
   }
 
   std::string outputBusLayoutsToJson() const {
-    return busLayoutsToJson(outputBusGroups_, "output");
-  }
-
-  std::string busLayoutsToJson(const std::vector<Lv2AudioBusGroup>& groups, const char* direction) const {
-    std::ostringstream output;
-    output << "[";
-    for (std::size_t index = 0; index < groups.size(); ++index) {
-      const auto& group = groups[index];
-      if (index > 0) {
-        output << ",";
-      }
-      output << "{\"index\":" << group.index
-             << ",\"direction\":\"" << direction << "\""
-             << ",\"mediaType\":\"audio\""
-             << ",\"name\":\"" << jsonEscape(group.name) << "\""
-             << ",\"type\":\"" << (group.index == 0 ? "main" : "aux") << "\""
-             << ",\"channels\":" << std::min<std::size_t>(group.portIndexes.size(), kMaxWorkerAudioPorts)
-             << ",\"active\":true}";
-    }
-    output << "]";
-    return output.str();
+    return lv2BusLayoutsToJson(outputBusGroups_, "output");
   }
 
   void copyInputBusChannels(
@@ -314,14 +276,6 @@ private:
         inputBuffers_[inputBufferIndex][frame] = sanitizeSample((*busChannels)[channelIndex][frame]);
       }
     }
-  }
-
-  std::optional<std::size_t> outputChannelOffsetForPort(std::size_t portIndex) const {
-    const auto position = std::find(outputPortIndexes_.begin(), outputPortIndexes_.end(), portIndex);
-    if (position == outputPortIndexes_.end()) {
-      return std::nullopt;
-    }
-    return static_cast<std::size_t>(std::distance(outputPortIndexes_.begin(), position));
   }
 
   std::string stateBase64() {
