@@ -4,6 +4,7 @@ project(SoundBridgeDaemon VERSION 0.1.0 LANGUAGES CXX)
 
 add_executable(soundbridge-daemon
   src/main.cpp
+  src/AudioUnitHostedEffect.cpp
   src/AudioUnitHostWorker.cpp
   src/AudioUnitHostWorkerSupport.cpp
   src/AudioUnitScanner.cpp
