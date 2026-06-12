@@ -71,7 +71,7 @@ Worker command text fields such as parameter ids, display strings, and file-gran
 For installed-plugin compatibility checks, run:
 
 ```sh
-SOUNDBRIDGE_PROBE_FILTER=Cymatics npm run probe:installed
+SOUNDBRIDGE_PROBE_FILTER="Plugin Name" npm run probe:installed
 ```
 
 The probe starts a temporary paired loopback daemon with an explicit origin allowlist and runs bounded create, parameter, state, latency, tail, MIDI, render, output-bus layout, and destroy checks against matching installed VST3, AU, and LV2 plugins. Set `SOUNDBRIDGE_PROBE_FORMATS` only when you intentionally want to narrow the run to a comma-separated subset such as `vst3,au` or `lv2`. It is intended for compatibility evidence and debugging; it does not replace OS-level worker sandboxing.

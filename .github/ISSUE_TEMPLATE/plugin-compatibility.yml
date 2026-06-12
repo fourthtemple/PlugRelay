@@ -23,14 +23,14 @@ body:
     id: plugin_name
     attributes:
       label: Plugin name
-      placeholder: Example Plugin
+      placeholder: Plugin Name
     validations:
       required: true
   - type: input
     id: vendor
     attributes:
       label: Plugin vendor
-      placeholder: Example Vendor
+      placeholder: Plugin Vendor
     validations:
       required: true
   - type: input
