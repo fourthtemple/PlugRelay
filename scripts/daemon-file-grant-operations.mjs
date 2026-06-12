@@ -1,4 +1,4 @@
-const FILE_GRANT_OPERATIONS = new Map([
+const FILE_GRANT_OPERATION_DEFINITIONS = Object.freeze([
   ["loadPreset", { access: "read", kind: "file", purpose: "preset" }],
   ["loadSample", { access: "read", kind: "file", purpose: "sample" }],
   ["openCacheDirectory", { access: "readWrite", kind: "directory", purpose: "cache" }],
@@ -7,6 +7,16 @@ const FILE_GRANT_OPERATIONS = new Map([
   ["saveStateDirectory", { access: "readWrite", kind: "directory", purpose: "state" }],
   ["other", {}]
 ]);
+
+export const FILE_GRANT_OPERATION_NAMES = Object.freeze(
+  FILE_GRANT_OPERATION_DEFINITIONS.map(([operation]) => operation)
+);
+
+const FILE_GRANT_OPERATIONS = new Map(FILE_GRANT_OPERATION_DEFINITIONS);
+
+export function isKnownFileGrantOperation(operation) {
+  return FILE_GRANT_OPERATIONS.has(operation);
+}
 
 export function createDaemonFileGrantOperations({
   getInstance,

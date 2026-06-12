@@ -3,8 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
+import { FILE_GRANT_OPERATION_NAMES, isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const NATIVE_FILE_GRANT_OPERATIONS = Object.freeze(["loadPreset", "restoreState", "saveStateDirectory"]);
 
 export function resolveNativeRenderer() {
   const candidates = [
@@ -274,6 +276,7 @@ export function createPluginCatalogSupport({
       engine: defaults.engine,
       parameters: makeInstrumentParameters(defaults),
       presets,
+      fileGrantOperations: fileGrantOperationsForNativeHost(nativeHost),
       nativeHost
     };
   }
@@ -300,6 +303,7 @@ export function createPluginCatalogSupport({
       metadata: normalizePluginClassMetadata(publicPluginMetadata(plugin, auHostProfile), plugin.format),
       parameters: [],
       presets: [],
+      fileGrantOperations: fileGrantOperationsForNativeHost(nativeHost),
       nativeHost
     };
   }
@@ -419,6 +423,12 @@ export function createPluginCatalogSupport({
       return "power-of-two";
     }
     return undefined;
+  }
+
+  function fileGrantOperationsForNativeHost(nativeHost) {
+    return nativeHost && ["au", "vst3", "lv2"].includes(nativeHost.format)
+      ? [...NATIVE_FILE_GRANT_OPERATIONS]
+      : undefined;
   }
 
   function defaultInputChannels(plugin) {
@@ -650,11 +660,32 @@ export function createPluginCatalogSupport({
     if (noteExpressions.length > 0) {
       cloned.vst3NoteExpressions = noteExpressions;
     }
+    const fileGrantOperations = normalizeFileGrantOperations(plugin.fileGrantOperations);
+    if (fileGrantOperations.length > 0) {
+      cloned.fileGrantOperations = fileGrantOperations;
+    }
     const programLists = normalizeVst3ProgramLists(plugin.vst3ProgramLists);
     if (programLists.length > 0) {
       cloned.vst3ProgramLists = programLists;
     }
     return cloned;
+  }
+
+  function normalizeFileGrantOperations(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const operations = [];
+    for (const rawOperation of value) {
+      const operation = String(rawOperation ?? "");
+      if (isKnownFileGrantOperation(operation) && !operations.includes(operation)) {
+        operations.push(operation);
+      }
+      if (operations.length >= FILE_GRANT_OPERATION_NAMES.length) {
+        break;
+      }
+    }
+    return operations;
   }
 
   function normalizePresetSnapshot(preset, index) {

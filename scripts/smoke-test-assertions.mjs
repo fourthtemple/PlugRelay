@@ -1,3 +1,5 @@
+import { FILE_GRANT_OPERATION_NAMES, isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
+
 const MAX_PLUGIN_LATENCY_SAMPLES = 1_048_576;
 const MAX_PLUGIN_TAIL_SAMPLES = 1_048_576;
 const MAX_AUDIO_CHANNELS = 32;
@@ -89,6 +91,15 @@ export function assertOutputBuses(block, layout, message) {
 }
 
 export function assertPublicPluginMetadata(plugin, message) {
+  if (plugin.fileGrantOperations != null) {
+    assert(
+      Array.isArray(plugin.fileGrantOperations) &&
+        plugin.fileGrantOperations.length <= FILE_GRANT_OPERATION_NAMES.length &&
+        new Set(plugin.fileGrantOperations).size === plugin.fileGrantOperations.length &&
+        plugin.fileGrantOperations.every((operation) => isKnownFileGrantOperation(operation)),
+      `${message}: fileGrantOperations are bounded known operations`
+    );
+  }
   const metadata = plugin.metadata;
   if (metadata == null) {
     return;

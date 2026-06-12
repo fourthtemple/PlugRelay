@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
 
 const HOST = process.env.SOUNDBRIDGE_HOST ?? "127.0.0.1";
 const ORIGIN = process.env.SOUNDBRIDGE_PROBE_ORIGIN ?? "http://127.0.0.1:5173";
@@ -106,12 +107,14 @@ async function probePlugin(socket, session, plugin) {
     vendor: plugin.vendor,
     kind: plugin.kind,
     audioUnitHostProfile: plugin.metadata?.audioUnitHostProfile,
+    fileGrantOperations: plugin.fileGrantOperations,
     ok: false,
     phases: []
   };
   let instanceId = "";
 
   try {
+    assertFileGrantOperationMetadata(plugin);
     const createPayload = createInstancePayload(plugin);
     const created = await phase(result, "createInstance", () =>
       request(socket, "createInstance", createPayload, true, session)
@@ -245,6 +248,18 @@ async function probePlugin(socket, session, plugin) {
   }
 
   return result;
+}
+
+function assertFileGrantOperationMetadata(plugin) {
+  if (!isNativePluginFormat(plugin.format)) {
+    return;
+  }
+  const operations = plugin.fileGrantOperations;
+  const expectedOperations = ["loadPreset", "restoreState", "saveStateDirectory"];
+  const ok = Array.isArray(operations) &&
+    expectedOperations.every((operation) => operations.includes(operation)) &&
+    operations.every((operation) => isKnownFileGrantOperation(operation));
+  assertProbe(ok, "missing_file_grant_operations", `${plugin.pluginId} did not advertise bounded native file-grant operations`);
 }
 
 async function probeNativeEditorBroker(socket, session, plugin, instanceId, result) {

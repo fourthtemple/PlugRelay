@@ -196,7 +196,9 @@ export interface PluginClassMetadata {
   componentType?: string;
   componentSubType?: string;
   componentManufacturer?: string;
+  audioUnitHostProfile?: string;
   lv2Uri?: string;
+  lv2BlockSizeProfile?: string;
   lv2UiTypes?: string;
   lv2UiCount?: string;
   lv2UiBinaryCount?: string;
@@ -239,6 +241,7 @@ export interface PluginMetadata {
   outputs: number;
   metadata?: PluginClassMetadata;
   parameters: PluginParameter[];
+  fileGrantOperations?: FileGrantOperation[];
   vst3ProgramLists?: PluginProgramList[];
   vst3NoteExpressions?: PluginVst3NoteExpression[];
   presets?: PluginPreset[];

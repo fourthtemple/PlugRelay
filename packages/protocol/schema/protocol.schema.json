@@ -420,6 +420,12 @@
           "maxItems": 1024,
           "items": { "$ref": "#/$defs/pluginParameter" }
         },
+        "fileGrantOperations": {
+          "type": "array",
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fileGrantOperation" }
+        },
         "vst3ProgramLists": {
           "type": "array",
           "maxItems": 256,
@@ -447,7 +453,9 @@
         "componentType": { "type": "string", "maxLength": 16 },
         "componentSubType": { "type": "string", "maxLength": 16 },
         "componentManufacturer": { "type": "string", "maxLength": 16 },
+        "audioUnitHostProfile": { "type": "string", "maxLength": 64 },
         "lv2Uri": { "type": "string", "maxLength": 256 },
+        "lv2BlockSizeProfile": { "type": "string", "maxLength": 32 },
         "lv2UiTypes": { "type": "string", "maxLength": 256 },
         "lv2UiCount": { "type": "string", "maxLength": 16 },
         "lv2UiBinaryCount": { "type": "string", "maxLength": 16 }
@@ -908,6 +916,18 @@
       "properties": {
         "editorId": { "type": "string", "minLength": 1, "maxLength": 80 }
       }
+    },
+    "fileGrantOperation": {
+      "type": "string",
+      "enum": [
+        "loadPreset",
+        "loadSample",
+        "openCacheDirectory",
+        "loadLicense",
+        "restoreState",
+        "saveStateDirectory",
+        "other"
+      ]
     },
     "createFileGrantRequest": {
       "type": "object",
