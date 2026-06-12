@@ -5,6 +5,7 @@ import {
   connect,
   createRequestClient,
   rawHandshake,
+  rawHttpRequest,
   sendOversizedTextFrame,
   waitForClose
 } from "./security-smoke-client.mjs";
@@ -54,6 +55,8 @@ if (failures.length > 0) {
 
 async function run() {
   // A. DNS-rebinding: a non-loopback Host header must be rejected at upgrade.
+  const rebindHttp = await rawHttpRequest(HOST, PORT, "evil.example", "/health");
+  check(rebindHttp.statusCode === 403, "HTTP request with non-loopback Host header is rejected (DNS-rebinding defense)");
   const rebind = await rawHandshake(HOST, PORT, "evil.example", ORIGIN);
   check(rebind.status !== "101", "WS upgrade with non-loopback Host header is rejected (DNS-rebinding defense)");
   rebind.socket?.destroy();

@@ -28,6 +28,32 @@ export function rawHandshake(host, port, hostHeader, origin) {
   });
 }
 
+export function rawHttpRequest(host, port, hostHeader, path = "/health") {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port }, () => {
+      socket.write(
+        [
+          `GET ${path} HTTP/1.1`,
+          `Host: ${hostHeader}`,
+          "Connection: close",
+          "\r\n"
+        ].join("\r\n")
+      );
+    });
+    let buffer = "";
+    const done = () => {
+      const statusLine = buffer.split("\r\n", 1)[0] ?? "";
+      const statusCode = Number(statusLine.match(/^HTTP\/1\.1\s+(\d+)/)?.[1]);
+      resolve({ statusCode, raw: buffer, socket });
+    };
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+    });
+    socket.on("close", done);
+    socket.on("error", done);
+  });
+}
+
 export function connect(host, port, hostHeader, origin) {
   return new Promise((resolve, reject) => {
     const key = crypto.randomBytes(16).toString("base64");
