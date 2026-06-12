@@ -59,6 +59,27 @@ export function createDaemonInstanceFileGrants({
     });
   }
 
+  function nativeFileGrantForInstance(instance, session, grantId, constraints = {}) {
+    cleanupStaleAttachments(instance, session);
+    const safeGrantId = requireGrantId(grantId);
+    const attachment = ensureAttachmentMap(instance).get(safeGrantId);
+    if (!attachment) {
+      throw makeProtocolError("file_grant_not_attached", "This file grant is not attached to the plugin instance.", {
+        grantId: safeGrantId,
+        instanceId: instance.instanceId
+      });
+    }
+    const grant = fileGrantSupport.resolveFileGrantForUse(safeGrantId, session, {
+      access: constraints.access ?? attachment.access,
+      kind: constraints.kind ?? attachment.kind,
+      purpose: constraints.purpose ?? attachment.purpose
+    });
+    return {
+      ...fileGrantSupport.publicFileGrant(grant),
+      absolutePath: grant.absolutePath
+    };
+  }
+
   function cleanupStaleAttachments(instance, session) {
     const attachments = ensureAttachmentMap(instance);
     for (const [grantId, attachment] of Array.from(attachments.entries())) {
@@ -93,6 +114,7 @@ export function createDaemonInstanceFileGrants({
     attachFileGrant,
     detachFileGrant,
     listInstanceFileGrants,
+    nativeFileGrantForInstance,
     nativeFileGrantsForInstance
   };
 }

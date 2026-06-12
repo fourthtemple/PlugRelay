@@ -5,6 +5,7 @@ import type {
   ClearAutomationLaneResponse,
   CreateFileGrantRequest,
   FileGrant,
+  FileGrantOperation,
   CreateInstanceRequest,
   CreateInstanceResponse,
   CloseEditorResponse,
@@ -274,6 +275,26 @@ export class SoundBridgeClient extends EventTarget {
 
   detachFileGrant(instanceId: string, grantId: string): Promise<{ detached: boolean; instanceId: string; grantId: string }> {
     return this.request("detachFileGrant", { instanceId, grantId });
+  }
+
+  useFileGrant(
+    instanceId: string,
+    grantId: string,
+    options: {
+      operation?: FileGrantOperation;
+      purpose?: CreateFileGrantRequest["purpose"];
+      access?: CreateFileGrantRequest["access"];
+      kind?: CreateFileGrantRequest["kind"];
+    } = {}
+  ): Promise<{
+    accepted: boolean;
+    applied: boolean;
+    instanceId: string;
+    operation: FileGrantOperation;
+    grant: FileGrant;
+    workerStatus?: string;
+  }> {
+    return this.request("useFileGrant", { instanceId, grantId, ...options });
   }
 
   heartbeat(): Promise<{ now: number }> {

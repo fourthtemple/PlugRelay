@@ -132,7 +132,8 @@ async function run() {
     "revokeFileGrant",
     "attachFileGrant",
     "listInstanceFileGrants",
-    "detachFileGrant"
+    "detachFileGrant",
+    "useFileGrant"
   ]) {
     const blocked = await request(main, command, {}, false).then(
       () => ({ ok: true }),
@@ -259,8 +260,10 @@ async function run() {
   );
   check(
     pairedHello.capabilities?.fileAccess === false &&
+      pairedHello.capabilities?.fileGrantOperations === true &&
       pairedHello.capabilities?.security?.fileBroker === false &&
       pairedHello.capabilities?.security?.browserFileGrantPaths === false &&
+      pairedHello.capabilities?.security?.nativeWorkerFileGrants === true &&
       pairedHello.capabilities?.security?.maxFileGrantsPerSession > 0 &&
       pairedHello.capabilities?.security?.maxFileGrantsPerInstance > 0 &&
       pairedHello.capabilities?.security?.maxFileGrantPathBytes <= 4096,

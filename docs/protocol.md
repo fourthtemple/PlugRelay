@@ -725,7 +725,47 @@ Plugin instances can hold path-free references to session-owned file grants. Thi
 }
 ```
 
-`listInstanceFileGrants` takes `{ "instanceId": "inst-..." }` and returns only that session-owned instance's live, path-free attachments. `detachFileGrant` takes `{ "instanceId": "inst-...", "grantId": "filegrant-..." }`. Native editor brokers receive attached grants only over daemon-to-broker IPC. Native audio workers should resolve attached grant ids inside daemon-owned code only at the moment of use.
+`listInstanceFileGrants` takes `{ "instanceId": "inst-..." }` and returns only that session-owned instance's live, path-free attachments. `detachFileGrant` takes `{ "instanceId": "inst-...", "grantId": "filegrant-..." }`. Native editor brokers receive attached grants only over daemon-to-broker IPC.
+
+### `useFileGrant`
+
+`useFileGrant` asks a compatible native worker to consume an already attached grant for a known operation. The browser supplies only the instance id, grant id, operation name, and optional constraints:
+
+```json
+{
+  "instanceId": "inst-...",
+  "grantId": "filegrant-...",
+  "operation": "loadSample",
+  "purpose": "sample",
+  "access": "read",
+  "kind": "file"
+}
+```
+
+Supported operation names are `loadPreset`, `loadSample`, `openCacheDirectory`, `loadLicense`, `restoreState`, `saveStateDirectory`, and `other`. Operation names imply conservative purpose/access/kind constraints where possible; for example, `loadSample` requires a read-only sample file and `openCacheDirectory` requires a read/write cache directory. The daemon must reject mismatches before worker dispatch.
+
+The daemon resolves the absolute path only after verifying that the paired session owns the instance, owns the grant, and has attached that grant to the instance. Browser responses stay path-free:
+
+```json
+{
+  "accepted": true,
+  "applied": true,
+  "instanceId": "inst-...",
+  "operation": "loadSample",
+  "grant": {
+    "grantId": "filegrant-...",
+    "purpose": "sample",
+    "access": "read",
+    "kind": "file",
+    "displayName": "Kick.wav",
+    "createdAt": 1710000000000,
+    "expiresAt": 1710000600000
+  },
+  "workerStatus": "ok"
+}
+```
+
+The reference daemon sends the absolute path only over bounded daemon-to-worker IPC, base64-encoded inside the worker line protocol. Workers that do not implement a file-grant operation return `unsupported_file_grant_operation`; plugin-specific VST3/AU/LV2 handlers should add only the operations they can implement with explicit bounds and ownership checks.
 
 ### `heartbeat`
 

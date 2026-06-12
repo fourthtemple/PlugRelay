@@ -409,6 +409,23 @@ export function createNativeWorkerProcesses({
       return this.request(`setState ${state.component || "-"} ${state.controller || "-"}`);
     }
 
+    async useFileGrant({ grant, operation }) {
+      if (!["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
+        return undefined;
+      }
+      const parsed = await this.request([
+        "fileGrant",
+        operation,
+        grant.purpose,
+        grant.access,
+        grant.kind,
+        grant.grantId,
+        encodeWorkerText(grant.displayName),
+        encodeWorkerText(grant.absolutePath)
+      ].join(" "));
+      return normalizeWorkerFileGrantResult(parsed);
+    }
+
     async getLatency() {
       if (!["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
         return 0;
@@ -614,6 +631,34 @@ function encodeAudioChannels(channels, frames) {
       return samples.join(",");
     })
     .join("|");
+}
+
+function encodeWorkerText(value) {
+  const text = String(value ?? "");
+  return text ? Buffer.from(text, "utf8").toString("base64") : "-";
+}
+
+function normalizeWorkerFileGrantResult(parsed) {
+  return {
+    applied: parsed?.applied === true,
+    status: boundedWorkerText(parsed?.status, 64)
+  };
+}
+
+function boundedWorkerText(value, maxBytes) {
+  const text = String(value ?? "");
+  let output = "";
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) {
+      continue;
+    }
+    if (Buffer.byteLength(output + char, "utf8") > maxBytes) {
+      break;
+    }
+    output += char;
+  }
+  return output;
 }
 
 function normalizeWorkerStdoutLineLimit(value) {

@@ -8,7 +8,7 @@ SoundBridge splits browser audio hosting from native plugin hosting. The browser
 
 The SDK is a small TypeScript package that gives Web DAWs:
 
-- a `SoundBridgeClient` for pairing, scanning, plugin instantiation, parameter changes, state, latency, tail time, editor sessions, and opaque file grants
+- a `SoundBridgeClient` for pairing, scanning, plugin instantiation, parameter changes, state, latency, tail time, editor sessions, opaque file grants, and grant-backed worker operations
 - a `SoundBridgeAudioNode` wrapper around `AudioWorkletNode`
 - bounded generic parameter editor sessions for hosts that do not have their own plugin UI
 - protocol message types shared with daemon implementations
@@ -29,7 +29,7 @@ The daemon listens on loopback only. It provides:
 - opaque state save/restore
 - latency, tail-time, and error reporting
 
-The development daemon in this repository implements the protocol with a stereo gain effect, example bundle instruments, and native worker handoff for installed VST3, AU, and compatible LV2 audio/control plugins. That lets Web DAWs integrate the browser transport while the production daemon is still taking shape.
+The development daemon in this repository implements the protocol with a stereo gain effect, example bundle instruments, and native worker handoff for installed VST3, AU, and compatible LV2 audio/control plugins. It also owns root-limited file grants and resolves attached grants for compatible native workers through operation-specific IPC instead of exposing paths to browser hosts. That lets Web DAWs integrate the browser transport while the production daemon is still taking shape.
 
 ### Native Plugin Hosts
 

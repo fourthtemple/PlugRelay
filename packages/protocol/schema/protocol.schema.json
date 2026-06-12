@@ -42,6 +42,7 @@
         "attachFileGrant",
         "listInstanceFileGrants",
         "detachFileGrant",
+        "useFileGrant",
         "heartbeat"
       ]
     },
@@ -146,13 +147,15 @@
                 "workerTerminationGraceMs": { "type": "number" },
                 "exampleWorkerCommandTimeoutMs": { "type": "number" },
                 "nativeWorkerCommandTimeoutMs": { "type": "number" },
-                "nativeEditorBroker": { "type": "boolean" }
+                "nativeEditorBroker": { "type": "boolean" },
+                "nativeWorkerFileGrants": { "type": "boolean" }
               }
             },
             "automation": { "type": "boolean" },
             "transport": { "type": "boolean" },
             "genericEditor": { "type": "boolean" },
-            "nativeEditor": { "type": "boolean" }
+            "nativeEditor": { "type": "boolean" },
+            "fileGrantOperations": { "type": "boolean" }
           }
         }
       }
@@ -268,6 +271,10 @@
         {
           "if": { "properties": { "command": { "const": "detachFileGrant" } }, "required": ["command"] },
           "then": { "properties": { "payload": { "$ref": "#/$defs/detachFileGrantRequest" } } }
+        },
+        {
+          "if": { "properties": { "command": { "const": "useFileGrant" } }, "required": ["command"] },
+          "then": { "properties": { "payload": { "$ref": "#/$defs/useFileGrantRequest" } } }
         }
       ]
     },
@@ -947,6 +954,30 @@
       "properties": {
         "instanceId": { "type": "string", "minLength": 1, "maxLength": 80 },
         "grantId": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "useFileGrantRequest": {
+      "type": "object",
+      "required": ["instanceId", "grantId"],
+      "additionalProperties": true,
+      "properties": {
+        "instanceId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "grantId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "loadPreset",
+            "loadSample",
+            "openCacheDirectory",
+            "loadLicense",
+            "restoreState",
+            "saveStateDirectory",
+            "other"
+          ]
+        },
+        "purpose": { "type": "string", "enum": ["preset", "sample", "cache", "license", "state", "other"] },
+        "access": { "type": "string", "enum": ["read", "write", "readWrite"] },
+        "kind": { "type": "string", "enum": ["file", "directory"] }
       }
     }
   }

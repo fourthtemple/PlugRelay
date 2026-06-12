@@ -29,6 +29,7 @@ export type ProtocolCommand =
   | "attachFileGrant"
   | "listInstanceFileGrants"
   | "detachFileGrant"
+  | "useFileGrant"
   | "heartbeat";
 
 export type PluginFormat = "vst3" | "au" | "lv2" | "mock" | "unknown";
@@ -64,6 +65,7 @@ export interface HelloResponse {
     fileAccess?: boolean;
     nativeExampleRenderer?: boolean;
     nativeEditor?: boolean;
+    fileGrantOperations?: boolean;
     security?: {
       originAllowlist?: boolean;
       sessionBoundToConnection?: boolean;
@@ -109,6 +111,7 @@ export interface HelloResponse {
       exampleWorkerCommandTimeoutMs?: number;
       nativeWorkerCommandTimeoutMs?: number;
       nativeEditorBroker?: boolean;
+      nativeWorkerFileGrants?: boolean;
     };
     [key: string]: unknown;
   };
@@ -388,6 +391,33 @@ export interface DetachFileGrantResponse {
   detached: boolean;
   instanceId: string;
   grantId: string;
+}
+
+export type FileGrantOperation =
+  | "loadPreset"
+  | "loadSample"
+  | "openCacheDirectory"
+  | "loadLicense"
+  | "restoreState"
+  | "saveStateDirectory"
+  | "other";
+
+export interface UseFileGrantRequest {
+  instanceId: string;
+  grantId: string;
+  operation?: FileGrantOperation;
+  purpose?: FileGrantPurpose;
+  access?: FileGrantAccess;
+  kind?: FileGrantKind;
+}
+
+export interface UseFileGrantResponse {
+  accepted: boolean;
+  applied: boolean;
+  instanceId: string;
+  operation: FileGrantOperation;
+  grant: FileGrant;
+  workerStatus?: string;
 }
 
 export interface AudioBusBlock {

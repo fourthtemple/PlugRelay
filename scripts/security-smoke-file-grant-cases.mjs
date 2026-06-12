@@ -299,6 +299,21 @@ export function createSecurityFileGrantCases({
         "listInstanceFileGrants returns only path-free instance attachments"
       );
 
+      const unsupportedUse = await request(
+        owner,
+        "useFileGrant",
+        { instanceId: instance.instanceId, grantId: grant.grantId, operation: "loadSample" },
+        true,
+        ownerPair.sessionToken
+      ).then(
+        () => ({ ok: true }),
+        (error) => ({ code: error.code })
+      );
+      check(
+        unsupportedUse.code === "unsupported_file_grant_operation",
+        "useFileGrant requires an explicit worker implementation"
+      );
+
       const purposeMismatch = await request(
         owner,
         "attachFileGrant",

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { createDaemonControlEvents } from "./daemon-control-events.mjs";
 import { createDaemonEditors } from "./daemon-editors.mjs";
 import { createDaemonFileGrants } from "./daemon-file-grants.mjs";
+import { createDaemonFileGrantOperations } from "./daemon-file-grant-operations.mjs";
 import { createDaemonInstanceFileGrants } from "./daemon-instance-file-grants.mjs";
 import { createDaemonInstrumentRendering } from "./daemon-instrument-rendering.mjs";
 import { createDaemonLifecycle } from "./daemon-lifecycle.mjs";
@@ -253,6 +254,11 @@ const instanceFileGrantSupport = createDaemonInstanceFileGrants({
   maxFileGrantsPerInstance: MAX_FILE_GRANTS_PER_INSTANCE,
   makeProtocolError: protocolError
 });
+const { useFileGrant } = createDaemonFileGrantOperations({
+  getInstance,
+  instanceFileGrantSupport,
+  makeProtocolError: protocolError
+});
 const {
   assertPaired,
   cleanupConnection,
@@ -477,6 +483,9 @@ async function dispatchCommand(envelope, context) {
     case "detachFileGrant":
       return instanceFileGrantSupport.detachFileGrant(payload, session, getInstance);
 
+    case "useFileGrant":
+      return useFileGrant(payload, session);
+
     case "heartbeat":
       return {
         now: Date.now(),
@@ -517,6 +526,7 @@ function helloResponse(paired) {
             transport: true,
             genericEditor: true,
             fileAccess: fileGrantSupport.browserPathGrantsAvailable() || fileGrantSupport.nativeApprovalAvailable(),
+            fileGrantOperations: true,
             nativeExampleRenderer: Boolean(NATIVE_RENDERER),
             nativeEditor: Boolean(nativeEditorBroker?.available)
           }
@@ -543,6 +553,7 @@ function helloResponse(paired) {
         maxFileGrantTtlMs: FILE_GRANT_TTL_MS,
         maxFileGrantPathBytes: MAX_FILE_GRANT_PATH_BYTES,
         maxFileGrantDisplayNameBytes: MAX_FILE_GRANT_DISPLAY_NAME_BYTES,
+        nativeWorkerFileGrants: true,
         maxTotalSessions: MAX_TOTAL_SESSIONS,
         maxAudioChannels: MAX_AUDIO_CHANNELS,
         maxBlockSize: MAX_BLOCK_SIZE,
