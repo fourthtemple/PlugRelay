@@ -101,6 +101,7 @@ async function run() {
     "getParameters",
     "setParameter",
     "setPreset",
+    "getVst3ProgramData",
     "setParameterEvents",
     "setParameterCurve",
     "setAutomationLane",
@@ -203,6 +204,10 @@ async function run() {
     "paired hello advertises bounded program-list metadata"
   );
   check(
+    pairedHello.capabilities?.security?.maxPluginProgramDataBytes > 0,
+    "paired hello advertises bounded VST3 program data"
+  );
+  check(
     pairedHello.capabilities?.security?.maxNoteExpressionTextBytes > 0,
     "paired hello advertises bounded note-expression text"
   );
@@ -299,6 +304,17 @@ async function run() {
       mockProgram.vst3Unit.name.length <= 160,
     "createInstance exposes bounded VST3 unit and program-list metadata"
   );
+  const unsupportedProgramData = await request(
+    main,
+    "getVst3ProgramData",
+    { instanceId: created.instanceId, programListId: mockProgram?.programList?.id ?? 0, programIndex: 0 },
+    true,
+    paired.sessionToken
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(unsupportedProgramData.code === "program_data_not_supported", "getVst3ProgramData rejects non-VST3 instances");
   const selectedProgram = await request(
     main,
     "setParameter",

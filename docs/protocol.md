@@ -243,11 +243,38 @@ Parameter metadata is plugin-controlled and must be bounded before it reaches a 
 
 VST3 parameters may include bounded `vst3Unit` metadata from the SDK `IUnitInfo` interface: `id`, `parentUnitId`, `name`, and optional `programListId`. Unit names use the same 160-byte cap as parameter names, and the worker inspects at most 1024 units. VST3 parameters flagged by the SDK as program-change parameters include `programChange: true`. When the parameter's unit can be associated with a VST3 program list, the worker may include a bounded `programList` with at most 256 named programs and normalized values suitable for `setParameter`.
 
-VST3 plugin snapshots may include `vst3ProgramLists`, a bounded list of all SDK program lists exposed by `IUnitInfo`, with at most 256 lists and 256 named programs per list. Program-list names and program names use the same 160-byte cap as parameter names; `unitId` is included when the SDK ties a list to a unit. This is display metadata. Hosts should use `programChange` parameters for selection when present and must not treat program-list metadata as permission to read, write, import, or load arbitrary preset files.
+VST3 plugin snapshots may include `vst3ProgramLists`, a bounded list of all SDK program lists exposed by `IUnitInfo`, with at most 256 lists and 256 named programs per list. Program-list names and program names use the same 160-byte cap as parameter names; `unitId` is included when the SDK ties a list to a unit. Lists may include `programDataSupported: true` when the worker can export opaque SDK `IProgramListData` for daemon-listed programs. Hosts should use `programChange` parameters for selection when present and must not treat program-list metadata as permission to read, write, import, or load arbitrary preset files.
 
 VST3 plugin snapshots may include `vst3NoteExpressions`, a bounded list from the SDK `INoteExpressionController` for event bus 0 and channels 0-15. The daemon exposes at most 256 expression definitions with capped display text, `typeId`, optional `unitId` and `associatedParameterId`, normalized value bounds, flags, `busIndex`, and `channel`. Value-style note-expression events use normalized `value`; text-style note-expression events use bounded UTF-8 `text` and are still VST3-only.
 
 Compatible LV2 control ports marked with `lv2:toggled`, `lv2:integer`, or `lv2:enumeration` expose bounded `stepCount` metadata. The reference LV2 worker caps reported step counts and quantizes normalized writes back to legal plain values before writing the plugin port.
+
+### `getVst3ProgramData`
+
+Exports opaque VST3 SDK program data for one daemon-listed program when the instance advertises `programDataSupported: true` on the matching `vst3ProgramLists` entry.
+
+```json
+{
+  "instanceId": "inst-1",
+  "programListId": 7,
+  "programIndex": 0
+}
+```
+
+The browser supplies only the owning `instanceId`, an exposed `programListId`, and an exposed `programIndex`. It does not send paths, preset files, or arbitrary opaque bytes. The reference daemon enforces instance ownership, rejects non-VST3 instances, verifies the list and program index against the bounded metadata already returned for that instance, and caps returned data to 384 KiB by default:
+
+```json
+{
+  "instanceId": "inst-1",
+  "format": "vst3",
+  "programListId": 7,
+  "programIndex": 0,
+  "size": 128,
+  "data": "AAECAwQ="
+}
+```
+
+`data` is base64 and host applications must store it as opaque plugin-originated data. Importing arbitrary VST3 preset files, sample folders, or user-selected filesystem data remains out of scope for this command and requires a separate file broker.
 
 ### `getLayout`
 

@@ -216,7 +216,8 @@ bool unitIdForProgramList(
     Steinberg::Vst::UnitID& unitId);
 std::string programListInfoToJson(
     const Steinberg::Vst::ProgramListInfo& programList,
-    Steinberg::Vst::IUnitInfo* unitInfo);
+    Steinberg::Vst::IUnitInfo* unitInfo,
+    Steinberg::Vst::IProgramListData* programListData);
 
 bool programListForParameter(
     const Steinberg::Vst::ParameterInfo& parameter,
@@ -319,12 +320,13 @@ std::string programListToJson(
   if (!programListForParameter(parameter, unitInfo, programList)) {
     return "";
   }
-  return programListInfoToJson(programList, unitInfo);
+  return programListInfoToJson(programList, unitInfo, nullptr);
 }
 
 std::string programListInfoToJson(
     const Steinberg::Vst::ProgramListInfo& programList,
-    Steinberg::Vst::IUnitInfo* unitInfo) {
+    Steinberg::Vst::IUnitInfo* unitInfo,
+    Steinberg::Vst::IProgramListData* programListData) {
   const auto programCount = std::clamp<Steinberg::int32>(
       programList.programCount,
       0,
@@ -340,6 +342,10 @@ std::string programListInfoToJson(
          << ",\"name\":\"" << jsonEscape(listName.empty() ? "Programs" : listName) << "\"";
   if (unitIdForProgramList(unitInfo, programList.id, unitId)) {
     output << ",\"unitId\":" << unitId;
+  }
+  if (programListData != nullptr &&
+      programListData->programDataSupported(programList.id) == Steinberg::kResultTrue) {
+    output << ",\"programDataSupported\":true";
   }
   output << ",\"programs\":[";
   for (Steinberg::int32 programIndex = 0; programIndex < programCount; ++programIndex) {
@@ -432,6 +438,20 @@ bool parseUint32Arg(const char* text, std::uint32_t minValue, std::uint32_t maxV
     return false;
   }
   out = static_cast<std::uint32_t>(value);
+  return true;
+}
+
+bool parseInt32Arg(const char* text, std::int32_t minValue, std::int32_t maxValue, std::int32_t& out) {
+  if (text == nullptr || *text == '\0') {
+    return false;
+  }
+  errno = 0;
+  char* end = nullptr;
+  const long value = std::strtol(text, &end, 10);
+  if (end == text || *end != '\0' || errno == ERANGE || value < minValue || value > maxValue) {
+    return false;
+  }
+  out = static_cast<std::int32_t>(value);
   return true;
 }
 
@@ -732,7 +752,9 @@ bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinb
   return false;
 }
 
-std::string programListsToJson(Steinberg::Vst::IUnitInfo* unitInfo) {
+std::string programListsToJson(
+    Steinberg::Vst::IUnitInfo* unitInfo,
+    Steinberg::Vst::IProgramListData* programListData) {
   std::ostringstream output;
   output << "{\"vst3ProgramLists\":[";
   if (unitInfo != nullptr) {
@@ -746,7 +768,7 @@ std::string programListsToJson(Steinberg::Vst::IUnitInfo* unitInfo) {
       if (unitInfo->getProgramListInfo(listIndex, info) != Steinberg::kResultOk) {
         continue;
       }
-      const auto listJson = programListInfoToJson(info, unitInfo);
+      const auto listJson = programListInfoToJson(info, unitInfo, programListData);
       if (listJson.empty()) {
         continue;
       }

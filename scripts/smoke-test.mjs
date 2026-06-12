@@ -570,6 +570,31 @@ assert(
   Array.isArray(nativeVst3Parameters.parameters),
   "getParameters returns a bounded installed VST3 parameter array"
 );
+const nativeVst3ProgramDataList = nativeVst3Instance.plugin.vst3ProgramLists?.find(
+  (programList) => programList.programDataSupported === true && programList.programs?.length > 0
+);
+if (nativeVst3ProgramDataList) {
+  const nativeVst3ProgramData = await request(
+    socket,
+    "getVst3ProgramData",
+    {
+      instanceId: nativeVst3Instance.instanceId,
+      programListId: nativeVst3ProgramDataList.id,
+      programIndex: nativeVst3ProgramDataList.programs[0].index
+    },
+    true,
+    pair.sessionToken
+  );
+  assert(
+    nativeVst3ProgramData.format === "vst3" &&
+      nativeVst3ProgramData.programListId === nativeVst3ProgramDataList.id &&
+      nativeVst3ProgramData.programIndex === nativeVst3ProgramDataList.programs[0].index &&
+      Number.isInteger(nativeVst3ProgramData.size) &&
+      nativeVst3ProgramData.size <= 384 * 1024 &&
+      typeof nativeVst3ProgramData.data === "string",
+    "getVst3ProgramData returns bounded installed VST3 program data when supported"
+  );
+}
 const nativeVst3Parameter = nativeVst3Parameters.parameters.find((parameter) => parameter.automatable);
 if (nativeVst3Parameter) {
   const nextVst3Value = nativeVst3Parameter.normalizedValue > 0.5 ? 0.25 : 0.75;

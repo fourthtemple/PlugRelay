@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -84,6 +85,7 @@ public:
 
     checkResult(component_->initialize(&hostApplication_), "IComponent::initialize");
     initialized_ = true;
+    programListData_ = Steinberg::FUnknownPtr<Steinberg::Vst::IProgramListData>(component_);
     initializeController();
     connectController();
     configure();
@@ -324,7 +326,32 @@ public:
   }
 
   std::string programListsToJson() const {
-    return vst3_worker::programListsToJson(unitInfo_);
+    return vst3_worker::programListsToJson(unitInfo_, programListData_);
+  }
+
+  std::string programDataToJson(Steinberg::Vst::ProgramListID programListId, Steinberg::int32 programIndex) const {
+    if (!programListData_) {
+      throw std::runtime_error("program_data_not_supported");
+    }
+    if (!programDataSupported(programListId) || !knownProgram(programListId, programIndex)) {
+      throw std::runtime_error("program_data_not_supported");
+    }
+
+    Steinberg::MemoryStream stream;
+    checkResult(
+        programListData_->getProgramData(programListId, programIndex, &stream),
+        "IProgramListData::getProgramData");
+    const auto rawSize = stream.getSize();
+    const auto size = rawSize > 0 ? static_cast<std::size_t>(rawSize) : 0;
+    std::ostringstream output;
+    output << "{\"programData\":{"
+           << "\"format\":\"vst3\""
+           << ",\"programListId\":" << programListId
+           << ",\"programIndex\":" << programIndex
+           << ",\"size\":" << size
+           << ",\"data\":\"" << streamToBase64(stream, kMaxWorkerProgramDataBytes, "program_data_too_large") << "\""
+           << "}}";
+    return output.str();
   }
 
   std::string setParameter(Steinberg::Vst::ParamID id, double value, std::uint32_t sampleOffset) {
@@ -563,7 +590,7 @@ private:
     if (component_->getState(&stream) != Steinberg::kResultOk) {
       return "";
     }
-    return streamToBase64(stream, "component_state_too_large");
+    return streamToBase64(stream, kMaxWorkerStateBytes, "component_state_too_large");
   }
 
   std::string controllerStateBase64() const {
@@ -575,19 +602,49 @@ private:
     if (controller_->getState(&stream) != Steinberg::kResultOk) {
       return "";
     }
-    return streamToBase64(stream, "controller_state_too_large");
+    return streamToBase64(stream, kMaxWorkerStateBytes, "controller_state_too_large");
   }
 
-  std::string streamToBase64(Steinberg::MemoryStream& stream, const std::string& sizeError) const {
+  std::string streamToBase64(
+      Steinberg::MemoryStream& stream,
+      std::size_t maxBytes,
+      const std::string& sizeError) const {
     const auto size = stream.getSize();
     if (size <= 0) {
       return "";
     }
-    if (static_cast<std::size_t>(size) > kMaxWorkerStateBytes) {
+    if (static_cast<std::size_t>(size) > maxBytes) {
       throw std::runtime_error(sizeError);
     }
     const auto* data = reinterpret_cast<const std::uint8_t*>(stream.getData());
     return base64Encode(data, static_cast<std::size_t>(size));
+  }
+
+  bool programDataSupported(Steinberg::Vst::ProgramListID programListId) const {
+    return programListData_ != nullptr &&
+        programListData_->programDataSupported(programListId) == Steinberg::kResultTrue;
+  }
+
+  bool knownProgram(Steinberg::Vst::ProgramListID programListId, Steinberg::int32 programIndex) const {
+    if (unitInfo_ == nullptr || programIndex < 0) {
+      return false;
+    }
+    const auto listCount = std::clamp<Steinberg::int32>(
+        unitInfo_->getProgramListCount(),
+        0,
+        kMaxWorkerProgramLists);
+    for (Steinberg::int32 listIndex = 0; listIndex < listCount; ++listIndex) {
+      Steinberg::Vst::ProgramListInfo info {};
+      if (unitInfo_->getProgramListInfo(listIndex, info) != Steinberg::kResultOk || info.id != programListId) {
+        continue;
+      }
+      const auto programCount = std::clamp<Steinberg::int32>(
+          info.programCount,
+          0,
+          kMaxWorkerProgramsPerParameter);
+      return programIndex < programCount;
+    }
+    return false;
   }
 
   std::uint32_t defaultBusChannels(Steinberg::Vst::BusDirection direction, Steinberg::int32 index, std::uint32_t fallback) const {
@@ -818,6 +875,7 @@ private:
   Steinberg::IPtr<Steinberg::Vst::IMidiMapping> midiMapping_;
   Steinberg::IPtr<Steinberg::Vst::INoteExpressionController> noteExpressionController_;
   Steinberg::IPtr<Steinberg::Vst::IUnitInfo> unitInfo_;
+  Steinberg::IPtr<Steinberg::Vst::IProgramListData> programListData_;
   double sampleRate_ = 48000.0;
   std::uint32_t maxBlockSize_ = 128;
   std::uint32_t requestedInputChannels_ = 2;
@@ -922,6 +980,30 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
 
         if (command == "programLists") {
           std::cout << host.programListsToJson() << std::endl;
+          continue;
+        }
+
+        if (command == "getProgramData") {
+          std::string programListIdText;
+          std::string programIndexText;
+          std::int32_t programListId = 0;
+          std::int32_t programIndex = 0;
+          stream >> programListIdText;
+          stream >> programIndexText;
+          if (!parseInt32Arg(
+                  programListIdText.c_str(),
+                  std::numeric_limits<std::int32_t>::min(),
+                  std::numeric_limits<std::int32_t>::max(),
+                  programListId) ||
+              !parseInt32Arg(
+                  programIndexText.c_str(),
+                  0,
+                  kMaxWorkerProgramsPerParameter - 1,
+                  programIndex)) {
+            std::cout << "{\"error\":\"invalid_program_data_arguments\"}" << std::endl;
+            continue;
+          }
+          std::cout << host.programDataToJson(programListId, programIndex) << std::endl;
           continue;
         }
 

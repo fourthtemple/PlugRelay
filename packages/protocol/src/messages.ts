@@ -8,6 +8,7 @@ export type ProtocolCommand =
   | "getParameters"
   | "setParameter"
   | "setPreset"
+  | "getVst3ProgramData"
   | "setParameterEvents"
   | "setParameterCurve"
   | "setAutomationLane"
@@ -80,6 +81,7 @@ export interface HelloResponse {
       maxWorkerStderrBytes?: number;
       maxWorkerDiagnosticLogChars?: number;
       maxPluginNoteExpressions?: number;
+      maxPluginProgramDataBytes?: number;
       maxPluginProgramLists?: number;
       maxPluginPrograms?: number;
       maxNoteExpressionTextBytes?: number;
@@ -155,6 +157,7 @@ export interface PluginProgramList {
   id: number;
   name: string;
   unitId?: number;
+  programDataSupported?: boolean;
   programs: PluginProgram[];
 }
 
@@ -361,6 +364,21 @@ export interface SetPresetResponse {
   presetId: string;
   parameterCount: number;
   parameters: PluginParameter[];
+}
+
+export interface GetVst3ProgramDataRequest {
+  instanceId: string;
+  programListId: number;
+  programIndex: number;
+}
+
+export interface GetVst3ProgramDataResponse {
+  instanceId: string;
+  format: "vst3";
+  programListId: number;
+  programIndex: number;
+  size: number;
+  data: string;
 }
 
 export interface ParameterAutomationEvent {

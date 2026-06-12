@@ -43,15 +43,42 @@ try {
     "daemon normalizers bound VST3 unit metadata"
   );
   const [unitProgramList] = unitNormalizers.normalizeVst3ProgramLists([
-    { id: 7, name: "1234567890", unitId: 2, programs: [{ index: 0, name: "1234567890", normalizedValue: 0.5 }] }
+    {
+      id: 7,
+      name: "1234567890",
+      unitId: 2,
+      programDataSupported: true,
+      programs: [{ index: 0, name: "1234567890", normalizedValue: 0.5 }]
+    }
   ]);
   check(
     unitProgramList?.id === 7 &&
       unitProgramList.unitId === 2 &&
+      unitProgramList.programDataSupported === true &&
       unitProgramList.name === "12345678" &&
       unitProgramList.programs?.[0]?.name === "12345678",
     "daemon normalizers bound VST3 program-list metadata"
   );
+  const programData = unitNormalizers.normalizeVst3ProgramData({
+    programListId: 7,
+    programIndex: 0,
+    data: "YWI="
+  });
+  check(
+    programData?.format === "vst3" &&
+      programData.programListId === 7 &&
+      programData.programIndex === 0 &&
+      programData.size === 2,
+    "daemon normalizers bound VST3 program data"
+  );
+  const tinyProgramDataNormalizers = createDaemonNormalizers({ maxPluginProgramDataBytes: 1 });
+  let oversizedProgramData;
+  try {
+    tinyProgramDataNormalizers.normalizeVst3ProgramData({ programListId: 7, programIndex: 0, data: "YWI=" });
+  } catch (error) {
+    oversizedProgramData = error.code;
+  }
+  check(oversizedProgramData === "program_data_too_large", "daemon normalizers reject oversized VST3 program data");
   const [unitExpression] = unitNormalizers.normalizeVst3NoteExpressions([
     {
       typeId: 0,

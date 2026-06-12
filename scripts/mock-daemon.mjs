@@ -61,6 +61,10 @@ const MAX_PLUGIN_NOTE_EXPRESSIONS = Math.min(envInteger("SOUNDBRIDGE_MAX_PLUGIN_
 const MAX_PLUGIN_PARAMETER_TEXT_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_PARAMETER_TEXT_BYTES", 160);
 const MAX_PLUGIN_METADATA_TEXT_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_METADATA_TEXT_BYTES", 256);
 const MAX_PLUGIN_STATE_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_STATE_BYTES", 384 * 1024);
+const MAX_PLUGIN_PROGRAM_DATA_BYTES = Math.min(
+  envInteger("SOUNDBRIDGE_MAX_PLUGIN_PROGRAM_DATA_BYTES", 384 * 1024),
+  MAX_PLUGIN_STATE_BYTES
+);
 const MAX_PLUGIN_STATE_ENVELOPE_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_STATE_ENVELOPE_BYTES", 1024 * 1024);
 const MAX_PLUGIN_LATENCY_SAMPLES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_LATENCY_SAMPLES", 1_048_576);
 const MAX_PLUGIN_TAIL_SAMPLES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_TAIL_SAMPLES", 1_048_576);
@@ -89,6 +93,7 @@ const normalizers = createDaemonNormalizers({
   maxPluginLatencySamples: MAX_PLUGIN_LATENCY_SAMPLES,
   maxPluginParameters: MAX_PLUGIN_PARAMETERS,
   maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
+  maxPluginProgramDataBytes: MAX_PLUGIN_PROGRAM_DATA_BYTES,
   maxPluginProgramLists: MAX_PLUGIN_PROGRAM_LISTS,
   maxPluginParameterTextBytes: MAX_PLUGIN_PARAMETER_TEXT_BYTES,
   maxPluginPrograms: MAX_PLUGIN_PROGRAMS,
@@ -106,7 +111,8 @@ const {
   normalizeLatencySamples,
   normalizeNativeState,
   normalizePluginLayout,
-  normalizeTailSamples
+  normalizeTailSamples,
+  normalizeVst3ProgramData
 } = normalizers;
 const mockInstruments = createMockInstrumentSupport({
   clamp01,
@@ -330,6 +336,9 @@ async function dispatchCommand(envelope, context) {
     case "setPreset":
       return setPreset(payload.instanceId, payload.presetId, session);
 
+    case "getVst3ProgramData":
+      return getVst3ProgramData(payload.instanceId, payload.programListId, payload.programIndex, session);
+
     case "setParameterEvents":
       return setParameterEvents(payload.instanceId, payload.events, session);
 
@@ -428,6 +437,7 @@ function helloResponse(paired) {
         maxAudioChannels: MAX_AUDIO_CHANNELS,
         maxBlockSize: MAX_BLOCK_SIZE,
         maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
+        maxPluginProgramDataBytes: MAX_PLUGIN_PROGRAM_DATA_BYTES,
         maxPluginProgramLists: MAX_PLUGIN_PROGRAM_LISTS,
         maxPluginPrograms: MAX_PLUGIN_PROGRAMS,
         maxNoteExpressionTextBytes: MAX_NOTE_EXPRESSION_TEXT_BYTES,
@@ -695,6 +705,35 @@ async function setPreset(instanceId, presetId, session) {
     presetId: preset.id,
     parameterCount: parameters.length,
     parameters
+  };
+}
+
+async function getVst3ProgramData(instanceId, programListId, programIndex, session) {
+  const instance = getInstance(instanceId, session);
+  if (instance.format !== "vst3" || !instance.worker || typeof instance.worker.getVst3ProgramData !== "function") {
+    throw protocolError("program_data_not_supported", "VST3 program data is available only for supported VST3 instances.");
+  }
+
+  const safeProgramListId = requireIntInRange(programListId, -2147483648, 2147483647, "programListId");
+  const safeProgramIndex = requireIntInRange(programIndex, 0, MAX_PLUGIN_PROGRAMS - 1, "programIndex");
+  const programList = (instance.vst3ProgramLists ?? []).find((list) => list.id === safeProgramListId);
+  const listedProgram = programList?.programs?.some((program) => program.index === safeProgramIndex);
+  if (!programList?.programDataSupported || !listedProgram) {
+    throw protocolError("program_data_not_supported", "The requested VST3 program does not expose bounded program data.");
+  }
+
+  const programData = normalizeVst3ProgramData(
+    await instance.worker.getVst3ProgramData(safeProgramListId, safeProgramIndex)
+  );
+  if (!programData) {
+    throw protocolError("program_data_not_supported", "The VST3 worker did not return program data.");
+  }
+  if (programData.programListId !== safeProgramListId || programData.programIndex !== safeProgramIndex) {
+    throw protocolError("bad_program_data", "The VST3 worker returned mismatched program data metadata.");
+  }
+  return {
+    ...programData,
+    instanceId
   };
 }
 

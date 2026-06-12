@@ -7,6 +7,7 @@ export function createDaemonNormalizers(options = {}) {
     maxPluginParameters: positiveInteger(options.maxPluginParameters, 1024),
     maxPluginParameterTextBytes: positiveInteger(options.maxPluginParameterTextBytes, 160),
     maxPluginNoteExpressions: positiveInteger(options.maxPluginNoteExpressions, 256),
+    maxPluginProgramDataBytes: positiveInteger(options.maxPluginProgramDataBytes, 384 * 1024),
     maxPluginProgramLists: positiveInteger(options.maxPluginProgramLists, 256),
     maxPluginPrograms: positiveInteger(options.maxPluginPrograms, 256),
     maxPluginStateBytes: positiveInteger(options.maxPluginStateBytes, 384 * 1024),
@@ -166,6 +167,9 @@ export function createDaemonNormalizers(options = {}) {
     if (programList.unitId !== undefined) {
       normalized.unitId = normalizeInt(programList.unitId, -2147483648, 2147483647, -1);
     }
+    if (programList.programDataSupported === true) {
+      normalized.programDataSupported = true;
+    }
     return normalized;
   }
 
@@ -177,6 +181,29 @@ export function createDaemonNormalizers(options = {}) {
       .slice(0, limits.maxPluginProgramLists)
       .map((programList) => normalizeProgramList(programList))
       .filter(Boolean);
+  }
+
+  function normalizeVst3ProgramData(programData) {
+    if (!programData || typeof programData !== "object") {
+      return undefined;
+    }
+    const data = String(programData.data ?? "");
+    if (!isBase64Text(data)) {
+      throw protocolError("bad_program_data", "VST3 program data was not valid base64.");
+    }
+    const size = decodedBase64Length(data);
+    if (size > limits.maxPluginProgramDataBytes) {
+      throw protocolError("program_data_too_large", "VST3 program data exceeded the configured limit.", {
+        maxProgramDataBytes: limits.maxPluginProgramDataBytes
+      });
+    }
+    return {
+      format: "vst3",
+      programListId: normalizeInt(programData.programListId, -2147483648, 2147483647, 0),
+      programIndex: normalizeInt(programData.programIndex, 0, limits.maxPluginPrograms - 1, 0),
+      size,
+      data
+    };
   }
 
   function normalizeVst3NoteExpressions(expressions) {
@@ -474,6 +501,7 @@ export function createDaemonNormalizers(options = {}) {
     normalizeTailReport,
     normalizeTailSamples,
     normalizeVst3NoteExpressions,
+    normalizeVst3ProgramData,
     normalizeVst3ProgramLists,
     normalizeWorkerParameter,
     normalizeWorkerParameters,

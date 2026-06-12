@@ -25,6 +25,7 @@ constexpr std::size_t kMaxWorkerParameterChanges = 4096;
 constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
 constexpr Steinberg::int32 kMaxWorkerProgramLists = 256;
 constexpr Steinberg::int32 kMaxWorkerProgramsPerParameter = 256;
+constexpr std::size_t kMaxWorkerProgramDataBytes = 384 * 1024;
 constexpr Steinberg::int32 kMaxWorkerUnits = 1024;
 constexpr Steinberg::int32 kMaxWorkerNoteExpressionTypes = 256;
 constexpr std::size_t kMaxWorkerNoteExpressionTextBytes = 256;
@@ -100,6 +101,7 @@ struct RenderedAudio {
 
 float sanitizeSample(const std::string& text);
 bool parseUint32Arg(const char* text, std::uint32_t minValue, std::uint32_t maxValue, std::uint32_t& out);
+bool parseInt32Arg(const char* text, std::int32_t minValue, std::int32_t maxValue, std::int32_t& out);
 bool parseParamIdArg(const char* text, Steinberg::Vst::ParamID& out);
 bool parseSampleRateArg(const char* text, double& out);
 bool parseDoubleArg(const char* text, double minValue, double maxValue, double& out);
@@ -110,7 +112,9 @@ bool parseAudioBuses(const std::string& encoded, std::uint32_t frames, std::vect
 const std::vector<std::vector<float>>* findBusChannels(const std::vector<IndexedAudioBus>& buses, std::uint32_t index);
 bool parseMidiEvents(const std::string& encoded, std::vector<PendingMidiEvent>& events);
 bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinberg::Vst::Event& event);
-std::string programListsToJson(Steinberg::Vst::IUnitInfo* unitInfo);
+std::string programListsToJson(
+    Steinberg::Vst::IUnitInfo* unitInfo,
+    Steinberg::Vst::IProgramListData* programListData);
 std::string noteExpressionsToJson(Steinberg::Vst::INoteExpressionController* noteExpressionController);
 std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels);
 std::string renderedAudioToJson(const RenderedAudio& rendered);

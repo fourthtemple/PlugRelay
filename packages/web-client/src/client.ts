@@ -6,6 +6,7 @@ import type {
   CreateInstanceRequest,
   CreateInstanceResponse,
   CloseEditorResponse,
+  GetVst3ProgramDataResponse,
   HelloResponse,
   MidiEvent,
   OpenEditorResponse,
@@ -132,6 +133,14 @@ export class SoundBridgeClient extends EventTarget {
     parameters: PluginParameter[];
   }> {
     return this.request("setPreset", { instanceId, presetId });
+  }
+
+  getVst3ProgramData(
+    instanceId: string,
+    programListId: number,
+    programIndex: number
+  ): Promise<GetVst3ProgramDataResponse> {
+    return this.request("getVst3ProgramData", { instanceId, programListId, programIndex });
   }
 
   setParameterEvents(
