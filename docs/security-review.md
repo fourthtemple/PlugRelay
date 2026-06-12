@@ -61,6 +61,8 @@ This file is an audit trail, not an active bug backlog. The original security fi
 
 ## Open Roadmap Items
 
+The active product roadmap lives in [Roadmap](roadmap.md). The items below are retained here only where they matter to the security review.
+
 ### Full VST3/AU/LV2 Hosting Surface
 
 Full plugin hosting should be tracked as security-sensitive roadmap work, not just compatibility work. These controls apply to browser apps and local apps because both are crossing into third-party native plugin code.

@@ -63,7 +63,7 @@ The final hardening layer is an operating-system sandbox around third-party plug
 
 ## Source Size Fitness
 
-`npm run check` includes `scripts/check-file-sizes.mjs`. Source files have a 1000-line hard cap, and files at or above 750 lines need a reviewed near-limit budget that cannot grow. Current large files are pinned to their reviewed line counts, so new host features must extract focused modules instead of quietly extending already-large files.
+`npm run check` includes `scripts/check-file-sizes.mjs`. Source files have a 1000-line hard cap, and files at or above 750 lines must either be split or receive an explicit reviewed near-limit budget that cannot grow. The current tree has no reviewed near-limit exceptions, so new host features should extract focused modules instead of quietly extending already-large files.
 
 When adding behavior near that limit, prefer extracting a focused scanner, parser, bus router, state adapter, or smoke helper before adding more logic. This keeps security-sensitive code reviewable and makes future sandboxing boundaries easier to see.
 

@@ -1,0 +1,123 @@
+# Roadmap
+
+This roadmap tracks what still needs to be completed for SoundBridge to become a dependable open standard and reference implementation for hosting local VST3, Audio Unit, and LV2 plugins from browser or desktop hosts.
+
+The current priority is core hosting compatibility first. OS-level sandboxing remains the final hardening layer, after the host adapters are feature-complete enough to exercise real plugin behavior.
+
+## Current Baseline
+
+SoundBridge already has the core security and host shape in place:
+
+- loopback daemon with pairing, origin checks, session ownership, and bounded request envelopes
+- installed VST3 hosting through the Steinberg VST3 SDK worker when the SDK is available
+- installed macOS Audio Unit hosting through the CoreAudio worker for realtime-compatible profiles
+- installed compatible LV2 audio/control hosting through the native LV2 C ABI worker
+- bounded plugin scanning metadata for VST3, AU, and LV2 without exposing launch paths to browsers
+- bounded parameters, automation events, automation curves, timeline lanes, MIDI events, transport context, latency, tail, state, bus layouts, and file-grant operations
+- generic parameter editor sessions
+- opt-in file grant broker foundation with path-free browser responses
+- native worker IPC limits for command size, pending commands, stdout/stderr lines, diagnostics, startup, timeout, and termination
+- source-size guardrails: 1000-line hard cap, 750-line near-limit threshold, and zero reviewed exceptions
+
+## Near-Term Core Hosting Work
+
+These are the next things that matter for musicians actually loading plugins.
+
+### VST3
+
+- Expand installed-plugin compatibility testing across more vendors, instruments, effects, multi-output instruments, sidechain effects, and plugins with unusual bus layouts.
+- Exercise more VST3 event-bus and channel cases, especially instruments that use multiple event buses or note-expression behavior beyond the current happy path.
+- Harden remaining edge cases around SDK program lists and program data where plugins advertise support but return partial, empty, or format-specific data.
+- Add focused regression fixtures for VST3 multi-bus rendering, program-data restore, note-expression text, and MIDI-controller parameter mapping.
+- Keep all new VST3 work behind the existing bounds for parameter counts, program data bytes, note-expression text, bus counts, block size, and worker IPC.
+
+### Audio Unit
+
+- Add explicit host profiles for AU offline render effects instead of keeping them discovery-only.
+- Add dedicated profiles for AU units that need advanced splitter, mixer, or format-converter lifecycles beyond the currently supported realtime utility profiles.
+- Expand AU MIDI and transport compatibility against more instrument and effect units.
+- Add AU-specific fixtures for multi-input, multi-output, offline render, preset/state restore, and host-callback behavior.
+- Keep unsupported AU profiles discovery-only until each profile has a bounded lifecycle, layout contract, and smoke coverage.
+
+### LV2
+
+- Add LV2 UI hosting through a separate native UI broker, not inside the daemon.
+- Decide which additional LV2 extensions become core support and implement them one at a time with explicit feature structs, byte caps, and compatibility tests.
+- Improve Turtle parsing coverage without adding GPL dependencies to the core.
+- Add fixtures for more LV2 extension combinations, including plugins with richer atom data, unusual port groups, and stricter block-size requirements.
+- Keep unsupported `lv2:requiredFeature` and `opts:requiredOption` declarations discovery-only until the matching host contract exists.
+
+## Native Editor And File Workflows
+
+Generic parameter editors work today. Native plugin UI is intentionally still a controlled roadmap item.
+
+- Implement the real platform UI broker for VST3, AU, and LV2 editor windows.
+- Keep native editor windows out of the daemon process.
+- Preserve explicit opt-in flags for file dialogs, clipboard, drag/drop, and any UI surface that can move data between plugin code and the host.
+- Add browser-visible capability reporting for native editor features only after the broker enforces the policy.
+- Expand file-grant operations beyond `loadPreset`, `restoreState`, and `saveStateDirectory` only as operation-specific adapter work.
+- Add grant-backed `loadSample`, cache access, and license-file workflows only with explicit purpose/access/kind constraints and path-free browser responses.
+- Treat vendor preset formats as plugin-specific file workflows, not generic browser-provided paths.
+
+## Browser And Transport Work
+
+The current JSON/WebSocket audio path is good for correctness and demos. It is not the final low-latency transport.
+
+- Add binary audio frames for `processAudioBlock`.
+- Move browser transport work off the main thread.
+- Add `SharedArrayBuffer` ring buffers where cross-origin isolation is available.
+- Add adaptive buffering, underrun reporting, and latency compensation suitable for Web DAWs.
+- Keep the protocol transport abstraction open for WebRTC data channels, shared-memory helpers, or desktop-host transports.
+- Keep the same pairing, origin, session, instance, and resource-limit model across browser and local desktop hosts.
+
+## Desktop And Cross-Platform Work
+
+The reference implementation is macOS-first today.
+
+- Package and sign the macOS bridge daemon.
+- Add a production first-run approval UX instead of the development token prompt.
+- Notarize the macOS build and document installation/update behavior.
+- Add Windows VST3 hosting support.
+- Add Linux VST3 and LV2 hosting support.
+- Keep Audio Unit support macOS-only.
+- Define how JUCE-based desktop hosts can talk to the same worker boundary instead of loading third-party plugins directly into the app process.
+
+## Compatibility And Release Testing
+
+- Maintain an installed-plugin compatibility matrix by format, vendor, plugin type, and feature coverage.
+- Keep `npm run probe:installed` as the repeatable local compatibility harness.
+- Add more native fixtures for edge cases that cannot run in CI with commercial plugins.
+- Track pass/fail separately for scanning, instantiation, parameters, preset snapshots, program data, state, file grants, MIDI, transport, rendering, bus layouts, latency, tail, and editor behavior.
+- Keep CI focused on source-size guardrails, security smoke tests, worker IPC limits, and broker contracts.
+
+## Documentation And Standardization
+
+- Keep README focused on quick-start hosting from a website.
+- Keep protocol docs normative about payload shapes, limits, ownership, and per-format behavior.
+- Keep security docs explicit about the trust boundary crossed by browser and desktop hosts.
+- Document why applications should use an auditable open bridge instead of opaque localhost helpers.
+- Publish the native editor broker, file grant broker, and worker IPC contracts clearly enough for independent implementations.
+- Add versioning guidance for protocol evolution and backward compatibility.
+
+## Last-Stage Hardening
+
+OS-level plugin sandboxing is intentionally last because the sandbox profile has to match real host behavior.
+
+- macOS: evaluate App Sandbox and seatbelt profiles for worker processes.
+- Windows: evaluate AppContainer, job objects, restricted tokens, and filesystem/network policy options.
+- Linux: evaluate namespaces, seccomp, Landlock, Bubblewrap, or Flatpak-style isolation.
+- Deny ambient filesystem access by default and grant only explicit broker-approved paths.
+- Deny network access where the platform sandbox can enforce it.
+- Keep plugin crashes isolated to the worker process.
+- Preserve the same sandbox architecture for web apps and desktop apps, including JUCE-based local hosts.
+
+## Done Criteria
+
+SoundBridge is ready to call production-grade when:
+
+- a normal developer can install the bridge, pair a site, scan plugins, create VST3/AU/LV2 instances, and process audio without reading internal docs
+- common commercial and open-source VST3/AU/LV2 plugins work through the compatibility probe
+- native editor and file workflows are brokered, opt-in, and path-free from the browser perspective
+- all host adapters have smoke coverage for malformed input, oversized payloads, ownership violations, and worker failure
+- the build ships with platform packaging, update, signing, and first-run approval UX
+- OS-level worker sandboxing is implemented for the supported target platforms

@@ -254,6 +254,7 @@ npm run check
 - [Native editor broker](docs/native-editor-broker.md)
 - [File grant approval broker](docs/file-grant-approval-broker.md)
 - [Why browser plugin bridges need an open standard](docs/open-standard.md)
+- [Roadmap](docs/roadmap.md)
 - [Architecture](docs/architecture.md)
 - [Web DAW integration](docs/daw-integration.md)
 
