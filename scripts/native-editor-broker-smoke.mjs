@@ -8,6 +8,22 @@ import { createDaemonEditors } from "./daemon-editors.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(scriptDir, "native-editor-broker-fixture.mjs");
+const fixtureEditor = {
+  editorId: "editor-00000000-0000-4000-8000-000000000001"
+};
+const fixtureInstance = {
+  instanceId: "inst-00000000-0000-4000-8000-000000000001",
+  pluginId: "vst3:fixture.vst3",
+  format: "vst3",
+  kind: "effect",
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  nativeHost: {
+    format: "vst3",
+    renderEngine: "native-vst3",
+    bundlePath: "/tmp/fixture.vst3"
+  }
+};
 const broker = new NativeEditorBroker({
   executablePath: process.execPath,
   args: [fixturePath],
@@ -24,22 +40,8 @@ const broker = new NativeEditorBroker({
 });
 
 const opened = await broker.openEditor({
-  editor: {
-    editorId: "editor-00000000-0000-4000-8000-000000000001"
-  },
-  instance: {
-    instanceId: "inst-00000000-0000-4000-8000-000000000001",
-    pluginId: "vst3:fixture.vst3",
-    format: "vst3",
-    kind: "effect",
-    sampleRate: 48000,
-    maxBlockSize: 128,
-    nativeHost: {
-      format: "vst3",
-      renderEngine: "native-vst3",
-      bundlePath: "/tmp/fixture.vst3"
-    }
-  }
+  editor: fixtureEditor,
+  instance: fixtureInstance
 });
 
 assert(opened.brokerSessionId.startsWith("fixture-editor-"), "broker returns bounded session id");
@@ -89,6 +91,13 @@ assertThrows(
     }),
   "oversized broker args are rejected"
 );
+await assertRejectsBroker("bad-ready", "bad ready handshakes are rejected", "native_editor_broker_ready_invalid");
+await assertRejectsBroker("malformed-ready", "malformed ready handshakes are rejected", "stdout_malformed");
+await assertRejectsBroker("ready-timeout", "missing ready handshakes time out", "ready_timeout");
+await assertRejectsBroker("open-error", "broker open errors are rejected", "fixture_open_failed");
+await assertRejectsBroker("malformed-open", "malformed command responses are rejected", "stdout_malformed");
+await assertRejectsBroker("oversized-open", "oversized command responses are rejected", "line_too_large");
+await assertRejectsBroker("open-timeout", "missing command responses time out", "command_timeout");
 
 const editors = new Map();
 const session = {
@@ -185,4 +194,31 @@ function assertThrows(callback, message) {
     threw = true;
   }
   assert(threw, message);
+}
+
+async function assertRejectsBroker(mode, message, expectedErrorText) {
+  const failingBroker = new NativeEditorBroker({
+    executablePath: process.execPath,
+    args: [fixturePath, mode],
+    limits: {
+      maxWorkerStdoutLineBytes: 128,
+      maxWorkerCommandBytes: 64 * 1024,
+      maxWorkerStderrLineBytes: 16 * 1024,
+      maxWorkerStderrBytes: 64 * 1024,
+      maxWorkerDiagnosticLogChars: 1024,
+      workerReadyTimeoutMs: 50,
+      nativeWorkerCommandTimeoutMs: 50,
+      workerTerminationGraceMs: 10
+    }
+  });
+  try {
+    await failingBroker.openEditor({
+      editor: fixtureEditor,
+      instance: fixtureInstance
+    });
+  } catch (error) {
+    assert(String(error?.message ?? error).includes(expectedErrorText), message);
+    return;
+  }
+  throw new Error(message);
 }

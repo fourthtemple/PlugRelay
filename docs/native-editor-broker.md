@@ -86,6 +86,8 @@ Command errors should be returned as:
 
 The broker IPC uses the daemon worker limits for stdout line size, stderr line size and budget, command size, ready timeout, command timeout, diagnostic log length, and termination grace. These limits are advertised under `hello.capabilities.security`.
 
+Malformed JSON, invalid ready handshakes, oversized stdout/stderr lines, missing responses, and broker-reported command errors fail closed and tear down the broker session.
+
 Native editor sessions keep the same ownership model as generic editor sessions:
 
 - opening requires a paired session that owns the plugin instance
