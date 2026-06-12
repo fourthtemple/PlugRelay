@@ -65,6 +65,9 @@ export function createDaemonFileGrantOperations({
   }
 
   function operationConstraints(operation, payload) {
+    if (operation === "other") {
+      requireOtherOperationConstraints(payload);
+    }
     const defaults = FILE_GRANT_OPERATIONS.get(operation) ?? {};
     const constraints = { ...defaults };
     for (const field of ["access", "kind", "purpose"]) {
@@ -78,6 +81,14 @@ export function createDaemonFileGrantOperations({
       constraints[field] = requested;
     }
     return constraints;
+  }
+
+  function requireOtherOperationConstraints(payload) {
+    for (const field of ["purpose", "access", "kind"]) {
+      if (payload[field] == null) {
+        throw makeProtocolError("invalid_argument", "`other` file grant operations require explicit purpose, access, and kind constraints.");
+      }
+    }
   }
 
   function requireOperation(value) {

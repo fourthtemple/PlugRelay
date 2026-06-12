@@ -1023,6 +1023,15 @@
       "type": "object",
       "required": ["instanceId", "grantId", "operation"],
       "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "operation": { "const": "other" } },
+            "required": ["operation"]
+          },
+          "then": { "required": ["purpose", "access", "kind"] }
+        }
+      ],
       "properties": {
         "instanceId": { "type": "string", "minLength": 1, "maxLength": 80 },
         "grantId": { "type": "string", "minLength": 1, "maxLength": 80 },

@@ -760,7 +760,7 @@ Plugin instances can hold path-free references to session-owned file grants. Thi
 }
 ```
 
-Supported operation names are `loadPreset`, `loadSample`, `openCacheDirectory`, `loadLicense`, `restoreState`, `saveStateDirectory`, and `other`. Operation names imply conservative purpose/access/kind constraints where possible; for example, `loadSample` requires a read-only sample file and `openCacheDirectory` requires a read/write cache directory. The daemon must reject mismatches before worker dispatch.
+Supported operation names are `loadPreset`, `loadSample`, `openCacheDirectory`, `loadLicense`, `restoreState`, `saveStateDirectory`, and `other`. Operation names imply conservative purpose/access/kind constraints where possible; for example, `loadSample` requires a read-only sample file and `openCacheDirectory` requires a read/write cache directory. The generic `other` operation is allowed only when `purpose`, `access`, and `kind` are all supplied explicitly. The daemon must reject mismatches before worker dispatch.
 
 Hosts should check the selected plugin's `fileGrantOperations` metadata before offering a file-backed action. The daemon still revalidates the operation against the live worker and returns `unsupported_file_grant_operation` when the operation is known to the protocol but unavailable for that plugin or worker profile.
 

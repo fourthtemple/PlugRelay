@@ -20,7 +20,7 @@ export async function exerciseDaemonFileGrantOperation({ absolutePath, check, pr
     instanceId: "inst-test",
     ownerSessionToken: session.sessionToken,
     fileGrantAttachments: new Map(),
-    fileGrantOperations: ["loadSample", "loadLicense"],
+    fileGrantOperations: ["loadSample", "loadLicense", "other"],
     worker: {
       async useFileGrant({ operation, grant: workerGrant }) {
         observedAbsolutePath = workerGrant.absolutePath;
@@ -90,6 +90,34 @@ export async function exerciseDaemonFileGrantOperation({ absolutePath, check, pr
     missingOperationCode = error.code;
   }
   check(missingOperationCode === "invalid_argument", "daemon file grant operations require an explicit operation");
+
+  let unconstrainedOtherCode;
+  try {
+    await operations.useFileGrant({
+      instanceId: instance.instanceId,
+      grantId: grant.grantId,
+      operation: "other"
+    }, session);
+  } catch (error) {
+    unconstrainedOtherCode = error.code;
+  }
+  check(unconstrainedOtherCode === "invalid_argument", "daemon file grant operations require explicit constraints for other operations");
+
+  const otherResponse = await operations.useFileGrant({
+    instanceId: instance.instanceId,
+    grantId: grant.grantId,
+    operation: "other",
+    purpose: "sample",
+    access: "read",
+    kind: "file"
+  }, session);
+  check(
+    otherResponse.accepted === true &&
+      otherResponse.operation === "other" &&
+      otherResponse.applied === false &&
+      observedAbsolutePath === absolutePath,
+    "daemon file grant operations allow explicitly constrained other operations"
+  );
 
   let invalidOperationCode;
   try {

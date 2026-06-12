@@ -433,14 +433,23 @@ export type FileGrantOperation =
   | "saveStateDirectory"
   | "other";
 
-export interface UseFileGrantRequest {
-  instanceId: string;
-  grantId: string;
-  operation: FileGrantOperation;
-  purpose?: FileGrantPurpose;
-  access?: FileGrantAccess;
-  kind?: FileGrantKind;
-}
+export type UseFileGrantRequest =
+  | {
+      instanceId: string;
+      grantId: string;
+      operation: Exclude<FileGrantOperation, "other">;
+      purpose?: FileGrantPurpose;
+      access?: FileGrantAccess;
+      kind?: FileGrantKind;
+    }
+  | {
+      instanceId: string;
+      grantId: string;
+      operation: "other";
+      purpose: FileGrantPurpose;
+      access: FileGrantAccess;
+      kind: FileGrantKind;
+    };
 
 export interface UseFileGrantResponse {
   accepted: boolean;
