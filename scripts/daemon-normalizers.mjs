@@ -84,12 +84,37 @@ export function createDaemonNormalizers(options = {}) {
       stepCount: Math.max(0, Math.min(1_000_000, Math.floor(Number(parameter.stepCount ?? 0)))),
       readOnly: Boolean(parameter.readOnly)
     };
+    const vst3Unit = normalizeVst3Unit(parameter.vst3Unit);
+    if (vst3Unit) {
+      normalized.vst3Unit = vst3Unit;
+    }
     if (parameter.programChange === true) {
       normalized.programChange = true;
       const programList = normalizeProgramList(parameter.programList);
       if (programList) {
         normalized.programList = programList;
       }
+    }
+    return normalized;
+  }
+
+  function normalizeVst3Unit(unit) {
+    if (!unit || typeof unit !== "object") {
+      return undefined;
+    }
+    const rawId = Number(unit.id);
+    if (!Number.isInteger(rawId) || rawId < -2147483648 || rawId > 2147483647) {
+      return undefined;
+    }
+    const id = rawId;
+    const name = truncateText(unit.name ?? `Unit ${id}`, limits.maxPluginParameterTextBytes) || `Unit ${id}`;
+    const normalized = {
+      id,
+      parentUnitId: normalizeInt(unit.parentUnitId, -2147483648, 2147483647, 0),
+      name
+    };
+    if (unit.programListId !== undefined) {
+      normalized.programListId = normalizeInt(unit.programListId, -2147483648, 2147483647, 0);
     }
     return normalized;
   }

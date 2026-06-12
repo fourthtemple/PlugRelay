@@ -123,6 +123,12 @@ export function createMockInstrumentSupport({ clamp01, finiteNumber }) {
       automatable: true,
       stepCount: programs.length - 1,
       programChange: true,
+      vst3Unit: {
+        id: 1,
+        parentUnitId: 0,
+        name: "Main Unit",
+        programListId: 0
+      },
       programList: {
         id: 0,
         name: "Programs",

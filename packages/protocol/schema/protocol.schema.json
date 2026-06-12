@@ -262,8 +262,20 @@
         "automatable": { "type": "boolean" },
         "stepCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
         "readOnly": { "type": "boolean" },
+        "vst3Unit": { "$ref": "#/$defs/pluginVst3Unit" },
         "programChange": { "type": "boolean" },
         "programList": { "$ref": "#/$defs/pluginProgramList" }
+      }
+    },
+    "pluginVst3Unit": {
+      "type": "object",
+      "required": ["id", "parentUnitId", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "parentUnitId": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "name": { "type": "string", "maxLength": 160 },
+        "programListId": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 }
       }
     },
     "pluginProgram": {

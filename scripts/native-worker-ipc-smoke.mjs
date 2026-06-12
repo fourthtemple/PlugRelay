@@ -21,6 +21,28 @@ const failures = [];
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-worker-ipc-"));
 
 try {
+  const unitNormalizers = createDaemonNormalizers({ maxPluginParameterTextBytes: 8 });
+  const unitParameter = unitNormalizers.normalizeWorkerParameter({
+    id: "unit-param",
+    name: "Unit Param",
+    normalizedValue: 0.5,
+    defaultNormalizedValue: 0.5,
+    automatable: true,
+    vst3Unit: {
+      id: 2,
+      parentUnitId: 0,
+      name: "1234567890",
+      programListId: 7
+    }
+  });
+  check(
+    unitParameter?.vst3Unit?.id === 2 &&
+      unitParameter.vst3Unit.parentUnitId === 0 &&
+      unitParameter.vst3Unit.programListId === 7 &&
+      unitParameter.vst3Unit.name === "12345678",
+    "daemon normalizers bound VST3 unit metadata"
+  );
+
   const exampleWorkerPath = writeExecutable(
     "oversized-example-worker.mjs",
     `#!/usr/bin/env node

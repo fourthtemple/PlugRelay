@@ -100,7 +100,7 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Plugin parameters per instance | 1024 | `getParameters`, `listPlugins`, `createInstance.plugin.parameters` |
 | Parameter id/name/unit text and flags | 64 / 160 / 64 bytes; read-only writes rejected | `getParameters`, `setParameter.parameterId`, `setParameterEvents.events[].parameterId`, `setParameterCurve.parameterId`, `setPreset` |
 | Plugin presets | 256 presets, 64-byte ids, 160-byte names, 1024 bounded parameter values per preset | `listPlugins`, `scanPlugins`, `setPreset.presetId` |
-| VST3 program metadata | 256 lists, 1024 units, 256 programs per parameter, 160-byte names | `getParameters`, `createInstance.plugin.parameters` |
+| VST3 unit/program metadata | 1024 units, 256 lists, 256 programs per parameter, 160-byte names | `getParameters`, `createInstance.plugin.parameters` |
 | Generic editor sessions | 8 per session / 32 total / 10-minute TTL | `openEditor`, `closeEditor` |
 | Native plugin state bytes / state envelope | 384 KiB / 1 MiB | `getState`, `setState` |
 | LV2 file-backed state | 64 files, 64 KiB per file, 192 KiB total, 256-byte relative paths | LV2 `state:mapPath` / `state:makePath` |

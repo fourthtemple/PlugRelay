@@ -279,8 +279,12 @@ async function run() {
   check(
     mockProgram?.programChange === true &&
       mockProgram.programList?.programs?.length === 4 &&
-      mockProgram.programList.programs.every((program) => typeof program.name === "string" && program.name.length <= 160),
-    "createInstance exposes bounded program-list parameter metadata"
+      mockProgram.programList.programs.every((program) => typeof program.name === "string" && program.name.length <= 160) &&
+      mockProgram.vst3Unit?.id === 1 &&
+      mockProgram.vst3Unit?.programListId === mockProgram.programList.id &&
+      typeof mockProgram.vst3Unit?.name === "string" &&
+      mockProgram.vst3Unit.name.length <= 160,
+    "createInstance exposes bounded VST3 unit and program-list parameter metadata"
   );
   const selectedProgram = await request(
     main,

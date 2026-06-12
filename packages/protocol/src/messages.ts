@@ -129,8 +129,16 @@ export interface PluginParameter {
   automatable: boolean;
   stepCount?: number;
   readOnly?: boolean;
+  vst3Unit?: PluginVst3Unit;
   programChange?: boolean;
   programList?: PluginProgramList;
+}
+
+export interface PluginVst3Unit {
+  id: number;
+  parentUnitId: number;
+  name: string;
+  programListId?: number;
 }
 
 export interface PluginProgram {
