@@ -38,7 +38,7 @@ export class NativeEditorBroker {
     return true;
   }
 
-  async openEditor({ editor, instance }) {
+  async openEditor({ editor, fileGrants = [], instance }) {
     const session = new NativeEditorBrokerSession({
       args: this.args,
       executablePath: this.executablePath,
@@ -55,6 +55,7 @@ export class NativeEditorBroker {
         kind: instance.kind,
         sampleRate: instance.sampleRate,
         maxBlockSize: instance.maxBlockSize,
+        fileGrants: normalizeBrokerFileGrants(fileGrants),
         nativeHost: instance.nativeHost
       });
       return {
@@ -258,7 +259,10 @@ function parseBrokerArgs(rawArgs) {
     throw new Error("SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS must be a JSON array of up to 16 strings.");
   }
   return parsed.map((arg) => {
-    const value = String(arg ?? "");
+    if (typeof arg !== "string") {
+      throw new Error("SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS must contain only strings.");
+    }
+    const value = arg;
     if (Buffer.byteLength(value, "utf8") > 4096) {
       throw new Error("SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS contains an oversized argument.");
     }
@@ -275,6 +279,22 @@ function normalizeBrokerCapabilities(capabilities) {
     clipboard: value.clipboard === true,
     dragAndDrop: value.dragAndDrop === true
   };
+}
+
+function normalizeBrokerFileGrants(fileGrants) {
+  if (!Array.isArray(fileGrants)) {
+    return [];
+  }
+  return fileGrants.slice(0, 64).map((grant) => ({
+    grantId: safeText(grant?.grantId, 80),
+    purpose: safeText(grant?.purpose, 32),
+    access: safeText(grant?.access, 32),
+    kind: safeText(grant?.kind, 32),
+    displayName: safeText(grant?.displayName, 256),
+    absolutePath: safeText(grant?.absolutePath, 4096),
+    createdAt: Number.isFinite(Number(grant?.createdAt)) ? Number(grant.createdAt) : 0,
+    expiresAt: Number.isFinite(Number(grant?.expiresAt)) ? Number(grant.expiresAt) : 0
+  }));
 }
 
 function normalizeLimits(limits) {

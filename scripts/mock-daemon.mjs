@@ -283,6 +283,9 @@ const { openEditor, closeEditor } = createDaemonEditors({
   },
   makeProtocolError: protocolError,
   nativeEditorBroker,
+  resolveNativeFileGrants(instance, session) {
+    return instanceFileGrantSupport.nativeFileGrantsForInstance(instance, session);
+  },
   resolvePlugin: getPlugin
 });
 const {

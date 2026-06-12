@@ -48,11 +48,23 @@ export function createDaemonInstanceFileGrants({
     };
   }
 
+  function nativeFileGrantsForInstance(instance, session) {
+    cleanupStaleAttachments(instance, session);
+    return Array.from(ensureAttachmentMap(instance).keys()).map((grantId) => {
+      const grant = fileGrantSupport.resolveFileGrantForUse(grantId, session);
+      return {
+        ...fileGrantSupport.publicFileGrant(grant),
+        absolutePath: grant.absolutePath
+      };
+    });
+  }
+
   function cleanupStaleAttachments(instance, session) {
     const attachments = ensureAttachmentMap(instance);
     for (const [grantId, attachment] of Array.from(attachments.entries())) {
       try {
         fileGrantSupport.resolveFileGrantForUse(grantId, session, {
+          access: attachment.access,
           kind: attachment.kind,
           purpose: attachment.purpose
         });
@@ -80,7 +92,8 @@ export function createDaemonInstanceFileGrants({
   return {
     attachFileGrant,
     detachFileGrant,
-    listInstanceFileGrants
+    listInstanceFileGrants,
+    nativeFileGrantsForInstance
   };
 }
 

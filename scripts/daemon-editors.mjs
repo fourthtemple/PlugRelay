@@ -10,6 +10,7 @@ export function createDaemonEditors({
   limits,
   makeProtocolError,
   nativeEditorBroker,
+  resolveNativeFileGrants,
   resolvePlugin
 }) {
   async function openEditor(payload, session) {
@@ -98,7 +99,8 @@ export function createDaemonEditors({
     };
 
     try {
-      const opened = await nativeEditorBroker.openEditor({ editor, instance });
+      const fileGrants = resolveNativeFileGrants?.(instance, session) ?? [];
+      const opened = await nativeEditorBroker.openEditor({ editor, fileGrants, instance });
       editor.brokerSessionId = opened.brokerSessionId;
       editor.capabilities = opened.capabilities;
       editor.close = () => opened.brokerSession?.close(editor.editorId);

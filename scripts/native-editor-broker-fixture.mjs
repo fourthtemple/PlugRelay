@@ -1,4 +1,5 @@
 const mode = process.argv[2] ?? "ok";
+const expectedFileGrantPath = process.argv[3];
 
 if (mode === "bad-ready") {
   process.stdout.write(`${JSON.stringify({ ok: false, ready: true })}\n`);
@@ -40,6 +41,20 @@ process.stdin.on("data", (chunk) => {
       if (mode === "oversized-open") {
         process.stdout.write(`${"x".repeat(4096)}\n`);
         continue;
+      }
+      if (mode === "require-file-grants") {
+        const grant = Array.isArray(message.fileGrants) ? message.fileGrants[0] : undefined;
+        if (
+          !grant ||
+          grant.absolutePath !== expectedFileGrantPath ||
+          grant.grantId !== "filegrant-00000000-0000-4000-8000-000000000001" ||
+          grant.purpose !== "sample" ||
+          grant.access !== "read" ||
+          grant.kind !== "file"
+        ) {
+          process.stdout.write(`${JSON.stringify({ error: "missing_file_grants" })}\n`);
+          continue;
+        }
       }
       process.stdout.write(
         `${JSON.stringify({

@@ -11,6 +11,17 @@ const fixturePath = path.join(scriptDir, "native-editor-broker-fixture.mjs");
 const fixtureEditor = {
   editorId: "editor-00000000-0000-4000-8000-000000000001"
 };
+const fixtureFileGrantPath = "/tmp/soundbridge-fixture-grant.wav";
+const fixtureFileGrant = {
+  grantId: "filegrant-00000000-0000-4000-8000-000000000001",
+  purpose: "sample",
+  access: "read",
+  kind: "file",
+  displayName: "Fixture Grant",
+  absolutePath: fixtureFileGrantPath,
+  createdAt: Date.now(),
+  expiresAt: Date.now() + 60_000
+};
 const fixtureInstance = {
   instanceId: "inst-00000000-0000-4000-8000-000000000001",
   pluginId: "vst3:fixture.vst3",
@@ -49,6 +60,28 @@ assert(opened.capabilities.nativeWindow === true, "broker advertises native wind
 assert(opened.capabilities.fileDialogs === false, "broker capabilities default to denied file dialogs");
 await opened.brokerSession.close("editor-00000000-0000-4000-8000-000000000001");
 
+const grantAwareBroker = new NativeEditorBroker({
+  executablePath: process.execPath,
+  args: [fixturePath, "require-file-grants", fixtureFileGrantPath],
+  limits: {
+    maxWorkerStdoutLineBytes: 64 * 1024,
+    maxWorkerCommandBytes: 64 * 1024,
+    maxWorkerStderrLineBytes: 16 * 1024,
+    maxWorkerStderrBytes: 64 * 1024,
+    maxWorkerDiagnosticLogChars: 1024,
+    workerReadyTimeoutMs: 1000,
+    nativeWorkerCommandTimeoutMs: 1000,
+    workerTerminationGraceMs: 50
+  }
+});
+const grantOpened = await grantAwareBroker.openEditor({
+  editor: fixtureEditor,
+  fileGrants: [fixtureFileGrant],
+  instance: fixtureInstance
+});
+assert(grantOpened.brokerSessionId.startsWith("fixture-editor-"), "broker receives attached file grants");
+await grantOpened.brokerSession.close("editor-00000000-0000-4000-8000-000000000001");
+
 const configured = createConfiguredNativeEditorBroker({
   env: {
     SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
@@ -56,6 +89,13 @@ const configured = createConfiguredNativeEditorBroker({
   }
 });
 assert(configured?.available === true, "configured broker is available");
+const grantAwareConfigured = createConfiguredNativeEditorBroker({
+  env: {
+    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, "require-file-grants", fixtureFileGrantPath])
+  }
+});
+assert(grantAwareConfigured?.available === true, "configured broker can receive file grants");
 assert(createConfiguredNativeEditorBroker({ env: {} }) === undefined, "missing broker configuration keeps native editors disabled");
 assertThrows(
   () => createConfiguredNativeEditorBroker({ env: { SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: "relative-broker" } }),
@@ -80,6 +120,16 @@ assertThrows(
       }
     }),
   "non-array broker args are rejected"
+);
+assertThrows(
+  () =>
+    createConfiguredNativeEditorBroker({
+      env: {
+        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, 1])
+      }
+    }),
+  "non-string broker args are rejected"
 );
 assertThrows(
   () =>
@@ -155,7 +205,10 @@ const editorSupport = createDaemonEditors({
     error.details = details;
     return error;
   },
-  nativeEditorBroker: configured,
+  nativeEditorBroker: grantAwareConfigured,
+  resolveNativeFileGrants() {
+    return [fixtureFileGrant];
+  },
   resolvePlugin() {
     return {
       pluginId: nativeInstance.pluginId,
@@ -176,6 +229,7 @@ assert(nativeEditor.native === true, "daemon editor support marks native editor 
 assert(nativeEditor.transport === "native-broker", "daemon editor support returns native-broker transport");
 assert(nativeEditor.capabilities.nativeWindow === true, "daemon editor support returns broker capabilities");
 assert(!("nativeHost" in nativeEditor.plugin), "daemon editor support keeps native launch data out of public plugin metadata");
+assert(!hasPrivatePathFields(nativeEditor), "daemon editor response keeps broker file grants out of browser-visible data");
 editorSupport.closeEditor(nativeEditor.editorId, session);
 
 console.log("Native editor broker IPC smoke test passed.");
@@ -194,6 +248,21 @@ function assertThrows(callback, message) {
     threw = true;
   }
   assert(threw, message);
+}
+
+function hasPrivatePathFields(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (["absolutePath", "bundlePath", "diagnostics", "executablePath", "nativeHost", "path", "rootId"].includes(key)) {
+      return true;
+    }
+    if (hasPrivatePathFields(child)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function assertRejectsBroker(mode, message, expectedErrorText) {

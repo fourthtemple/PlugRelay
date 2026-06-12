@@ -39,6 +39,18 @@ Open:
   "kind": "effect",
   "sampleRate": 48000,
   "maxBlockSize": 128,
+  "fileGrants": [
+    {
+      "grantId": "filegrant-...",
+      "purpose": "sample",
+      "access": "read",
+      "kind": "file",
+      "displayName": "Kick.wav",
+      "absolutePath": "/absolute/native-approved/path/Kick.wav",
+      "createdAt": 1710000000000,
+      "expiresAt": 1710000600000
+    }
+  ],
   "nativeHost": {
     "format": "vst3",
     "renderEngine": "native-vst3"
@@ -46,7 +58,7 @@ Open:
 }
 ```
 
-The `nativeHost` object is daemon-to-broker data only. Browser responses must remain path-free.
+The `nativeHost` object and `fileGrants[].absolutePath` are daemon-to-broker data only. The daemon includes only grants already attached to the owning plugin instance and only after session ownership checks. Browser responses must remain path-free.
 
 Open response:
 
@@ -96,4 +108,4 @@ Native editor sessions keep the same ownership model as generic editor sessions:
 - editor sessions expire with the configured editor TTL
 - editor cleanup runs when the editor closes, the instance is destroyed, the WebSocket session disconnects, or the editor expires
 
-The broker must treat plugin UI code as untrusted native code. Platform implementations should broker file dialogs, clipboard, drag/drop, focus, and window ownership explicitly, then add OS-level sandboxing after the core host behavior is complete.
+The broker must treat plugin UI code as untrusted native code. Platform implementations should broker file dialogs, clipboard, drag/drop, focus, window ownership, and any attached file-grant use explicitly, then add OS-level sandboxing after the core host behavior is complete.

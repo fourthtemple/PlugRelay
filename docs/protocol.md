@@ -694,7 +694,7 @@ In both modes, `createFileGrant` resolves the approved absolute path through the
 
 ### `attachFileGrant` / `listInstanceFileGrants` / `detachFileGrant`
 
-Plugin instances can hold path-free references to session-owned file grants. This is the handoff point for preset, sample, cache, license, and state flows that need native plugin workers or UI brokers to use a local file without exposing the path to browser code.
+Plugin instances can hold path-free references to session-owned file grants. This is the handoff point for preset, sample, cache, license, and state flows that need native-side code to use a local file without exposing the path to browser code.
 
 ```json
 {
@@ -725,7 +725,7 @@ Plugin instances can hold path-free references to session-owned file grants. Thi
 }
 ```
 
-`listInstanceFileGrants` takes `{ "instanceId": "inst-..." }` and returns only that session-owned instance's live, path-free attachments. `detachFileGrant` takes `{ "instanceId": "inst-...", "grantId": "filegrant-..." }`. Native workers and UI brokers should resolve attached grant ids inside daemon-owned code only at the moment of use.
+`listInstanceFileGrants` takes `{ "instanceId": "inst-..." }` and returns only that session-owned instance's live, path-free attachments. `detachFileGrant` takes `{ "instanceId": "inst-...", "grantId": "filegrant-..." }`. Native editor brokers receive attached grants only over daemon-to-broker IPC. Native audio workers should resolve attached grant ids inside daemon-owned code only at the moment of use.
 
 ### `heartbeat`
 
