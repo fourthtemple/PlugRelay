@@ -6,6 +6,7 @@ import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
 const TEST_READY_TIMEOUT_MS = 500;
+const TEST_COMMAND_TIMEOUT_MS = 500;
 
 let passed = 0;
 const failures = [];
@@ -41,12 +42,29 @@ process.stdin.resume();
 setTimeout(() => {}, 30000);
 `
   );
+  const hangingExampleCommandWorkerPath = writeExecutable(
+    "hanging-example-command-worker.mjs",
+    `#!/usr/bin/env node
+process.stdin.resume();
+setTimeout(() => {}, 30000);
+`
+  );
+  const hangingNativeCommandWorkerPath = writeExecutable(
+    "hanging-native-command-worker.mjs",
+    `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
+process.stdin.resume();
+setTimeout(() => {}, 30000);
+`
+  );
 
   const workers = createNativeWorkerProcesses({
     nativeRenderer: nativeWorkerPath,
     normalizers: createDaemonNormalizers(),
     maxWorkerStdoutLineBytes: MAX_TEST_STDOUT_LINE_BYTES,
-    workerReadyTimeoutMs: TEST_READY_TIMEOUT_MS
+    workerReadyTimeoutMs: TEST_READY_TIMEOUT_MS,
+    exampleWorkerCommandTimeoutMs: TEST_COMMAND_TIMEOUT_MS,
+    nativeWorkerCommandTimeoutMs: TEST_COMMAND_TIMEOUT_MS
   });
 
   const exampleWorker = new workers.ExampleInstrumentWorker(exampleWorkerPath);
@@ -85,6 +103,36 @@ setTimeout(() => {}, 30000);
     "native host workers reject missing ready handshakes"
   );
   hangingWorker.destroy();
+
+  const hangingCommandWorkers = createNativeWorkerProcesses({
+    nativeRenderer: hangingNativeCommandWorkerPath,
+    normalizers: createDaemonNormalizers(),
+    maxWorkerStdoutLineBytes: MAX_TEST_STDOUT_LINE_BYTES,
+    workerReadyTimeoutMs: TEST_READY_TIMEOUT_MS,
+    exampleWorkerCommandTimeoutMs: TEST_COMMAND_TIMEOUT_MS,
+    nativeWorkerCommandTimeoutMs: TEST_COMMAND_TIMEOUT_MS
+  });
+  const hangingExampleCommandWorker = new hangingCommandWorkers.ExampleInstrumentWorker(hangingExampleCommandWorkerPath);
+  await expectRejected(
+    () => hangingExampleCommandWorker.render({ frames: 1, sampleRate: 48000, gain: 0.5, tone: 0.5, detune: 0.5 }),
+    "worker_command_timeout",
+    "example instrument workers terminate timed-out commands"
+  );
+  check(hangingExampleCommandWorker.process?.killed === true, "timed-out example instrument worker process is killed");
+  hangingExampleCommandWorker.destroy();
+
+  const hangingNativeCommandWorker = new hangingCommandWorkers.NativeHostWorker(
+    { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
+    nativeWorkerInstance()
+  );
+  await hangingNativeCommandWorker.ready;
+  await expectRejected(
+    () => hangingNativeCommandWorker.getParameters(),
+    "worker_command_timeout",
+    "native host workers terminate timed-out commands"
+  );
+  check(hangingNativeCommandWorker.process?.killed === true, "timed-out native host worker process is killed");
+  hangingNativeCommandWorker.destroy();
 } finally {
   fs.rmSync(tempDir, { force: true, recursive: true });
 }

@@ -2,12 +2,16 @@ import { spawn } from "node:child_process";
 
 export const DEFAULT_MAX_WORKER_STDOUT_LINE_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_WORKER_READY_TIMEOUT_MS = 5000;
+export const DEFAULT_EXAMPLE_WORKER_COMMAND_TIMEOUT_MS = 1500;
+export const DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS = 5000;
 
 export function createNativeWorkerProcesses({
   nativeRenderer,
   normalizers,
   maxWorkerStdoutLineBytes = DEFAULT_MAX_WORKER_STDOUT_LINE_BYTES,
-  workerReadyTimeoutMs = DEFAULT_WORKER_READY_TIMEOUT_MS
+  workerReadyTimeoutMs = DEFAULT_WORKER_READY_TIMEOUT_MS,
+  exampleWorkerCommandTimeoutMs = DEFAULT_EXAMPLE_WORKER_COMMAND_TIMEOUT_MS,
+  nativeWorkerCommandTimeoutMs = DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS
 }) {
   const {
     clonePluginLayout,
@@ -24,6 +28,14 @@ export function createNativeWorkerProcesses({
   } = normalizers;
   const workerStdoutLineLimit = normalizeWorkerStdoutLineLimit(maxWorkerStdoutLineBytes);
   const workerReadyTimeout = normalizeWorkerReadyTimeout(workerReadyTimeoutMs);
+  const exampleCommandTimeout = normalizeWorkerCommandTimeout(
+    exampleWorkerCommandTimeoutMs,
+    DEFAULT_EXAMPLE_WORKER_COMMAND_TIMEOUT_MS
+  );
+  const nativeCommandTimeout = normalizeWorkerCommandTimeout(
+    nativeWorkerCommandTimeoutMs,
+    DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS
+  );
 
   class ExampleInstrumentWorker {
     constructor(executablePath) {
@@ -32,6 +44,7 @@ export function createNativeWorkerProcesses({
       this.pending = [];
       this.stdoutBuffer = "";
       this.maxStdoutLineBytes = workerStdoutLineLimit;
+      this.commandTimeoutMs = exampleCommandTimeout;
       this.process = spawn(executablePath, ["--worker"], {
         stdio: ["pipe", "pipe", "pipe"]
       });
@@ -91,9 +104,8 @@ export function createNativeWorkerProcesses({
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-          this.pending = this.pending.filter((pending) => pending.resolve !== resolve);
-          reject(new Error("worker command timed out"));
-        }, 1500);
+          this.abortWorker(workerCommandTimeoutError(this.commandTimeoutMs));
+        }, this.commandTimeoutMs);
         this.pending.push({ resolve, reject, timeout });
         this.process.stdin.write(`${command}\n`, "utf8", (error) => {
           if (error) {
@@ -179,6 +191,7 @@ export function createNativeWorkerProcesses({
       this.pending = [];
       this.stdoutBuffer = "";
       this.maxStdoutLineBytes = workerStdoutLineLimit;
+      this.commandTimeoutMs = nativeCommandTimeout;
       this.readySettled = false;
       this.ready = new Promise((resolve, reject) => {
         this.resolveReady = resolve;
@@ -325,9 +338,8 @@ export function createNativeWorkerProcesses({
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-          this.pending = this.pending.filter((pending) => pending.resolve !== resolve);
-          reject(new Error("worker command timed out"));
-        }, 5000);
+          this.abortWorker(workerCommandTimeoutError(this.commandTimeoutMs));
+        }, this.commandTimeoutMs);
         this.pending.push({ resolve, reject, timeout });
         this.process.stdin.write(`${command}\n`, "utf8", (error) => {
           if (error) {
@@ -491,6 +503,17 @@ function normalizeWorkerReadyTimeout(value) {
   return number;
 }
 
+function normalizeWorkerCommandTimeout(value, fallback) {
+  const fallbackNumber = Math.floor(Number(fallback));
+  const number = Math.floor(Number(value));
+  if (!Number.isFinite(number) || number <= 0) {
+    return Number.isFinite(fallbackNumber) && fallbackNumber > 0
+      ? fallbackNumber
+      : DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS;
+  }
+  return number;
+}
+
 function workerStdoutLineTooLarge(line, maxBytes) {
   return Buffer.byteLength(line, "utf8") > maxBytes;
 }
@@ -501,6 +524,10 @@ function workerStdoutLineError(maxBytes) {
 
 function workerReadyTimeoutError(timeoutMs) {
   return new Error(`worker_ready_timeout: worker did not report ready within ${timeoutMs}ms`);
+}
+
+function workerCommandTimeoutError(timeoutMs) {
+  return new Error(`worker_command_timeout: worker command timed out after ${timeoutMs}ms`);
 }
 
 function killWorkerProcess(process) {
