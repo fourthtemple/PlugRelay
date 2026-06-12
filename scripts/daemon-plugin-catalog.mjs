@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { classifyAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -278,7 +279,8 @@ export function createPluginCatalogSupport({
   }
 
   function decorateInstalledPlugin(plugin) {
-    const auProfileReason = unsupportedAudioUnitHostProfileReason(plugin);
+    const auHostProfile = audioUnitHostProfileFor(plugin);
+    const auProfileReason = auHostProfile.hostUnavailableReason;
     const nativeHost = auProfileReason ? undefined : nativeHostForInstalledPlugin(plugin);
     const hostable = Boolean(nativeHost);
     return {
@@ -295,7 +297,7 @@ export function createPluginCatalogSupport({
         : auProfileReason ?? hostUnavailableReasonForInstalledPlugin(plugin),
       inputs: defaultInputChannels(plugin),
       outputs: defaultOutputChannels(plugin),
-      metadata: normalizePluginClassMetadata(plugin.metadata, plugin.format),
+      metadata: normalizePluginClassMetadata(publicPluginMetadata(plugin, auHostProfile), plugin.format),
       parameters: [],
       presets: [],
       nativeHost
@@ -323,7 +325,8 @@ export function createPluginCatalogSupport({
     const diagnostics = plugin.diagnostics ?? {};
 
     if (plugin.format === "au" && nativeHostStatus.get("au")?.host === true) {
-      if (unsupportedAudioUnitHostProfileReason(plugin)) {
+      const auHostProfile = audioUnitHostProfileFor(plugin);
+      if (auHostProfile.hostUnavailableReason) {
         return undefined;
       }
       if (
@@ -339,7 +342,8 @@ export function createPluginCatalogSupport({
         renderEngine: "native-au",
         componentType: diagnostics.componentType,
         componentSubType: diagnostics.componentSubType,
-        componentManufacturer: diagnostics.componentManufacturer
+        componentManufacturer: diagnostics.componentManufacturer,
+        hostProfile: auHostProfile.profile
       };
     }
 
@@ -383,24 +387,23 @@ export function createPluginCatalogSupport({
     if (plugin?.format !== "au" || nativeHostStatus.get("au")?.host !== true) {
       return undefined;
     }
-    const diagnostics = plugin.diagnostics ?? {};
-    const componentType = String(diagnostics.componentType ?? plugin.metadata?.componentType ?? "");
-    const componentSubType = String(diagnostics.componentSubType ?? plugin.metadata?.componentSubType ?? "");
-    const componentManufacturer = String(diagnostics.componentManufacturer ?? plugin.metadata?.componentManufacturer ?? "");
+    return audioUnitHostProfileFor(plugin).hostUnavailableReason;
+  }
 
-    if (componentType === "auol") {
-      return "This Audio Unit is an offline effect and requires a future offline-render host profile.";
+  function audioUnitHostProfileFor(plugin) {
+    return plugin?.format === "au" && nativeHostStatus.get("au")?.host === true
+      ? classifyAudioUnitHostProfile(plugin)
+      : {};
+  }
+
+  function publicPluginMetadata(plugin, auHostProfile) {
+    if (!auHostProfile.profile) {
+      return plugin.metadata;
     }
-
-    if (componentManufacturer === "appl" && componentType === "aufc" && componentSubType === "amix") {
-      return "AUAudioMix requires a multi-source format-converter host profile; the current Audio Unit bridge hosts realtime main-bus units.";
-    }
-
-    if (componentManufacturer === "appl" && componentType === "aumx" && componentSubType === "mspl") {
-      return "AUMultiSplitter requires a multi-output splitter host profile; the current Audio Unit bridge hosts realtime main-bus units.";
-    }
-
-    return undefined;
+    return {
+      ...(plugin.metadata ?? {}),
+      audioUnitHostProfile: auHostProfile.profile
+    };
   }
 
   function lv2BlockSizeProfile(diagnostics) {
@@ -695,6 +698,7 @@ export function createPluginCatalogSupport({
     add("componentType", 16);
     add("componentSubType", 16);
     add("componentManufacturer", 16);
+    add("audioUnitHostProfile", 64);
     add("lv2Uri");
     add("lv2BlockSizeProfile", 32);
     add("lv2UiTypes");

@@ -105,6 +105,7 @@ async function probePlugin(socket, session, plugin) {
     name: plugin.name,
     vendor: plugin.vendor,
     kind: plugin.kind,
+    audioUnitHostProfile: plugin.metadata?.audioUnitHostProfile,
     ok: false,
     phases: []
   };

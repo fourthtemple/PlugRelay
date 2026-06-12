@@ -510,6 +510,7 @@ assert(
   nativeAuEffect.metadata?.componentManufacturer === "appl" &&
     nativeAuEffect.metadata?.componentType === "aufx" &&
     nativeAuEffect.metadata?.componentSubType === "lpas" &&
+    nativeAuEffect.metadata?.audioUnitHostProfile === "realtime-main-bus" &&
     nativeAuEffect.metadata?.stableId === "appl:aufx:lpas",
   "hostable AU metadata exposes bounded AudioComponent class identifiers"
 );
