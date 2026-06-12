@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  source-security-fitness:
+    name: Source And Security Fitness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Show Node.js version
+        run: node --version
+
+      - name: Syntax and file-size guardrails
+        run: npm run check
+
+      - name: Security smoke tests
+        run: npm run smoke:security
+
+      - name: Worker IPC smoke tests
+        run: npm run smoke:worker-ipc
+
+      - name: Broker contract smoke tests
+        run: |
+          npm run smoke:file-grant-broker
+          npm run smoke:native-editor-broker
+          npm run smoke:native-editor-daemon
+
+      - name: Mock protocol smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_file="$(mktemp)"
+          SOUNDBRIDGE_PAIRING_TOKEN=dev-token node scripts/mock-daemon.mjs >"$log_file" 2>&1 &
+          daemon_pid="$!"
+          trap 'kill "$daemon_pid" 2>/dev/null || true' EXIT
+
+          ready=0
+          for _ in {1..50}; do
+            if grep -q "listening" "$log_file"; then
+              ready=1
+              break
+            fi
+            sleep 0.1
+          done
+
+          if [[ "$ready" != "1" ]]; then
+            cat "$log_file"
+            exit 1
+          fi
+
+          npm run smoke:mock
