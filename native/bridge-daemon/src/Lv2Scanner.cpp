@@ -21,6 +21,8 @@ constexpr const char* kLv2WorkerScheduleUri = "http://lv2plug.in/ns/ext/worker#s
 constexpr const char* kLv2OptionsOptionsUri = "http://lv2plug.in/ns/ext/options#options";
 constexpr const char* kLv2OptionsRequiredOptionUri = "http://lv2plug.in/ns/ext/options#requiredOption";
 constexpr const char* kLv2BufSizeBoundedBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#boundedBlockLength";
+constexpr const char* kLv2BufSizeFixedBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#fixedBlockLength";
+constexpr const char* kLv2BufSizePowerOf2BlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#powerOf2BlockLength";
 constexpr const char* kLv2BufSizeMaxBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#maxBlockLength";
 constexpr const char* kLv2BufSizeMinBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#minBlockLength";
 constexpr const char* kLv2BufSizeNominalBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#nominalBlockLength";
@@ -428,14 +430,18 @@ bool lv2RequiredFeatureSupported(const std::string& uri) {
       uri == kLv2UridUnmapUri ||
       uri == kLv2WorkerScheduleUri ||
       uri == kLv2OptionsOptionsUri ||
-      uri == kLv2BufSizeBoundedBlockLengthUri;
+      uri == kLv2BufSizeBoundedBlockLengthUri ||
+      uri == kLv2BufSizeFixedBlockLengthUri ||
+      uri == kLv2BufSizePowerOf2BlockLengthUri;
 }
 
 bool lv2RequiredOptionSupported(const std::string& uri) {
   return uri == kLv2BufSizeMaxBlockLengthUri ||
       uri == kLv2BufSizeMinBlockLengthUri ||
       uri == kLv2BufSizeNominalBlockLengthUri ||
-      uri == kLv2BufSizeSequenceSizeUri;
+      uri == kLv2BufSizeSequenceSizeUri ||
+      uri == kLv2BufSizeFixedBlockLengthUri ||
+      uri == kLv2BufSizePowerOf2BlockLengthUri;
 }
 
 std::filesystem::path canonicalPathOrInput(const std::filesystem::path& path) {
@@ -669,7 +675,8 @@ void applyLv2TurtleMetadata(
   }
 
   std::uint32_t unsupportedRequiredFeatures = 0;
-  for (const auto& uri : requiredFeatureUris(turtle)) {
+  const auto requiredFeatures = requiredFeatureUris(turtle);
+  for (const auto& uri : requiredFeatures) {
     if (!lv2RequiredFeatureSupported(uri)) {
       ++unsupportedRequiredFeatures;
     }
@@ -677,13 +684,20 @@ void applyLv2TurtleMetadata(
   info.unsupportedRequiredFeatureCount = unsupportedRequiredFeatures;
   info.hasUnsupportedRequiredFeatures = unsupportedRequiredFeatures > 0;
   std::uint32_t unsupportedRequiredOptions = 0;
-  for (const auto& uri : requiredOptionUris(turtle)) {
+  const auto requiredOptions = requiredOptionUris(turtle);
+  for (const auto& uri : requiredOptions) {
     if (!lv2RequiredOptionSupported(uri)) {
       ++unsupportedRequiredOptions;
     }
   }
   info.unsupportedRequiredOptionCount = unsupportedRequiredOptions;
   info.hasUnsupportedRequiredOptions = unsupportedRequiredOptions > 0;
+  info.lv2RequiresFixedBlockLength =
+      requiredFeatures.count(kLv2BufSizeFixedBlockLengthUri) > 0 ||
+      requiredOptions.count(kLv2BufSizeFixedBlockLengthUri) > 0;
+  info.lv2RequiresPowerOf2BlockLength =
+      requiredFeatures.count(kLv2BufSizePowerOf2BlockLengthUri) > 0 ||
+      requiredOptions.count(kLv2BufSizePowerOf2BlockLengthUri) > 0;
   info.lv2UiTypes = lv2UiTypes(turtle);
   info.lv2UiCount = std::max<std::uint32_t>(
       static_cast<std::uint32_t>(info.lv2UiTypes.size()),

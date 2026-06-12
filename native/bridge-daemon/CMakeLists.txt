@@ -110,6 +110,9 @@ set(SOUNDBRIDGE_EXAMPLE_LV2_EXECUTABLE
 set(SOUNDBRIDGE_EXAMPLE_LV2_GAIN_MODULE
   "${CMAKE_CURRENT_SOURCE_DIR}/../example-plugins/LV2/soundbridge-example-gain.lv2/soundbridge-example-lv2-gain.so"
 )
+set(SOUNDBRIDGE_BLOCK_PROFILE_LV2_GAIN_MODULE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../example-plugins/LV2/soundbridge-block-profile-gain.lv2/soundbridge-example-lv2-gain.so"
+)
 
 add_custom_command(TARGET soundbridge-example-instrument POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../example-plugins/VST3/soundbridge-example-polysynth.vst3/Contents/MacOS>"
@@ -123,6 +126,8 @@ add_custom_command(TARGET soundbridge-example-instrument POST_BUILD
 
 add_custom_command(TARGET soundbridge-example-lv2-gain POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../example-plugins/LV2/soundbridge-example-gain.lv2>"
+  COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../example-plugins/LV2/soundbridge-block-profile-gain.lv2>"
   COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:soundbridge-example-lv2-gain>" "$<SHELL_PATH:${SOUNDBRIDGE_EXAMPLE_LV2_GAIN_MODULE}>"
+  COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:soundbridge-example-lv2-gain>" "$<SHELL_PATH:${SOUNDBRIDGE_BLOCK_PROFILE_LV2_GAIN_MODULE}>"
   COMMENT "Installing SoundBridge LV2 gain fixture into repo-local LV2 bundle"
 )

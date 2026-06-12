@@ -81,7 +81,7 @@ Example paired capability payload:
         "scan": true,
         "host": true,
         "exampleHost": true,
-        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, bounded buf-size/options host data, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled."
+        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, bounded buf-size/options host data including fixed/power-of-two block profiles, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled."
       }
     },
     "security": {
@@ -114,7 +114,7 @@ Example paired capability payload:
 }
 ```
 
-`host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. The reference LV2 host currently means compatible basic audio/control LV2 plugins with optional atom/event MIDI input ports, bounded `buf-size:boundedBlockLength` and `options#options` host data, bounded portable POD `state:interface` properties, and brokered file-backed state through LV2 state path features, not every LV2 extension profile. `notes` is optional human-readable status text from the native backend.
+`host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. The reference LV2 host currently means compatible basic audio/control LV2 plugins with optional atom/event MIDI input ports, bounded `buf-size:boundedBlockLength`, fixed/power-of-two block profiles, and `options#options` host data, bounded portable POD `state:interface` properties, and brokered file-backed state through LV2 state path features, not every LV2 extension profile. `notes` is optional human-readable status text from the native backend.
 
 `capabilities.security` describes local multi-host protections and is safe to expose before pairing. Production hosts should require `sessionBoundToOrigin` and `instanceOwnership` before exposing installed plugins to arbitrary web origins.
 
@@ -183,7 +183,7 @@ Returns plugin metadata:
 
 `format` is required and is one of `vst3`, `au`, `lv2`, `mock`, or `unknown`. `pluginId` must be stable within that format namespace; native daemons should prefix or otherwise scope ids so a VST3 and AU from the same vendor do not collide.
 
-`metadata` is optional bounded public class metadata for host caching and plugin browsers. It must not contain local filesystem paths. Current fields include `stableId`, `bundleIdentifier`, `version`, AudioComponent `componentType` / `componentSubType` / `componentManufacturer`, `lv2Uri`, and path-free LV2 UI declaration fields (`lv2UiTypes`, `lv2UiCount`, `lv2UiBinaryCount`). Installed VST3 plugin listings may also use a short-lived brokered factory probe to refine public `name`, `vendor`, `category`, and `kind` values from SDK class metadata without exposing the bundle path to the browser.
+`metadata` is optional bounded public class metadata for host caching and plugin browsers. It must not contain local filesystem paths. Current fields include `stableId`, `bundleIdentifier`, `version`, AudioComponent `componentType` / `componentSubType` / `componentManufacturer`, `lv2Uri`, `lv2BlockSizeProfile`, and path-free LV2 UI declaration fields (`lv2UiTypes`, `lv2UiCount`, `lv2UiBinaryCount`). Installed VST3 plugin listings may also use a short-lived brokered factory probe to refine public `name`, `vendor`, `category`, and `kind` values from SDK class metadata without exposing the bundle path to the browser.
 
 `presets` is optional bounded host-display metadata. Preset ids are capped at 64 bytes, names at 160 bytes, and the daemon exposes at most 256 presets per plugin. These presets are parameter snapshots; arbitrary preset files, sample locations, and licensing data require a separate brokered file-access path.
 
@@ -193,7 +193,7 @@ Plugin instances are owned by the session that creates them. Commands that refer
 
 ### `createInstance`
 
-Creates one plugin instance for a sample rate, max block size, and channel layout. `pluginId` is required; `format` is optional when the id is globally unique but recommended for hosts that cache plugin descriptors.
+Creates one plugin instance for a sample rate, max block size, and channel layout. `pluginId` is required; `format` is optional when the id is globally unique but recommended for hosts that cache plugin descriptors. LV2 plugins whose metadata exposes `lv2BlockSizeProfile: "power-of-two"` or `"fixed-power-of-two"` require `maxBlockSize` to be a power of two.
 
 Example:
 
@@ -247,7 +247,7 @@ VST3 plugin snapshots may include `vst3ProgramLists`, a bounded list of all SDK 
 
 VST3 plugin snapshots may include `vst3NoteExpressions`, a bounded list from the SDK `INoteExpressionController` for event bus 0 and channels 0-15. The daemon exposes at most 256 expression definitions with capped display text, `typeId`, optional `unitId` and `associatedParameterId`, normalized value bounds, flags, `busIndex`, and `channel`. Value-style note-expression events use normalized `value`; text-style note-expression events use bounded UTF-8 `text` and are still VST3-only.
 
-Compatible LV2 control ports marked with `lv2:toggled`, `lv2:integer`, or `lv2:enumeration` expose bounded `stepCount` metadata. The reference LV2 worker caps reported step counts and quantizes normalized writes back to legal plain values before writing the plugin port.
+Compatible LV2 control ports marked with `lv2:toggled`, `lv2:integer`, or `lv2:enumeration` expose bounded `stepCount` metadata. The reference LV2 worker caps reported step counts and quantizes normalized writes back to legal plain values before writing the plugin port. For LV2 fixed/power-of-two block profiles, parameter writes are still allowed at block boundaries, but nonzero sample-offset automation is rejected until a sub-block scheduling model can satisfy those plugin contracts.
 
 ### `getVst3ProgramData`
 
@@ -375,7 +375,7 @@ The browser sends only `presetId`; it does not send an arbitrary parameter map o
 
 ### `setParameterEvents`
 
-Queues a bounded list of normalized parameter events for the next render block. `time` is an integer sample offset into the next block and is clamped by schema/daemon validation to the instance block size. The reference daemon rejects more than 4096 events per request, rejects parameter ids longer than 64 bytes, and enforces instance ownership before dispatching events to workers.
+Queues a bounded list of normalized parameter events for the next render block. `time` is an integer sample offset into the next block and is clamped by schema/daemon validation to the instance block size. The reference daemon rejects more than 4096 events per request, rejects parameter ids longer than 64 bytes, and enforces instance ownership before dispatching events to workers. LV2 fixed/power-of-two block profiles accept only block-boundary parameter events, so `time` must be `0` for those instances.
 
 Automation requests must target writable automatable parameters. `readOnly: true` parameters are rejected with `parameter_read_only`, and `automatable: false` parameters are rejected with `parameter_not_automatable`.
 
@@ -491,7 +491,7 @@ Request:
 }
 ```
 
-`channels` is the backwards-compatible main input bus. `inputBuses` is optional and carries explicit indexed input bus buffers for sidechain-style routing. When both are present, bus index `0` is the main input bus. Explicit `inputBuses` must be an array of at most 32 bus blocks with unique integer indexes in `0..31`; malformed, duplicate, non-integer, or out-of-range indexes are rejected at the daemon boundary and rechecked by native worker line-protocol parsers. All channel counts are capped to 32, and all frame counts are capped to the instance `maxBlockSize`. Installed VST3 workers negotiate bounded per-bus SDK speaker arrangements where accepted and route bounded indexed input buffers into active VST3 buses. Installed AU workers route bounded indexed input buffers into matching active CoreAudio input elements where the unit exposes them. Installed LV2 workers route bus index `0` into the declared main LV2 port group when `pg:group` metadata is present; ungrouped LV2 metadata keeps the compatibility fallback where bus index `0` is the aggregate main input and bus indexes `1..31` are bounded mono overrides for parsed audio input ports.
+`channels` is the backwards-compatible main input bus. `inputBuses` is optional and carries explicit indexed input bus buffers for sidechain-style routing. When both are present, bus index `0` is the main input bus. Explicit `inputBuses` must be an array of at most 32 bus blocks with unique integer indexes in `0..31`; malformed, duplicate, non-integer, or out-of-range indexes are rejected at the daemon boundary and rechecked by native worker line-protocol parsers. All channel counts are capped to 32, and all frame counts are capped to the instance `maxBlockSize`. LV2 `fixed` block profiles reject render blocks whose frame count is not exactly `maxBlockSize`; LV2 `power-of-two` block profiles reject non-power-of-two frame counts. Installed VST3 workers negotiate bounded per-bus SDK speaker arrangements where accepted and route bounded indexed input buffers into active VST3 buses. Installed AU workers route bounded indexed input buffers into matching active CoreAudio input elements where the unit exposes them. Installed LV2 workers route bus index `0` into the declared main LV2 port group when `pg:group` metadata is present; ungrouped LV2 metadata keeps the compatibility fallback where bus index `0` is the aggregate main input and bus indexes `1..31` are bounded mono overrides for parsed audio input ports.
 
 `transport` is optional bounded host timeline context. Supported fields are `playing`, `recording`, `loopActive`, `tempo`, `timeSignatureNumerator`, `timeSignatureDenominator`, `projectTimeMusic`, `barPositionMusic`, `cycleStartMusic`, `cycleEndMusic`, and `samplePosition`. Tempo is `1..960` BPM, time-signature denominators must be powers of two in `1..64`, musical positions are quarter-note values in `0..1000000000`, sample positions are integers in `0..9007199254740991`, and cycle start/end must be supplied together with `cycleEndMusic >= cycleStartMusic`. VST3 workers map accepted values into Steinberg `ProcessContext`; AU workers map accepted values into `AudioTimeStamp` sample time plus `kAudioUnitProperty_HostCallbacks`; LV2 workers map supported timeline values into bounded atom `time:Position` events for compatible atom/event input ports.
 

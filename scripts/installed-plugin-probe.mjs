@@ -130,6 +130,7 @@ async function probePlugin(socket, session, plugin) {
     result.parameterCount = Array.isArray(parameters.parameters) ? parameters.parameters.length : result.parameterCount;
 
     const writableParameter = parameters.parameters?.find((parameter) => parameter.automatable && !parameter.readOnly);
+    const restrictedLv2BlockProfile = isRestrictedLv2BlockProfile(plugin);
     if (writableParameter) {
       await phase(result, "setParameter", () =>
         request(
@@ -154,12 +155,14 @@ async function probePlugin(socket, session, plugin) {
     );
     await phase(result, "getTailTime", () => request(socket, "getTailTime", { instanceId }, true, session));
 
-    if (writableParameter) {
+    let automationLaneApplied = false;
+    if (writableParameter && !restrictedLv2BlockProfile) {
       const laneStartSample = 4096;
+      const blockSize = layoutBlockSize(result.layout);
       const lanePoints = [{ samplePosition: laneStartSample, normalizedValue: 0.25 }];
-      if (MAX_BLOCK_SIZE > 1) {
+      if (blockSize > 1) {
         lanePoints.push({
-          samplePosition: laneStartSample + Math.min(8, MAX_BLOCK_SIZE - 1),
+          samplePosition: laneStartSample + Math.min(8, blockSize - 1),
           normalizedValue: 0.5
         });
       }
@@ -173,9 +176,12 @@ async function probePlugin(socket, session, plugin) {
         )
       );
       result.automationLanePointCount = lane.pointCount;
+      automationLaneApplied = true;
+    } else if (writableParameter && restrictedLv2BlockProfile) {
+      result.automationLaneSkipped = "lv2-block-size-profile";
     }
 
-    const midiEvents = midiEventsForBlock(plugin.format);
+    const midiEvents = midiEventsForBlock(plugin.format, layoutBlockSize(result.layout));
     const midiAccepted = await phase(result, "sendMidiEvents", () =>
       request(socket, "sendMidiEvents", { instanceId, events: midiEvents }, true, session)
     );
@@ -187,7 +193,7 @@ async function probePlugin(socket, session, plugin) {
     result.midiEventCount = midiAccepted.eventCount;
 
     const renderPayload = renderPayloadForLayout(instanceId, result.layout);
-    if (writableParameter) {
+    if (automationLaneApplied) {
       renderPayload.transport = { samplePosition: 4096, tempo: SAMPLE_RATE / 400 };
     }
     const rendered = await phase(result, "processAudioBlock", async () => {
@@ -197,7 +203,7 @@ async function probePlugin(socket, session, plugin) {
     });
     result.renderedChannels = Array.isArray(rendered.channels) ? rendered.channels.length : 0;
 
-    if (writableParameter) {
+    if (automationLaneApplied) {
       await phase(result, "clearAutomationLane", () =>
         request(
           socket,
@@ -395,7 +401,7 @@ function createInstancePayload(plugin) {
     pluginId: plugin.pluginId,
     format: plugin.format,
     sampleRate: SAMPLE_RATE,
-    maxBlockSize: MAX_BLOCK_SIZE,
+    maxBlockSize: maxBlockSizeForPlugin(plugin),
     inputChannels,
     outputChannels
   };
@@ -442,7 +448,8 @@ function assertNoNativeLaunchData(value, context) {
 
 function renderPayloadForLayout(instanceId, layout) {
   const inputChannels = clampInt(layout?.inputChannels, 0, 32, 0);
-  const bus0Channels = Array.from({ length: inputChannels }, () => Array(MAX_BLOCK_SIZE).fill(0.05));
+  const frames = layoutBlockSize(layout);
+  const bus0Channels = Array.from({ length: inputChannels }, () => Array(frames).fill(0.05));
   const inputBuses = inputChannels > 0 ? [{ index: 0, channels: bus0Channels }] : [];
   const inputBusLayouts = Array.isArray(layout?.inputBusLayouts) ? layout.inputBusLayouts : [];
   for (const bus of inputBusLayouts) {
@@ -453,20 +460,21 @@ function renderPayloadForLayout(instanceId, layout) {
     }
     inputBuses.push({
       index,
-      channels: Array.from({ length: channels }, () => Array(MAX_BLOCK_SIZE).fill(0.025))
+      channels: Array.from({ length: channels }, () => Array(frames).fill(0.025))
     });
   }
   return {
     instanceId,
-    frames: MAX_BLOCK_SIZE,
+    frames,
     sampleRate: SAMPLE_RATE,
-    channels: Array.from({ length: inputChannels }, () => Array(MAX_BLOCK_SIZE).fill(0)),
+    channels: Array.from({ length: inputChannels }, () => Array(frames).fill(0)),
     inputBuses
   };
 }
 
-function midiEventsForBlock(format) {
-  const offset = (fraction) => Math.min(MAX_BLOCK_SIZE - 1, Math.max(0, Math.floor(MAX_BLOCK_SIZE * fraction)));
+function midiEventsForBlock(format, frames = MAX_BLOCK_SIZE) {
+  const boundedFrames = clampInt(frames, 1, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE);
+  const offset = (fraction) => Math.min(boundedFrames - 1, Math.max(0, Math.floor(boundedFrames * fraction)));
   const noteId = 77;
   const events = [
     { type: "noteOn", note: 60, velocity: 0.7, channel: 0, time: 0, ...(format === "vst3" ? { noteId } : {}) },
@@ -484,6 +492,41 @@ function midiEventsForBlock(format) {
 function isNativePluginFormat(format) {
   const normalized = String(format ?? "").toLowerCase();
   return normalized === "vst3" || normalized === "au" || normalized === "lv2";
+}
+
+function isRestrictedLv2BlockProfile(plugin) {
+  return plugin?.format === "lv2" && Boolean(lv2BlockSizeProfile(plugin));
+}
+
+function maxBlockSizeForPlugin(plugin) {
+  const profile = lv2BlockSizeProfile(plugin);
+  if (profile && profile.includes("power") && !isPowerOfTwoBlock(MAX_BLOCK_SIZE)) {
+    return nearestPowerOfTwoAtMost(MAX_BLOCK_SIZE);
+  }
+  return MAX_BLOCK_SIZE;
+}
+
+function lv2BlockSizeProfile(plugin) {
+  const profile = plugin?.metadata?.lv2BlockSizeProfile;
+  return profile === "fixed" || profile === "power-of-two" || profile === "fixed-power-of-two"
+    ? profile
+    : "";
+}
+
+function layoutBlockSize(layout) {
+  return clampInt(layout?.maxBlockSize, 1, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE);
+}
+
+function nearestPowerOfTwoAtMost(value) {
+  let power = 1;
+  while (power * 2 <= value) {
+    power *= 2;
+  }
+  return power;
+}
+
+function isPowerOfTwoBlock(value) {
+  return Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
 }
 
 function assertRenderMatchesLayout(rendered, layout) {

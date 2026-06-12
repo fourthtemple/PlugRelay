@@ -65,6 +65,8 @@ constexpr const char* kLv2StateMapPathUri = "http://lv2plug.in/ns/ext/state#mapP
 constexpr const char* kLv2WorkerInterfaceUri = "http://lv2plug.in/ns/ext/worker#interface";
 constexpr const char* kLv2WorkerScheduleUri = "http://lv2plug.in/ns/ext/worker#schedule";
 constexpr const char* kLv2BufSizeBoundedBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#boundedBlockLength";
+constexpr const char* kLv2BufSizeFixedBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#fixedBlockLength";
+constexpr const char* kLv2BufSizePowerOf2BlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#powerOf2BlockLength";
 constexpr const char* kLv2BufSizeMaxBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#maxBlockLength";
 constexpr const char* kLv2BufSizeMinBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#minBlockLength";
 constexpr const char* kLv2BufSizeNominalBlockLengthUri = "http://lv2plug.in/ns/ext/buf-size#nominalBlockLength";
@@ -147,6 +149,8 @@ struct Lv2BundleMetadata {
   std::vector<Lv2Port> ports;
   std::string mainInputGroupUri;
   std::string mainOutputGroupUri;
+  bool requiresFixedBlockLength = false;
+  bool requiresPowerOf2BlockLength = false;
 };
 
 struct PendingParameterChange {
@@ -204,6 +208,12 @@ std::string base64ToStateString(const std::string& encoded, std::size_t maxBytes
 std::string cappedString(std::string value, std::size_t maxBytes = kMaxWorkerParameterStringBytes);
 std::uint32_t boundedLatencySamples(double value);
 Lv2BundleMetadata loadBundleMetadata(const std::filesystem::path& bundlePath);
+bool isPowerOfTwoLv2BlockSize(std::uint32_t value);
+bool lv2MetadataHasRestrictedBlockProfile(const Lv2BundleMetadata& metadata);
+bool lv2MetadataAcceptsRenderBlockSize(
+    const Lv2BundleMetadata& metadata,
+    std::uint32_t maxBlockSize,
+    std::uint32_t frames);
 std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::uint32_t frames);
 bool parseAudioBuses(const std::string& encoded, std::uint32_t frames, std::vector<IndexedAudioBus>& buses);
 const std::vector<std::vector<float>>* findBusChannels(const std::vector<IndexedAudioBus>& buses, std::uint32_t index);

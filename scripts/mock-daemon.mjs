@@ -6,6 +6,7 @@ import { createDaemonFileGrantOperations } from "./daemon-file-grant-operations.
 import { createDaemonInstanceFileGrants } from "./daemon-instance-file-grants.mjs";
 import { createDaemonInstrumentRendering } from "./daemon-instrument-rendering.mjs";
 import { createDaemonLifecycle } from "./daemon-lifecycle.mjs";
+import { createDaemonLv2BlockProfileSupport } from "./daemon-lv2-block-profiles.mjs";
 import { createMockInstrumentSupport } from "./daemon-mock-instruments.mjs";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { createPluginCatalogSupport, loadNativeHostStatus, resolveNativeRenderer } from "./daemon-plugin-catalog.mjs";
@@ -132,6 +133,13 @@ const {
   normalizePluginLayout,
   normalizeTailSamples
 } = normalizers;
+const {
+  validateNativeHostBlockSizeProfile,
+  validateParameterSampleOffsetForBlockProfile,
+  validateRenderBlockSizeProfile
+} = createDaemonLv2BlockProfileSupport({
+  makeProtocolError: protocolError
+});
 const mockInstruments = createMockInstrumentSupport({
   clamp01,
   finiteNumber
@@ -676,6 +684,7 @@ async function createInstance(payload, session) {
   const maxBlockSize = requireIntInRange(payload.maxBlockSize ?? 128, 1, MAX_BLOCK_SIZE, "maxBlockSize");
   const inputChannels = requireIntInRange(payload.inputChannels ?? plugin.inputs ?? 2, 0, MAX_AUDIO_CHANNELS, "inputChannels");
   const outputChannels = requireIntInRange(payload.outputChannels ?? plugin.outputs ?? 2, 1, MAX_AUDIO_CHANNELS, "outputChannels");
+  validateNativeHostBlockSizeProfile(plugin.nativeHost, maxBlockSize);
 
   const instanceId = `inst-${crypto.randomUUID()}`;
   const parameters = plugin.parameters.map((parameter) => ({ ...parameter }));
@@ -938,6 +947,7 @@ async function applyAutomationLanesForBlock(instance, transport, frames) {
 
 async function applyParameterValue(instance, parameterIndex, normalizedValue, sampleOffset = 0) {
   const parameter = instance.parameters[parameterIndex];
+  validateParameterSampleOffsetForBlockProfile(instance, sampleOffset);
   if (
     instance.nativeParameterIds.has(parameter.id) &&
     instance.worker &&
@@ -1033,7 +1043,9 @@ function getLayout(payload, session) {
 
 async function processAudioBlock(payload, session) {
   const instance = getInstance(payload.instanceId, session);
-  const frames = boundedFrames(firstAudioFrameCount(payload, instance.maxBlockSize), instance.maxBlockSize);
+  const requestedFrames = firstAudioFrameCount(payload, instance.maxBlockSize);
+  const frames = boundedFrames(requestedFrames, instance.maxBlockSize);
+  validateRenderBlockSizeProfile(instance, requestedFrames, frames);
   const blockSampleRate = clampSampleRate(payload.sampleRate, instance.sampleRate);
   const mainInputChannels = normalizeAudioChannels(payload.channels, MAX_AUDIO_CHANNELS, frames);
   const inputBuses = normalizeAudioBusBlocks(payload.inputBuses, mainInputChannels, instance.layout?.inputBusLayouts, frames, {

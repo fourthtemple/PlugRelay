@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -276,6 +277,24 @@ std::vector<std::string> angleValuesAfter(const std::string& text, const std::st
     }
   }
   return values;
+}
+
+bool predicateRequiresUri(const std::string& text, const char* predicate, const char* prefixedName, const char* uri) {
+  std::size_t position = 0;
+  while ((position = text.find(predicate, position)) != std::string::npos) {
+    const auto end = text.find_first_of(".;", position + std::strlen(predicate));
+    const auto block = text.substr(position, end == std::string::npos ? std::string::npos : end - position);
+    if (blockContainsUri(block, prefixedName, uri)) {
+      return true;
+    }
+    position = end == std::string::npos ? text.size() : end + 1;
+  }
+  return false;
+}
+
+bool turtleRequiresUri(const std::string& text, const char* prefixedName, const char* uri) {
+  return predicateRequiresUri(text, "lv2:requiredFeature", prefixedName, uri) ||
+      predicateRequiresUri(text, "opts:requiredOption", prefixedName, uri);
 }
 
 std::optional<std::string> firstPluginUri(const std::string& text) {
@@ -814,11 +833,37 @@ Lv2BundleMetadata loadBundleMetadata(const std::filesystem::path& bundlePath) {
   metadata.mainOutputGroupUri = cappedString(
       prefixedOrUriAngleValueAfter(ttl, "pg:mainOutput", kLv2PortGroupsMainOutputUri).value_or(""),
       kMaxWorkerUriBytes);
+  metadata.requiresFixedBlockLength = turtleRequiresUri(ttl, "buf-size:fixedBlockLength", kLv2BufSizeFixedBlockLengthUri);
+  metadata.requiresPowerOf2BlockLength = turtleRequiresUri(ttl, "buf-size:powerOf2BlockLength", kLv2BufSizePowerOf2BlockLengthUri);
   metadata.ports = parsePorts(ttl);
   if (metadata.ports.empty()) {
     throw std::runtime_error("LV2 plugin metadata did not expose basic audio/control ports.");
   }
   return metadata;
+}
+
+bool isPowerOfTwoLv2BlockSize(std::uint32_t value) {
+  return value > 0 && (value & (value - 1U)) == 0;
+}
+
+bool lv2MetadataHasRestrictedBlockProfile(const Lv2BundleMetadata& metadata) {
+  return metadata.requiresFixedBlockLength || metadata.requiresPowerOf2BlockLength;
+}
+
+bool lv2MetadataAcceptsRenderBlockSize(
+    const Lv2BundleMetadata& metadata,
+    std::uint32_t maxBlockSize,
+    std::uint32_t frames) {
+  if (frames == 0 || frames > maxBlockSize) {
+    return false;
+  }
+  if (metadata.requiresFixedBlockLength && frames != maxBlockSize) {
+    return false;
+  }
+  if (metadata.requiresPowerOf2BlockLength && !isPowerOfTwoLv2BlockSize(frames)) {
+    return false;
+  }
+  return true;
 }
 
 std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::uint32_t frames) {

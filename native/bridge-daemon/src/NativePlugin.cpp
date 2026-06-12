@@ -106,6 +106,13 @@ std::string nativePluginInfoToJson(const NativePluginInfo& info) {
   writeMetadataString("componentSubType", info.componentSubType);
   writeMetadataString("componentManufacturer", info.componentManufacturer);
   writeMetadataString("lv2Uri", info.lv2Uri);
+  if (info.lv2RequiresFixedBlockLength && info.lv2RequiresPowerOf2BlockLength) {
+    writeMetadataString("lv2BlockSizeProfile", "fixed-power-of-two");
+  } else if (info.lv2RequiresFixedBlockLength) {
+    writeMetadataString("lv2BlockSizeProfile", "fixed");
+  } else if (info.lv2RequiresPowerOf2BlockLength) {
+    writeMetadataString("lv2BlockSizeProfile", "power-of-two");
+  }
   if (info.lv2UiCount > 0) {
     writeMetadataString("lv2UiTypes", joinStrings(info.lv2UiTypes, ","));
     writeMetadataString("lv2UiCount", std::to_string(info.lv2UiCount));
@@ -124,6 +131,8 @@ std::string nativePluginInfoToJson(const NativePluginInfo& info) {
   output << "\"unsupportedRequiredFeatureCount\":" << info.unsupportedRequiredFeatureCount << ",";
   output << "\"hasUnsupportedRequiredOptions\":" << (info.hasUnsupportedRequiredOptions ? "true" : "false") << ",";
   output << "\"unsupportedRequiredOptionCount\":" << info.unsupportedRequiredOptionCount << ",";
+  output << "\"lv2RequiresFixedBlockLength\":" << (info.lv2RequiresFixedBlockLength ? "true" : "false") << ",";
+  output << "\"lv2RequiresPowerOf2BlockLength\":" << (info.lv2RequiresPowerOf2BlockLength ? "true" : "false") << ",";
   output << "\"hasLv2Ui\":" << (info.lv2UiCount > 0 ? "true" : "false") << ",";
   output << "\"lv2UiCount\":" << info.lv2UiCount << ",";
   output << "\"lv2UiBinaryCount\":" << info.lv2UiBinaryCount;

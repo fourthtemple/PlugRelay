@@ -248,11 +248,13 @@ export function createPluginCatalogSupport({
       typeof diagnostics.bundlePath === "string" &&
       diagnostics.bundlePath.length > 0 &&
       diagnostics.hasExecutable === true &&
-      diagnostics.hasUnsupportedRequiredFeatures !== true
+      diagnostics.hasUnsupportedRequiredFeatures !== true &&
+      diagnostics.hasUnsupportedRequiredOptions !== true
         ? {
             format: "lv2",
             renderEngine: "native-lv2",
-            bundlePath: diagnostics.bundlePath
+            bundlePath: diagnostics.bundlePath,
+            blockSizeProfile: lv2BlockSizeProfile(diagnostics)
           }
         : undefined;
     return {
@@ -369,7 +371,8 @@ export function createPluginCatalogSupport({
       return {
         format: "lv2",
         renderEngine: "native-lv2",
-        bundlePath: diagnostics.bundlePath
+        bundlePath: diagnostics.bundlePath,
+        blockSizeProfile: lv2BlockSizeProfile(diagnostics)
       };
     }
 
@@ -397,6 +400,21 @@ export function createPluginCatalogSupport({
       return "AUMultiSplitter requires a multi-output splitter host profile; the current Audio Unit bridge hosts realtime main-bus units.";
     }
 
+    return undefined;
+  }
+
+  function lv2BlockSizeProfile(diagnostics) {
+    const fixed = diagnostics?.lv2RequiresFixedBlockLength === true;
+    const powerOfTwo = diagnostics?.lv2RequiresPowerOf2BlockLength === true;
+    if (fixed && powerOfTwo) {
+      return "fixed-power-of-two";
+    }
+    if (fixed) {
+      return "fixed";
+    }
+    if (powerOfTwo) {
+      return "power-of-two";
+    }
     return undefined;
   }
 
@@ -678,6 +696,7 @@ export function createPluginCatalogSupport({
     add("componentSubType", 16);
     add("componentManufacturer", 16);
     add("lv2Uri");
+    add("lv2BlockSizeProfile", 32);
     add("lv2UiTypes");
     add("lv2UiCount", 16);
     add("lv2UiBinaryCount", 16);

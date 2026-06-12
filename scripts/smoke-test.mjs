@@ -138,6 +138,11 @@ assert(
     lv2GainMetadata.lv2UiBinaryCount === "0",
   "scanPlugins exposes bounded path-free LV2 UI declaration metadata"
 );
+const lv2BlockProfileMetadata = lv2Scan.plugins.find((plugin) => plugin.pluginId === "lv2:soundbridge-block-profile-gain.lv2")?.metadata;
+assert(
+  lv2BlockProfileMetadata?.lv2BlockSizeProfile === "fixed-power-of-two",
+  "scanPlugins exposes LV2 fixed power-of-two block profile metadata"
+);
 
 await request(
   socket,
@@ -407,6 +412,95 @@ if (nativeLv2Effect) {
   assert(nativeLv2Latency.pluginLatencySamples === 17, "installed LV2 reports bounded plugin latency");
   assertLatencyReport(nativeLv2Latency, 32, "installed LV2 reports bounded plugin and transport latency");
   await request(socket, "destroyInstance", { instanceId: nativeLv2Instance.instanceId }, true, pair.sessionToken);
+}
+
+const nativeLv2BlockProfile = plugins.find((plugin) => plugin.pluginId === "lv2:soundbridge-block-profile-gain.lv2" && plugin.hostable === true);
+if (nativeLv2BlockProfile) {
+  await request(
+    socket,
+    "createInstance",
+    {
+      pluginId: nativeLv2BlockProfile.pluginId,
+      format: nativeLv2BlockProfile.format,
+      sampleRate: 48000,
+      maxBlockSize: 96,
+      inputChannels: 2,
+      outputChannels: 2
+    },
+    true,
+    pair.sessionToken
+  ).then(
+    () => {
+      throw new Error("LV2 block-profile plugin unexpectedly accepted a non-power-of-two maxBlockSize");
+    },
+    (error) => {
+      assert(error.message.includes("invalid_argument"), "LV2 power-of-two block profiles reject invalid maxBlockSize");
+    }
+  );
+  const blockProfileInstance = await request(
+    socket,
+    "createInstance",
+    {
+      pluginId: nativeLv2BlockProfile.pluginId,
+      format: nativeLv2BlockProfile.format,
+      sampleRate: 48000,
+      maxBlockSize: 128,
+      inputChannels: 2,
+      outputChannels: 2
+    },
+    true,
+    pair.sessionToken
+  );
+  await request(
+    socket,
+    "setParameterEvents",
+    {
+      instanceId: blockProfileInstance.instanceId,
+      events: [{ parameterId: "gain", normalizedValue: 0.5, time: 4 }]
+    },
+    true,
+    pair.sessionToken
+  ).then(
+    () => {
+      throw new Error("LV2 block-profile plugin unexpectedly accepted mid-block parameter automation");
+    },
+    (error) => {
+      assert(error.message.includes("invalid_argument"), "LV2 restricted block profiles reject mid-block parameter automation");
+    }
+  );
+  const fixedProfileBlock = await request(
+    socket,
+    "processAudioBlock",
+    {
+      instanceId: blockProfileInstance.instanceId,
+      blockId: 15,
+      sampleRate: 48000,
+      channels: [new Array(128).fill(0.2), new Array(128).fill(0.2)]
+    },
+    true,
+    pair.sessionToken
+  );
+  assert(fixedProfileBlock.renderEngine === "native-lv2", "LV2 block-profile plugin renders at its negotiated fixed block size");
+  await request(
+    socket,
+    "processAudioBlock",
+    {
+      instanceId: blockProfileInstance.instanceId,
+      blockId: 16,
+      sampleRate: 48000,
+      channels: [new Array(64).fill(0.2), new Array(64).fill(0.2)]
+    },
+    true,
+    pair.sessionToken
+  ).then(
+    () => {
+      throw new Error("LV2 block-profile plugin unexpectedly accepted a short render block");
+    },
+    (error) => {
+      assert(error.message.includes("invalid_argument"), "LV2 fixed block profiles reject non-fixed render sizes");
+    }
+  );
+  await request(socket, "destroyInstance", { instanceId: blockProfileInstance.instanceId }, true, pair.sessionToken);
 }
 
 const nativeAuEffect = plugins.find((plugin) => plugin.pluginId === "au-reg:appl:aufx:lpas");

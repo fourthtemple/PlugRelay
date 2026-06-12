@@ -60,6 +60,9 @@ public:
         requestedInputChannels_(std::min<std::uint32_t>(inputChannels, kMaxWorkerAudioPorts)),
         requestedOutputChannels_(std::clamp<std::uint32_t>(outputChannels, 1, kMaxWorkerAudioPorts)) {
     metadata_ = loadBundleMetadata(bundlePath_);
+    if (metadata_.requiresPowerOf2BlockLength && !isPowerOfTwoLv2BlockSize(maxBlockSize_)) {
+      throw std::runtime_error("LV2 plugin requires power-of-two block sizes.");
+    }
     ports_ = metadata_.ports;
     classifyPorts();
     if (outputPortIndexes_.empty()) {
@@ -101,6 +104,9 @@ public:
       throw std::runtime_error("LV2 worker cannot change sample rate after initialization.");
     }
 
+    if (!lv2MetadataAcceptsRenderBlockSize(metadata_, maxBlockSize_, frames)) {
+      throw std::runtime_error("invalid_lv2_block_size");
+    }
     frames = std::clamp<std::uint32_t>(frames, 1, maxBlockSize_);
     if (inputBuses.empty() && !inputChannels.empty()) {
       inputBuses.push_back(IndexedAudioBus{0, std::move(inputChannels)});
@@ -174,6 +180,9 @@ public:
       if (sampleOffset == 0) {
         port.value = plainValue;
       } else {
+        if (lv2MetadataHasRestrictedBlockProfile(metadata_)) {
+          throw std::runtime_error("lv2_block_profile_requires_block_boundary_parameters");
+        }
         if (pendingParameterChanges_.size() >= kMaxWorkerParameterChanges) {
           throw std::runtime_error("too_many_queued_parameter_changes");
         }
@@ -1139,7 +1148,7 @@ bool lv2HostWorkerAvailable() {
 
 std::string lv2HostWorkerStatus() {
 #ifndef _WIN32
-  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, bounded buf-size/options host data, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled.";
+  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, bounded buf-size/options host data including fixed/power-of-two block profiles, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled.";
 #else
   return "LV2 host worker is not available on this platform build.";
 #endif

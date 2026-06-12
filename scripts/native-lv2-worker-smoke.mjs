@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 const LV2_FIXTURE_BUNDLE = "native/example-plugins/LV2/soundbridge-example-gain.lv2";
+const LV2_BLOCK_PROFILE_BUNDLE = "native/example-plugins/LV2/soundbridge-block-profile-gain.lv2";
 
 export async function runNativeLv2WorkerSmoke({ nativeRenderer, assert, assertLayoutReport }) {
   const worker = spawn(
@@ -204,6 +205,89 @@ export async function runNativeLv2WorkerSmoke({ nativeRenderer, assert, assertLa
     setTimeout(() => {
       if (!worker.killed) {
         worker.kill();
+      }
+    }, 250).unref?.();
+  }
+
+  const restrictedWorker = spawn(
+    nativeRenderer,
+    ["--host-lv2-worker", LV2_BLOCK_PROFILE_BUNDLE, "48000", "128", "2", "2", "effect"],
+    { stdio: ["pipe", "pipe", "pipe"] }
+  );
+  restrictedWorker.stderr.setEncoding("utf8");
+  restrictedWorker.stderr.on("data", (chunk) => {
+    const message = String(chunk).trim();
+    if (message) {
+      console.warn(`LV2 block-profile worker stderr: ${message}`);
+    }
+  });
+
+  const restrictedLines = [];
+  let restrictedBuffer = "";
+  let restrictedWaiter;
+  restrictedWorker.stdout.setEncoding("utf8");
+  restrictedWorker.stdout.on("data", (chunk) => {
+    restrictedBuffer += chunk;
+    let newline;
+    while ((newline = restrictedBuffer.indexOf("\n")) >= 0) {
+      const line = restrictedBuffer.slice(0, newline).trim();
+      restrictedBuffer = restrictedBuffer.slice(newline + 1);
+      if (line) {
+        restrictedLines.push(line);
+      }
+      if (restrictedWaiter) {
+        const current = restrictedWaiter;
+        restrictedWaiter = undefined;
+        current();
+      }
+    }
+  });
+
+  const readRestrictedJsonLine = async () => {
+    const started = Date.now();
+    while (restrictedLines.length === 0) {
+      if (Date.now() - started > 5000) {
+        throw new Error("LV2 block-profile worker timed out");
+      }
+      await new Promise((resolve) => {
+        restrictedWaiter = resolve;
+        setTimeout(resolve, 25);
+      });
+    }
+    return JSON.parse(restrictedLines.shift());
+  };
+
+  const requestRestrictedWorker = async (command) => {
+    restrictedWorker.stdin.write(`${command}\n`, "utf8");
+    const response = await readRestrictedJsonLine();
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response;
+  };
+
+  try {
+    const ready = await readRestrictedJsonLine();
+    assert(ready.ok === true && ready.ready === true, "native LV2 block-profile worker reports ready");
+    const fullBlock = new Array(128).fill("0.2").join(",");
+    const restrictedRender = await requestRestrictedWorker(`render 128 48000 ${fullBlock}|${fullBlock}`);
+    assert(restrictedRender.channels?.[0]?.length === 128, "native LV2 block-profile worker accepts fixed power-of-two blocks");
+    const shortBlock = new Array(64).fill("0.2").join(",");
+    restrictedWorker.stdin.write(`render 64 48000 ${shortBlock}|${shortBlock}\n`, "utf8");
+    const invalidBlock = await readRestrictedJsonLine();
+    assert(invalidBlock.error === "invalid_lv2_block_size", "native LV2 block-profile worker rejects short render blocks");
+    restrictedWorker.stdin.write("setParameter gain 0.5 4\n", "utf8");
+    const invalidParameterOffset = await readRestrictedJsonLine();
+    assert(
+      invalidParameterOffset.error === "lv2_block_profile_requires_block_boundary_parameters",
+      "native LV2 block-profile worker rejects mid-block parameter changes"
+    );
+  } finally {
+    restrictedWorker.stdin.write("quit\n");
+    restrictedWorker.stdin.end();
+    setTimeout(() => {
+      if (!restrictedWorker.killed) {
+        restrictedWorker.kill();
       }
     }, 250).unref?.();
   }
