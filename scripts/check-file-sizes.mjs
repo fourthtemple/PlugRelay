@@ -12,8 +12,7 @@ const NEAR_LIMIT_BUDGETS = new Map([
   ["native/bridge-daemon/src/Vst3HostWorker.cpp", 1059],
   ["native/bridge-daemon/src/Vst3HostWorkerSupport.cpp", 1086],
   ["scripts/mock-daemon.mjs", 1121],
-  ["scripts/security-smoke.mjs", 1002],
-  ["scripts/smoke-test.mjs", 1056]
+  ["scripts/security-smoke.mjs", 1002]
 ]);
 
 const SOURCE_EXTENSIONS = new Set([
