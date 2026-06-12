@@ -73,7 +73,13 @@ try {
     await assertProgramDataControls(page, { expectInstanceTargets: false, label: `${format} before instance` });
     await page.getByRole("button", { name: "Create Instance" }).click();
     await page.waitForFunction(() => document.querySelector("#engineStatus")?.textContent === "Engine running");
-    await assertProgramDataControls(page, { expectInstanceTargets: format === "vst3", label: `${format} instance` });
+    const hasProgramDataTargets = await assertProgramDataControls(page, {
+      expectInstanceTargets: format === "vst3",
+      label: `${format} instance`
+    });
+    if (hasProgramDataTargets) {
+      await assertVst3ProgramDataRoundTrip(page);
+    }
     await assertPresetApply(page, format);
     await assertParameterStateRoundTrip(page, format);
 
@@ -133,13 +139,33 @@ async function assertProgramDataControls(page, { expectInstanceTargets, label })
     assert(exportDisabled === false, `${label} can export daemon-listed VST3 program data.`);
     assert(restoreDisabled === true, `${label} keeps VST3 program restore disabled until an envelope exists.`);
     assert(textDisabled === false, `${label} keeps the VST3 program envelope field available.`);
-    return;
+    return true;
   }
 
   assert(selectDisabled === true, `${label} keeps VST3 program target selection disabled.`);
   assert(exportDisabled === true, `${label} keeps VST3 program export disabled.`);
   assert(restoreDisabled === true, `${label} keeps VST3 program restore disabled.`);
   assert(textDisabled === true, `${label} keeps the VST3 program envelope field disabled.`);
+  return false;
+}
+
+async function assertVst3ProgramDataRoundTrip(page) {
+  const label = await page.locator("#programDataSelect option").first().textContent();
+  await page.locator("#programDataText").fill("");
+  await page.getByRole("button", { name: "Export Program" }).click();
+  await page.waitForFunction(() => /^[A-Za-z0-9+/]+={0,2}$/.test(document.querySelector("#programDataText")?.value ?? ""));
+  const exported = await page.locator("#programDataText").inputValue();
+  assert(exported.length > 0 && exported.length < 512 * 1024, "VST3 program-data export returns a bounded opaque envelope.");
+
+  const restoreDisabled = await page.locator("#restoreProgramDataButton").evaluate((button) => button.disabled);
+  assert(restoreDisabled === false, "VST3 program-data restore is enabled after an envelope export.");
+  await page.getByRole("button", { name: "Restore Program" }).click();
+  await page.waitForFunction(
+    () => (document.querySelector("#log")?.value ?? "").startsWith("VST3 program data restored."),
+    undefined,
+    { timeout: 3000 }
+  );
+  assert(Boolean(label), "VST3 program-data smoke used a daemon-listed program target.");
 }
 
 async function assertParameterStateRoundTrip(page, format) {
