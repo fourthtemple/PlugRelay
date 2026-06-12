@@ -10,6 +10,7 @@ export const DEFAULT_WORKER_READY_TIMEOUT_MS = 5000;
 export const DEFAULT_WORKER_TERMINATION_GRACE_MS = 250;
 export const DEFAULT_EXAMPLE_WORKER_COMMAND_TIMEOUT_MS = 1500;
 export const DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS = 5000;
+const MAX_SANITIZED_WORKER_DIAGNOSTIC_CHARS = 4096;
 
 export function createNativeWorkerProcesses({
   nativeRenderer,
@@ -673,7 +674,7 @@ function handleWorkerStderr(worker, chunk, label) {
       return;
     }
 
-    const message = rawLine.trim();
+    const message = sanitizeWorkerDiagnosticMessage(rawLine.trim());
     if (message) {
       console.warn(`${label} stderr: ${message}`);
     }
@@ -687,6 +688,22 @@ function accountWorkerStderr(worker, rawText) {
     return false;
   }
   return true;
+}
+
+function sanitizeWorkerDiagnosticMessage(value) {
+  let sanitized = "";
+  for (const char of String(value)) {
+    const codePoint = char.codePointAt(0);
+    if ((codePoint >= 0 && codePoint < 0x20) || codePoint === 0x7f) {
+      sanitized += `\\u${codePoint.toString(16).padStart(4, "0")}`;
+    } else {
+      sanitized += char;
+    }
+    if (sanitized.length > MAX_SANITIZED_WORKER_DIAGNOSTIC_CHARS) {
+      return `${sanitized.slice(0, MAX_SANITIZED_WORKER_DIAGNOSTIC_CHARS)}...`;
+    }
+  }
+  return sanitized;
 }
 
 function workerStdoutLineError(maxBytes) {

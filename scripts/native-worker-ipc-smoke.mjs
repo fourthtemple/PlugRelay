@@ -84,6 +84,24 @@ process.stdin.on("data", () => {
 setTimeout(() => {}, 30000);
 `
   );
+  const diagnosticControlWorkerPath = writeExecutable(
+    "diagnostic-control-worker.mjs",
+    `#!/usr/bin/env node
+process.stdin.setEncoding("utf8");
+let handled = false;
+process.stdin.on("data", () => {
+  if (handled) {
+    return;
+  }
+  handled = true;
+  process.stderr.write("\\u001b[31mwarning\\rfake\\x7f\\n");
+  setTimeout(() => {
+    process.stdout.write(JSON.stringify({ channels: [[0]] }) + "\\n");
+  }, 10);
+});
+setTimeout(() => {}, 30000);
+`
+  );
   const malformedExampleWorkerPath = writeExecutable(
     "malformed-example-worker.mjs",
     `#!/usr/bin/env node
@@ -241,6 +259,21 @@ setTimeout(() => {}, 30000);
   );
   check(nativeStderrBudgetWorker.process?.killed === true, "stderr-flood native host worker process is killed");
   nativeStderrBudgetWorker.destroy();
+
+  const diagnosticWorkers = createTestWorkers(nativeWorkerPath);
+  const diagnosticWorker = new diagnosticWorkers.ExampleInstrumentWorker(diagnosticControlWorkerPath);
+  const warnings = await captureWarnings(() =>
+    diagnosticWorker.render({ frames: 1, sampleRate: 48000, gain: 0.5, tone: 0.5, detune: 0.5 })
+  );
+  diagnosticWorker.destroy();
+  check(
+    warnings.some((warning) => warning.includes("\\u001b[31mwarning\\u000dfake\\u007f")),
+    "worker stderr diagnostics escape terminal control characters"
+  );
+  check(
+    warnings.every((warning) => !warning.includes(String.fromCharCode(27)) && !warning.includes("\r")),
+    "worker stderr diagnostics do not log raw terminal controls"
+  );
 
   const malformedWorkers = createTestWorkers(malformedNativeCommandWorkerPath);
   const malformedExampleWorker = new malformedWorkers.ExampleInstrumentWorker(malformedExampleWorkerPath);
@@ -530,6 +563,18 @@ async function expectRejected(operation, expectedText, message) {
   } catch (error) {
     check(String(error?.message ?? error).includes(expectedText), message);
   }
+}
+
+async function captureWarnings(operation) {
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args.map(String).join(" "));
+  try {
+    await operation();
+  } finally {
+    console.warn = originalWarn;
+  }
+  return warnings;
 }
 
 async function waitForKilled(worker) {
