@@ -2,12 +2,18 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { classifyAudioUnitHostProfile, isKnownAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
-import { FILE_GRANT_OPERATION_NAMES, isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
+import { classifyAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
+import {
+  clonePluginClassMetadata,
+  editorKindsForHostableNativeHost,
+  fileGrantOperationsForNativeHost,
+  formatCategory,
+  normalizeEditorKinds,
+  normalizeFileGrantOperations,
+  normalizePluginClassMetadata
+} from "./daemon-plugin-catalog-policy.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NATIVE_FILE_GRANT_OPERATIONS = Object.freeze(["loadPreset", "restoreState", "saveStateDirectory"]);
-const PLUGIN_EDITOR_KINDS = Object.freeze(["generic-parameters", "native-window"]);
 
 export function resolveNativeRenderer() {
   const candidates = [
@@ -78,6 +84,7 @@ export function createPluginCatalogSupport({
     maxPluginParameterTextBytes,
     maxPluginPresets
   } = limits;
+  const metadataContext = { maxPluginMetadataTextBytes, truncateText };
 
   function createPluginCatalog() {
     return [
@@ -273,7 +280,7 @@ export function createPluginCatalogSupport({
       hostable: true,
       inputs: plugin.inputs ?? 0,
       outputs: plugin.outputs ?? 2,
-      metadata: normalizePluginClassMetadata(plugin.metadata, plugin.format),
+      metadata: normalizePluginClassMetadata(plugin.metadata, metadataContext),
       executablePath: nativeHost ? undefined : diagnostics.executablePath,
       engine: defaults.engine,
       parameters: makeInstrumentParameters(defaults),
@@ -303,7 +310,7 @@ export function createPluginCatalogSupport({
         : auProfileReason ?? hostUnavailableReasonForInstalledPlugin(plugin),
       inputs: defaultInputChannels(plugin),
       outputs: defaultOutputChannels(plugin),
-      metadata: normalizePluginClassMetadata(publicPluginMetadata(plugin, auHostProfile), plugin.format),
+      metadata: normalizePluginClassMetadata(publicPluginMetadata(plugin, auHostProfile), metadataContext),
       parameters: [],
       presets: [],
       editorKinds: editorKindsForHostableNativeHost(hostable, nativeHost),
@@ -427,21 +434,6 @@ export function createPluginCatalogSupport({
       return "power-of-two";
     }
     return undefined;
-  }
-
-  function fileGrantOperationsForNativeHost(nativeHost) {
-    return nativeHost && ["au", "vst3", "lv2"].includes(nativeHost.format)
-      ? [...NATIVE_FILE_GRANT_OPERATIONS]
-      : undefined;
-  }
-
-  function editorKindsForHostableNativeHost(hostable, nativeHost) {
-    if (!hostable) {
-      return undefined;
-    }
-    return nativeHost && ["au", "vst3", "lv2"].includes(nativeHost.format)
-      ? ["generic-parameters", "native-window"]
-      : ["generic-parameters"];
   }
 
   function defaultInputChannels(plugin) {
@@ -661,7 +653,7 @@ export function createPluginCatalogSupport({
       hostUnavailableReason: plugin.hostUnavailableReason,
       inputs: plugin.inputs,
       outputs: plugin.outputs,
-      metadata: clonePluginClassMetadata(plugin.metadata),
+      metadata: clonePluginClassMetadata(plugin.metadata, metadataContext),
       parameters: plugin.parameters.map((parameter) => ({ ...parameter })),
       parameterMetadataAtLimit: plugin.parameterMetadataAtLimit === true || plugin.parameters.length >= maxPluginParameters || undefined,
       presets: (plugin.presets ?? [])
@@ -689,40 +681,6 @@ export function createPluginCatalogSupport({
     return cloned;
   }
 
-  function normalizeFileGrantOperations(value) {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    const operations = [];
-    for (const rawOperation of value) {
-      const operation = String(rawOperation ?? "");
-      if (isKnownFileGrantOperation(operation) && !operations.includes(operation)) {
-        operations.push(operation);
-      }
-      if (operations.length >= FILE_GRANT_OPERATION_NAMES.length) {
-        break;
-      }
-    }
-    return operations;
-  }
-
-  function normalizeEditorKinds(value) {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    const kinds = [];
-    for (const rawKind of value) {
-      const kind = String(rawKind ?? "");
-      if (PLUGIN_EDITOR_KINDS.includes(kind) && !kinds.includes(kind)) {
-        kinds.push(kind);
-      }
-      if (kinds.length >= PLUGIN_EDITOR_KINDS.length) {
-        break;
-      }
-    }
-    return kinds;
-  }
-
   function normalizePresetSnapshot(preset, index) {
     if (!preset || typeof preset !== "object") {
       return undefined;
@@ -743,54 +701,6 @@ export function createPluginCatalogSupport({
     return { id, name, parameters };
   }
 
-  function clonePluginClassMetadata(metadata) {
-    const normalized = normalizePluginClassMetadata(metadata);
-    return normalized ? { ...normalized } : undefined;
-  }
-
-  function normalizePluginClassMetadata(value) {
-    const source = value && typeof value === "object" ? value : {};
-    const metadata = {};
-    const add = (key, maxBytes = maxPluginMetadataTextBytes) => {
-      const text = truncateText(source[key], maxBytes);
-      if (text) {
-        metadata[key] = text;
-      }
-    };
-
-    add("stableId");
-    add("bundleIdentifier");
-    add("version", 80);
-    add("vst3ClassId", 64);
-    add("vst3SdkVersion", 80);
-    add("componentType", 16);
-    add("componentSubType", 16);
-    add("componentManufacturer", 16);
-    const audioUnitHostProfile = truncateText(source.audioUnitHostProfile, 64);
-    if (isKnownAudioUnitHostProfile(audioUnitHostProfile)) {
-      metadata.audioUnitHostProfile = audioUnitHostProfile;
-    }
-    add("lv2Uri");
-    add("lv2BlockSizeProfile", 32);
-    add("lv2UiTypes");
-    add("lv2UiCount", 16);
-    add("lv2UiBinaryCount", 16);
-
-    if (!metadata.stableId) {
-      if (metadata.vst3ClassId) {
-        metadata.stableId = `vst3:${metadata.vst3ClassId}`;
-      } else if (metadata.componentManufacturer && metadata.componentType && metadata.componentSubType) {
-        metadata.stableId = `${metadata.componentManufacturer}:${metadata.componentType}:${metadata.componentSubType}`;
-      } else if (metadata.lv2Uri) {
-        metadata.stableId = metadata.lv2Uri;
-      } else if (metadata.bundleIdentifier) {
-        metadata.stableId = metadata.bundleIdentifier;
-      }
-    }
-
-    return Object.keys(metadata).length > 0 ? metadata : undefined;
-  }
-
   return {
     clonePluginMetadata,
     createPluginFormatCapabilities,
@@ -798,17 +708,4 @@ export function createPluginCatalogSupport({
     normalizePresetSnapshot,
     plugins: createPluginCatalog()
   };
-}
-
-function formatCategory(format) {
-  switch (format) {
-    case "vst3":
-      return "VST3";
-    case "au":
-      return "AudioUnit";
-    case "lv2":
-      return "LV2";
-    default:
-      return "Unknown";
-  }
 }
