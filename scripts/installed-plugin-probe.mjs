@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import net from "node:net";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const HOST = process.env.SOUNDBRIDGE_HOST ?? "127.0.0.1";
 const ORIGIN = process.env.SOUNDBRIDGE_PROBE_ORIGIN ?? "http://127.0.0.1:5173";
@@ -10,6 +11,8 @@ const MAX_BLOCK_SIZE = intFromEnv("SOUNDBRIDGE_PROBE_MAX_BLOCK_SIZE", 64, 1, 819
 const SAMPLE_RATE = intFromEnv("SOUNDBRIDGE_PROBE_SAMPLE_RATE", 48000, 8000, 384000);
 const LIMIT = intFromEnv("SOUNDBRIDGE_PROBE_LIMIT", 0, 0, 10000);
 const NAME_FILTER = process.env.SOUNDBRIDGE_PROBE_FILTER ?? "";
+const PROBE_NATIVE_EDITOR_BROKER = flagFromEnv("SOUNDBRIDGE_PROBE_NATIVE_EDITOR_BROKER");
+const NATIVE_EDITOR_BROKER_FIXTURE = fileURLToPath(new URL("./native-editor-broker-fixture.mjs", import.meta.url));
 const FORMATS = new Set(
   (process.env.SOUNDBRIDGE_PROBE_FORMATS ?? "vst3,au")
     .split(",")
@@ -21,13 +24,7 @@ let requestSeq = 0;
 
 const port = await reservePort();
 const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
-  env: {
-    ...process.env,
-    SOUNDBRIDGE_HOST: HOST,
-    SOUNDBRIDGE_PORT: String(port),
-    SOUNDBRIDGE_PAIRING_TOKEN: PAIRING_TOKEN,
-    SOUNDBRIDGE_ALLOWED_ORIGINS: ORIGIN
-  },
+  env: daemonEnvironment(port),
   stdio: ["ignore", "pipe", "pipe"]
 });
 
@@ -60,7 +57,9 @@ async function runProbe(socket) {
   console.log(
     `Probing ${selected.length} installed plugin(s) (${[...FORMATS].join(",")})` +
       (NAME_FILTER ? ` matching "${NAME_FILTER}"` : "") +
-      ` with ${MAX_BLOCK_SIZE} frame blocks.`
+      ` with ${MAX_BLOCK_SIZE} frame blocks` +
+      (PROBE_NATIVE_EDITOR_BROKER ? " and native editor broker checks" : "") +
+      "."
   );
 
   const results = [];
@@ -114,6 +113,10 @@ async function probePlugin(socket, session, plugin) {
     result.renderEngine = created.renderEngine;
     result.layout = boundedLayoutSummary(created.layout);
     result.parameterCount = Array.isArray(created.plugin?.parameters) ? created.plugin.parameters.length : 0;
+
+    if (PROBE_NATIVE_EDITOR_BROKER && isNativePluginFormat(plugin.format)) {
+      await probeNativeEditorBroker(socket, session, plugin, instanceId, result);
+    }
 
     const parameters = await phase(result, "getParameters", () =>
       request(socket, "getParameters", { instanceId }, true, session)
@@ -228,6 +231,22 @@ async function probePlugin(socket, session, plugin) {
   return result;
 }
 
+async function probeNativeEditorBroker(socket, session, plugin, instanceId, result) {
+  const opened = await phase(result, "openNativeEditor", async () => {
+    const response = await request(socket, "openEditor", { instanceId, mode: "native" }, true, session);
+    assertNativeEditorResponse(response, plugin, instanceId);
+    return response;
+  });
+  result.nativeEditor = {
+    kind: opened.kind,
+    transport: opened.transport,
+    nativeWindow: opened.capabilities?.nativeWindow === true
+  };
+  await phase(result, "closeNativeEditor", () =>
+    request(socket, "closeEditor", { editorId: opened.editorId }, true, session)
+  );
+}
+
 async function phase(result, name, operation) {
   const started = Date.now();
   try {
@@ -252,6 +271,35 @@ function createInstancePayload(plugin) {
     inputChannels,
     outputChannels
   };
+}
+
+function assertNativeEditorResponse(response, plugin, instanceId) {
+  assertProbe(response && typeof response === "object", "bad_native_editor_response", "native editor response was not an object");
+  assertProbe(response.instanceId === instanceId, "bad_native_editor_response", "native editor instance id mismatch");
+  assertProbe(response.kind === "native-window", "bad_native_editor_response", "native editor kind was not native-window");
+  assertProbe(response.native === true, "bad_native_editor_response", "native editor response was not marked native");
+  assertProbe(response.transport === "native-broker", "bad_native_editor_response", "native editor transport was not native-broker");
+  assertProbe(response.capabilities?.nativeWindow === true, "bad_native_editor_response", "native editor did not expose nativeWindow capability");
+  assertProbe(response.plugin?.pluginId === plugin.pluginId, "bad_native_editor_response", "native editor plugin id mismatch");
+  assertProbe(response.plugin?.format === plugin.format, "bad_native_editor_response", "native editor plugin format mismatch");
+  assertNoNativeLaunchData(response, "native editor response");
+}
+
+function assertNoNativeLaunchData(value, context) {
+  const forbiddenKeys = new Set(["brokerSessionId", "bundlePath", "componentPath", "diagnostics", "executablePath", "nativeHost", "path"]);
+  const stack = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") {
+      continue;
+    }
+    for (const [key, child] of Object.entries(current)) {
+      assertProbe(!forbiddenKeys.has(key), "native_editor_launch_data_leak", `${context} exposed ${key}`);
+      if (child && typeof child === "object") {
+        stack.push(child);
+      }
+    }
+  }
 }
 
 function renderPayloadForLayout(instanceId, layout) {
@@ -293,6 +341,11 @@ function midiEventsForBlock(format) {
     events.splice(2, 0, { type: "noteExpression", typeId: 0, value: 0.5, noteId, channel: 0, time: offset(0.1875) });
   }
   return events;
+}
+
+function isNativePluginFormat(format) {
+  const normalized = String(format ?? "").toLowerCase();
+  return normalized === "vst3" || normalized === "au" || normalized === "lv2";
 }
 
 function assertRenderMatchesLayout(rendered, layout) {
@@ -338,6 +391,14 @@ function boundedLayoutSummary(layout) {
   };
 }
 
+function assertProbe(condition, code, message) {
+  if (!condition) {
+    const error = new Error(message);
+    error.code = code;
+    throw error;
+  }
+}
+
 function printResult(result) {
   const status = result.ok ? "ok" : "FAIL";
   const failedPhase = result.phases.find((phaseResult) => !phaseResult.ok);
@@ -345,10 +406,33 @@ function printResult(result) {
   console.log(`${status.padEnd(4)} ${result.pluginId}${suffix}`);
 }
 
+function daemonEnvironment(port) {
+  const env = {
+    ...process.env,
+    SOUNDBRIDGE_HOST: HOST,
+    SOUNDBRIDGE_PORT: String(port),
+    SOUNDBRIDGE_PAIRING_TOKEN: PAIRING_TOKEN,
+    SOUNDBRIDGE_ALLOWED_ORIGINS: ORIGIN
+  };
+  if (PROBE_NATIVE_EDITOR_BROKER) {
+    const configuredPath = String(process.env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH ?? "").trim();
+    env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH = configuredPath || process.execPath;
+    if (process.env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS === undefined && !configuredPath) {
+      env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS = JSON.stringify([NATIVE_EDITOR_BROKER_FIXTURE]);
+    }
+  }
+  return env;
+}
+
 function errorSummary(error) {
   const message = error?.message ?? String(error);
   const code = error?.code ?? message.split(":")[0];
   return { code, message };
+}
+
+function flagFromEnv(name) {
+  const raw = String(process.env[name] ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
 function intFromEnv(name, fallback, min, max) {
