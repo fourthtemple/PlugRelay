@@ -73,6 +73,17 @@ export interface HelloResponse {
       maxTransportTempoBpm?: number;
       maxTransportPositionMusic?: number;
       maxTransportSamplePosition?: number;
+      maxWorkerStdoutLineBytes?: number;
+      maxWorkerCommandBytes?: number;
+      maxWorkerPendingCommandBytes?: number;
+      maxWorkerStderrLineBytes?: number;
+      maxWorkerStderrBytes?: number;
+      maxWorkerDiagnosticLogChars?: number;
+      maxWorkerPendingCommands?: number;
+      workerReadyTimeoutMs?: number;
+      workerTerminationGraceMs?: number;
+      exampleWorkerCommandTimeoutMs?: number;
+      nativeWorkerCommandTimeoutMs?: number;
     };
     [key: string]: unknown;
   };

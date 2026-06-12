@@ -274,6 +274,16 @@ setTimeout(() => {}, 30000);
     warnings.every((warning) => !warning.includes(String.fromCharCode(27)) && !warning.includes("\r")),
     "worker stderr diagnostics do not log raw terminal controls"
   );
+  const cappedDiagnosticWorkers = createTestWorkers(nativeWorkerPath, { maxWorkerDiagnosticLogChars: 16 });
+  const cappedDiagnosticWorker = new cappedDiagnosticWorkers.ExampleInstrumentWorker(diagnosticControlWorkerPath);
+  const cappedWarnings = await captureWarnings(() =>
+    cappedDiagnosticWorker.render({ frames: 1, sampleRate: 48000, gain: 0.5, tone: 0.5, detune: 0.5 })
+  );
+  cappedDiagnosticWorker.destroy();
+  check(
+    cappedWarnings.some((warning) => warning.endsWith("...")),
+    "worker stderr diagnostics cap displayed log length"
+  );
 
   const malformedWorkers = createTestWorkers(malformedNativeCommandWorkerPath);
   const malformedExampleWorker = new malformedWorkers.ExampleInstrumentWorker(malformedExampleWorkerPath);
@@ -504,6 +514,7 @@ function createTestWorkers(nativeRenderer, options = {}) {
     maxWorkerPendingCommandBytes: options.maxWorkerPendingCommandBytes ?? MAX_TEST_PENDING_COMMAND_BYTES,
     maxWorkerStderrLineBytes: MAX_TEST_STDERR_LINE_BYTES,
     maxWorkerStderrBytes: MAX_TEST_STDERR_BYTES,
+    maxWorkerDiagnosticLogChars: options.maxWorkerDiagnosticLogChars,
     maxWorkerPendingCommands: options.maxWorkerPendingCommands ?? MAX_TEST_PENDING_COMMANDS,
     workerReadyTimeoutMs: TEST_READY_TIMEOUT_MS,
     workerTerminationGraceMs: options.workerTerminationGraceMs ?? TEST_TERMINATION_GRACE_MS,

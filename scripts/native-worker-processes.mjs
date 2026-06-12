@@ -10,7 +10,7 @@ export const DEFAULT_WORKER_READY_TIMEOUT_MS = 5000;
 export const DEFAULT_WORKER_TERMINATION_GRACE_MS = 250;
 export const DEFAULT_EXAMPLE_WORKER_COMMAND_TIMEOUT_MS = 1500;
 export const DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS = 5000;
-const MAX_SANITIZED_WORKER_DIAGNOSTIC_CHARS = 4096;
+export const DEFAULT_MAX_WORKER_DIAGNOSTIC_LOG_CHARS = 4096;
 
 export function createNativeWorkerProcesses({
   nativeRenderer,
@@ -24,7 +24,8 @@ export function createNativeWorkerProcesses({
   workerReadyTimeoutMs = DEFAULT_WORKER_READY_TIMEOUT_MS,
   workerTerminationGraceMs = DEFAULT_WORKER_TERMINATION_GRACE_MS,
   exampleWorkerCommandTimeoutMs = DEFAULT_EXAMPLE_WORKER_COMMAND_TIMEOUT_MS,
-  nativeWorkerCommandTimeoutMs = DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS
+  nativeWorkerCommandTimeoutMs = DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS,
+  maxWorkerDiagnosticLogChars = DEFAULT_MAX_WORKER_DIAGNOSTIC_LOG_CHARS
 }) {
   const {
     clonePluginLayout,
@@ -45,6 +46,7 @@ export function createNativeWorkerProcesses({
   const workerStderrLineLimit = normalizeWorkerStderrLineLimit(maxWorkerStderrLineBytes);
   const workerStderrBudget = normalizeWorkerStderrBudget(maxWorkerStderrBytes);
   const workerPendingCommandLimit = normalizeWorkerPendingCommandLimit(maxWorkerPendingCommands);
+  const workerDiagnosticLogLimit = normalizeWorkerDiagnosticLogLimit(maxWorkerDiagnosticLogChars);
   const workerReadyTimeout = normalizeWorkerReadyTimeout(workerReadyTimeoutMs);
   const workerTerminationGrace = normalizeWorkerTerminationGrace(workerTerminationGraceMs);
   const exampleCommandTimeout = normalizeWorkerCommandTimeout(
@@ -71,6 +73,7 @@ export function createNativeWorkerProcesses({
       this.maxStderrLineBytes = workerStderrLineLimit;
       this.maxStderrBytes = workerStderrBudget;
       this.maxPendingCommands = workerPendingCommandLimit;
+      this.maxDiagnosticLogChars = workerDiagnosticLogLimit;
       this.workerTerminationGraceMs = workerTerminationGrace;
       this.commandTimeoutMs = exampleCommandTimeout;
       this.process = spawn(executablePath, ["--worker"], {
@@ -250,6 +253,7 @@ export function createNativeWorkerProcesses({
       this.maxStderrLineBytes = workerStderrLineLimit;
       this.maxStderrBytes = workerStderrBudget;
       this.maxPendingCommands = workerPendingCommandLimit;
+      this.maxDiagnosticLogChars = workerDiagnosticLogLimit;
       this.workerTerminationGraceMs = workerTerminationGrace;
       this.commandTimeoutMs = nativeCommandTimeout;
       this.readySettled = false;
@@ -645,6 +649,14 @@ function normalizeWorkerCommandTimeout(value, fallback) {
   return number;
 }
 
+function normalizeWorkerDiagnosticLogLimit(value) {
+  const number = Math.floor(Number(value));
+  if (!Number.isFinite(number) || number <= 0) {
+    return DEFAULT_MAX_WORKER_DIAGNOSTIC_LOG_CHARS;
+  }
+  return number;
+}
+
 function workerLineTooLarge(line, maxBytes) {
   return Buffer.byteLength(line, "utf8") > maxBytes;
 }
@@ -674,7 +686,7 @@ function handleWorkerStderr(worker, chunk, label) {
       return;
     }
 
-    const message = sanitizeWorkerDiagnosticMessage(rawLine.trim());
+    const message = sanitizeWorkerDiagnosticMessage(rawLine.trim(), worker.maxDiagnosticLogChars);
     if (message) {
       console.warn(`${label} stderr: ${message}`);
     }
@@ -690,7 +702,8 @@ function accountWorkerStderr(worker, rawText) {
   return true;
 }
 
-function sanitizeWorkerDiagnosticMessage(value) {
+function sanitizeWorkerDiagnosticMessage(value, maxChars) {
+  const limit = normalizeWorkerDiagnosticLogLimit(maxChars);
   let sanitized = "";
   for (const char of String(value)) {
     const codePoint = char.codePointAt(0);
@@ -699,8 +712,8 @@ function sanitizeWorkerDiagnosticMessage(value) {
     } else {
       sanitized += char;
     }
-    if (sanitized.length > MAX_SANITIZED_WORKER_DIAGNOSTIC_CHARS) {
-      return `${sanitized.slice(0, MAX_SANITIZED_WORKER_DIAGNOSTIC_CHARS)}...`;
+    if (sanitized.length > limit) {
+      return `${sanitized.slice(0, limit)}...`;
     }
   }
   return sanitized;

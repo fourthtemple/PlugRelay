@@ -1,5 +1,8 @@
 import { envInteger } from "./daemon-security-helpers.mjs";
-import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
+import {
+  DEFAULT_MAX_WORKER_DIAGNOSTIC_LOG_CHARS,
+  createNativeWorkerProcesses
+} from "./native-worker-processes.mjs";
 
 export function createDaemonWorkerSecurity({ nativeRenderer, normalizers }) {
   const securityLimits = {
@@ -8,6 +11,10 @@ export function createDaemonWorkerSecurity({ nativeRenderer, normalizers }) {
     maxWorkerPendingCommandBytes: envInteger("SOUNDBRIDGE_MAX_WORKER_PENDING_COMMAND_BYTES", 64 * 1024 * 1024),
     maxWorkerStderrLineBytes: envInteger("SOUNDBRIDGE_MAX_WORKER_STDERR_LINE_BYTES", 1024 * 1024),
     maxWorkerStderrBytes: envInteger("SOUNDBRIDGE_MAX_WORKER_STDERR_BYTES", 4 * 1024 * 1024),
+    maxWorkerDiagnosticLogChars: envInteger(
+      "SOUNDBRIDGE_MAX_WORKER_DIAGNOSTIC_LOG_CHARS",
+      DEFAULT_MAX_WORKER_DIAGNOSTIC_LOG_CHARS
+    ),
     maxWorkerPendingCommands: envInteger("SOUNDBRIDGE_MAX_WORKER_PENDING_COMMANDS", 64),
     workerReadyTimeoutMs: envInteger("SOUNDBRIDGE_WORKER_READY_TIMEOUT_MS", 5000),
     workerTerminationGraceMs: envInteger("SOUNDBRIDGE_WORKER_TERMINATION_GRACE_MS", 250),

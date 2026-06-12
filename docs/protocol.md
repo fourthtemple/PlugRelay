@@ -101,6 +101,7 @@ Example paired capability payload:
       "maxWorkerPendingCommandBytes": 67108864,
       "maxWorkerStderrLineBytes": 1048576,
       "maxWorkerStderrBytes": 4194304,
+      "maxWorkerDiagnosticLogChars": 4096,
       "maxWorkerPendingCommands": 64,
       "workerReadyTimeoutMs": 5000,
       "workerTerminationGraceMs": 250,
