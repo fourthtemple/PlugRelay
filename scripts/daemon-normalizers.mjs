@@ -6,6 +6,7 @@ export function createDaemonNormalizers(options = {}) {
     maxPluginLatencySamples: positiveInteger(options.maxPluginLatencySamples, 1_048_576),
     maxPluginParameters: positiveInteger(options.maxPluginParameters, 1024),
     maxPluginParameterTextBytes: positiveInteger(options.maxPluginParameterTextBytes, 160),
+    maxPluginNoteExpressions: positiveInteger(options.maxPluginNoteExpressions, 256),
     maxPluginPrograms: positiveInteger(options.maxPluginPrograms, 256),
     maxPluginStateBytes: positiveInteger(options.maxPluginStateBytes, 384 * 1024),
     maxPluginTailSamples: positiveInteger(options.maxPluginTailSamples, 1_048_576),
@@ -14,7 +15,7 @@ export function createDaemonNormalizers(options = {}) {
   };
   const protocolError = options.makeProtocolError ?? defaultProtocolError;
 
-  function encodeMidiEvents(events) {
+  function encodeMidiEvents(events, format = "unknown") {
     if (!Array.isArray(events) || events.length === 0) {
       return "-";
     }
@@ -22,10 +23,10 @@ export function createDaemonNormalizers(options = {}) {
     return events
       .map((event) => {
         if (event.type === "noteOn") {
-          return ["on", event.note, event.velocity, event.channel, event.time].join(":");
+          return vst3NoteEventToken("on", event, event.velocity, format);
         }
         if (event.type === "noteOff") {
-          return ["off", event.note, event.velocity, event.channel, event.time].join(":");
+          return vst3NoteEventToken("off", event, event.velocity, format);
         }
         if (event.type === "controlChange") {
           return ["cc", event.controller, event.value, event.channel, event.time].join(":");
@@ -37,14 +38,25 @@ export function createDaemonNormalizers(options = {}) {
           return ["pressure", event.pressure, event.channel, event.time].join(":");
         }
         if (event.type === "polyPressure") {
-          return ["poly", event.note, event.pressure, event.channel, event.time].join(":");
+          return vst3NoteEventToken("poly", event, event.pressure, format);
         }
         if (event.type === "programChange") {
           return ["program", event.program, event.channel, event.time].join(":");
         }
+        if (event.type === "noteExpression" && format === "vst3") {
+          return ["expr", event.typeId, event.value, event.noteId, event.channel, event.time].join(":");
+        }
         throw protocolError("invalid_argument", `Unsupported MIDI event type: ${event.type}`);
       })
       .join(";");
+  }
+
+  function vst3NoteEventToken(kind, event, value, format) {
+    const token = [kind, event.note, value, event.channel, event.time];
+    if (format === "vst3" && Number.isInteger(event.noteId)) {
+      token.push(event.noteId);
+    }
+    return token.join(":");
   }
 
   function normalizeWorkerParameters(parameters) {
@@ -146,6 +158,52 @@ export function createDaemonNormalizers(options = {}) {
       name: truncateText(programList.name ?? "Programs", limits.maxPluginParameterTextBytes) || "Programs",
       programs
     };
+  }
+
+  function normalizeVst3NoteExpressions(expressions) {
+    if (!Array.isArray(expressions)) {
+      return [];
+    }
+    return expressions
+      .slice(0, limits.maxPluginNoteExpressions)
+      .map((expression) => normalizeVst3NoteExpression(expression))
+      .filter(Boolean);
+  }
+
+  function normalizeVst3NoteExpression(expression) {
+    if (!expression || typeof expression !== "object") {
+      return undefined;
+    }
+    const rawTypeId = Number(expression.typeId);
+    if (!Number.isInteger(rawTypeId) || rawTypeId < 0 || rawTypeId > 4_294_967_295) {
+      return undefined;
+    }
+    const name = truncateText(expression.name ?? `Expression ${rawTypeId}`, limits.maxPluginParameterTextBytes);
+    const minValue = clamp01(Number(expression.minValue));
+    const maxValue = Math.max(minValue, clamp01(Number(expression.maxValue)));
+    const normalized = {
+      typeId: rawTypeId,
+      name: name || `Expression ${rawTypeId}`,
+      defaultValue: Math.max(minValue, Math.min(maxValue, clamp01(Number(expression.defaultValue)))),
+      minValue,
+      maxValue,
+      stepCount: normalizeInt(expression.stepCount, 0, 1_000_000, 0),
+      busIndex: normalizeInt(expression.busIndex, 0, limits.maxPluginBuses - 1, 0),
+      channel: normalizeInt(expression.channel, 0, 15, 0)
+    };
+    const shortName = truncateText(expression.shortName, limits.maxPluginParameterTextBytes);
+    const unit = truncateText(expression.unit, 64);
+    const associatedParameterId = truncateText(expression.associatedParameterId, 64);
+    if (shortName) normalized.shortName = shortName;
+    if (unit) normalized.unit = unit;
+    if (associatedParameterId) normalized.associatedParameterId = associatedParameterId;
+    if (Number.isInteger(Number(expression.unitId))) {
+      normalized.unitId = normalizeInt(expression.unitId, -2147483648, 2147483647, -1);
+    }
+    if (expression.bipolar === true) normalized.bipolar = true;
+    if (expression.oneShot === true) normalized.oneShot = true;
+    if (expression.absolute === true) normalized.absolute = true;
+    return normalized;
   }
 
   function normalizeNativeState(nativeState, format) {
@@ -396,6 +454,7 @@ export function createDaemonNormalizers(options = {}) {
     normalizePluginLayout,
     normalizeTailReport,
     normalizeTailSamples,
+    normalizeVst3NoteExpressions,
     normalizeWorkerParameter,
     normalizeWorkerParameters,
     normalizeWorkerState,

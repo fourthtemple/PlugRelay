@@ -48,7 +48,9 @@ export function createDaemonControlEvents({
           1,
           `events[${index}].velocity`
         );
-        return { type, note, velocity, channel, time };
+        const normalized = { type, note, velocity, channel, time };
+        addOptionalNoteId(normalized, event, index);
+        return normalized;
       }
       if (type === "controlChange") {
         return {
@@ -76,13 +78,15 @@ export function createDaemonControlEvents({
         };
       }
       if (type === "polyPressure") {
-        return {
+        const normalized = {
           type,
           note: requireIntInRange(event.note, 0, 127, `events[${index}].note`),
           pressure: requireNumberInRange(event.pressure, 0, 1, `events[${index}].pressure`),
           channel,
           time
         };
+        addOptionalNoteId(normalized, event, index);
+        return normalized;
       }
       if (type === "programChange") {
         return {
@@ -92,11 +96,27 @@ export function createDaemonControlEvents({
           time
         };
       }
+      if (type === "noteExpression") {
+        return {
+          type,
+          typeId: requireIntegerInRange(event.typeId, 0, 4_294_967_295, `events[${index}].typeId`),
+          noteId: requireIntegerInRange(event.noteId, 0, 2_147_483_647, `events[${index}].noteId`),
+          value: requireNumberInRange(event.value, 0, 1, `events[${index}].value`),
+          channel,
+          time
+        };
+      }
       throw makeProtocolError(
         "invalid_argument",
-        `events[${index}].type must be noteOn, noteOff, controlChange, pitchBend, channelPressure, polyPressure, or programChange.`
+        `events[${index}].type must be noteOn, noteOff, controlChange, pitchBend, channelPressure, polyPressure, programChange, or noteExpression.`
       );
     });
+  }
+
+  function addOptionalNoteId(normalized, event, index) {
+    if (event.noteId !== undefined) {
+      normalized.noteId = requireIntegerInRange(event.noteId, 0, 2_147_483_647, `events[${index}].noteId`);
+    }
   }
 
   function normalizeParameterEvents(events, maxBlockSizeForInstance) {

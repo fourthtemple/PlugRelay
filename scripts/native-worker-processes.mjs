@@ -36,6 +36,7 @@ export function createNativeWorkerProcesses({
     normalizeNativeState,
     normalizePluginLayout,
     normalizeTailReport,
+    normalizeVst3NoteExpressions,
     normalizeWorkerParameter,
     normalizeWorkerParameters,
     normalizeWorkerState
@@ -313,7 +314,7 @@ export function createNativeWorkerProcesses({
 
     async sendMidiEvents(events) {
       if (["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
-        await this.request(`midi ${encodeMidiEvents(events)}`);
+        await this.request(`midi ${encodeMidiEvents(events, this.nativeHost.format)}`);
         return;
       }
 
@@ -332,6 +333,14 @@ export function createNativeWorkerProcesses({
       }
       const parsed = await this.request("parameters");
       return normalizeWorkerParameters(parsed.parameters);
+    }
+
+    async getVst3NoteExpressions() {
+      if (this.nativeHost.format !== "vst3") {
+        return [];
+      }
+      const parsed = await this.request("noteExpressions");
+      return normalizeVst3NoteExpressions(parsed.vst3NoteExpressions);
     }
 
     async setParameter(parameterId, normalizedValue, sampleOffset = 0) {

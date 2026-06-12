@@ -58,11 +58,11 @@ The reference implementation does not claim that sandboxing is complete today. I
 
 ## Full Host Feature Security Roadmap
 
-Full VST3/AU/LV2 hosting adds more than audio rendering. MIDI event lists, parameter metadata, automation, opaque state, latency/tail reporting, bus negotiation, native editor windows, presets, samples, and licensing flows all increase the attack surface. This applies to browser hosts and local desktop hosts: once the system loads third-party plugin code, the plugin boundary must be treated as untrusted.
+Full VST3/AU/LV2 hosting adds more than audio rendering. MIDI and note-expression event lists, parameter metadata, automation, opaque state, latency/tail reporting, bus negotiation, native editor windows, presets, samples, and licensing flows all increase the attack surface. This applies to browser hosts and local desktop hosts: once the system loads third-party plugin code, the plugin boundary must be treated as untrusted.
 
 | Feature | Added risk | Required control |
 | --- | --- | --- |
-| MIDI event lists | Oversized or malformed event batches can stress workers or confuse adapters. | Bound event count, byte size, timing offsets, channel/note/controller/program/value ranges, and reject malformed events before worker dispatch; LV2 atom MIDI must use worker-owned bounded sequence buffers. |
+| MIDI and note-expression event lists | Oversized or malformed event batches can stress workers or confuse adapters. | Bound event count, byte size, timing offsets, channel/note/controller/program/value/type-id ranges, reject malformed events before worker dispatch, and gate VST3 note-expression events to VST3 workers; LV2 atom MIDI must use worker-owned bounded sequence buffers. |
 | Parameter enumeration, program metadata, presets, and automation | Plugin-controlled names/units/ids/program/preset labels and oversized automation bursts, curves, or timeline lanes can break JSON, UI, logs, or automation paths. | Cap counts and string lengths, escape text, normalize values, bound VST3 program-list and preset snapshot metadata, apply presets by daemon-listed id only, reject writes to read-only parameters, bound automation event lists, curve expansion, lane count, lane point count, render-block lane expansion, and enforce per-instance ownership. |
 | Public plugin metadata | Scanner-controlled identifiers can leak local paths or become oversized UI/cache data. | Expose only bounded path-free public metadata such as bundle ids, AudioComponent tuples, versions, LV2 URIs, and brokered VST3 factory class metadata; keep launch paths in internal diagnostics. |
 | State save/restore | Opaque blobs can be huge or maliciously malformed. | VST3/AU now enforce blob-size limits, keep state opaque, bind it to the producing instance/session, skip read-only daemon-managed parameter values on restore, and never interpret state as a path or command; LV2 control-port state and portable POD extension properties are bounded and keyed only to known ports or URIs; LV2 file-backed state is allowed only through brokered relative paths, symlink/traversal rejection, and capped embedded file bytes. |
@@ -94,6 +94,7 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Audio channels | 0–32 in, 1–32 out | `createInstance.inputChannels` / `outputChannels` |
 | Plugin buses | 0–32 in, 1–32 out; explicit input bus indexes must be unique integers in 0–31 and worker line-protocol bus framing must be revalidated | `getLayout`, `createInstance.layout`, `processAudioBlock.inputBuses` |
 | MIDI events per request | 4096 | `sendMidiEvents.events` |
+| VST3 note-expression metadata | 256 entries; text capped to parameter-text limits; type ids `0..4294967295`; note ids `0..2147483647` | `PluginMetadata.vst3NoteExpressions`, `sendMidiEvents.events` |
 | Parameter automation events per request | 4096 | `setParameterEvents.events`, expanded `setParameterCurve` events |
 | Parameter automation curve points | 256, never above the parameter-event cap | `setParameterCurve.points` |
 | Parameter automation lanes | 128 lanes per instance; 4096 points per lane; render-block lane expansion capped by the parameter-event cap | `setAutomationLane.points`, `clearAutomationLane`, `processAudioBlock.transport.samplePosition` |

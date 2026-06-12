@@ -42,6 +42,40 @@ try {
       unitParameter.vst3Unit.name === "12345678",
     "daemon normalizers bound VST3 unit metadata"
   );
+  const [unitExpression] = unitNormalizers.normalizeVst3NoteExpressions([
+    {
+      typeId: 0,
+      name: "1234567890",
+      shortName: "Velocity",
+      unit: "%",
+      unitId: 2,
+      defaultValue: 0.5,
+      minValue: 0,
+      maxValue: 1,
+      stepCount: 0,
+      associatedParameterId: "1234567890",
+      busIndex: 0,
+      channel: 1,
+      bipolar: true
+    }
+  ]);
+  check(
+    unitExpression?.name === "12345678" &&
+      unitExpression.associatedParameterId === "1234567890" &&
+      unitExpression.channel === 1 &&
+      unitExpression.bipolar === true,
+    "daemon normalizers bound VST3 note-expression metadata"
+  );
+  check(
+    unitNormalizers.encodeMidiEvents(
+      [
+        { type: "noteOn", note: 60, velocity: 0.8, channel: 0, time: 0, noteId: 42 },
+        { type: "noteExpression", typeId: 0, value: 0.5, noteId: 42, channel: 0, time: 1 }
+      ],
+      "vst3"
+    ) === "on:60:0.8:0:0:42;expr:0:0.5:42:0:1",
+    "daemon normalizers encode VST3 note-expression worker events"
+  );
 
   const exampleWorkerPath = writeExecutable(
     "oversized-example-worker.mjs",

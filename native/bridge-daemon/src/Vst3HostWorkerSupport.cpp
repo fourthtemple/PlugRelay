@@ -72,20 +72,23 @@ bool parseMidiEventToken(const std::string& token, PendingMidiEvent& event) {
   };
 
   if (parts[0] == "on" || parts[0] == "off" || parts[0] == "poly") {
-    if (parts.size() != 5) {
+    if (parts.size() != 5 && parts.size() != 6) {
       return false;
     }
     std::uint32_t note = 60;
+    std::uint32_t noteId = 0;
     double value = parts[0] == "off" ? 0.0 : 0.8;
     if (!parseUint32Arg(parts[1].c_str(), 0, 127, note) ||
         !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) ||
-        !parseChannelAndOffset(3, 4)) {
+        !parseChannelAndOffset(3, 4) ||
+        (parts.size() == 6 && !parseUint32Arg(parts[5].c_str(), 0, 2147483647U, noteId))) {
       return false;
     }
     event.type = parts[0] == "on"
         ? PendingMidiEventType::NoteOn
         : parts[0] == "off" ? PendingMidiEventType::NoteOff : PendingMidiEventType::PolyPressure;
     event.note = static_cast<std::uint8_t>(note);
+    event.noteId = parts.size() == 6 ? static_cast<Steinberg::int32>(noteId) : -1;
     event.value = static_cast<float>(value);
     return true;
   }
@@ -146,6 +149,26 @@ bool parseMidiEventToken(const std::string& token, PendingMidiEvent& event) {
     }
     event.type = PendingMidiEventType::ProgramChange;
     event.program = static_cast<std::uint8_t>(program);
+    return true;
+  }
+
+  if (parts[0] == "expr") {
+    if (parts.size() != 6) {
+      return false;
+    }
+    std::uint32_t typeId = 0;
+    std::uint32_t noteId = 0;
+    double value = 0.0;
+    if (!parseUint32Arg(parts[1].c_str(), 0, 4294967295U, typeId) ||
+        !parseDoubleArg(parts[2].c_str(), 0.0, 1.0, value) ||
+        !parseUint32Arg(parts[3].c_str(), 0, 2147483647U, noteId) ||
+        !parseChannelAndOffset(4, 5)) {
+      return false;
+    }
+    event.type = PendingMidiEventType::NoteExpression;
+    event.noteExpressionTypeId = typeId;
+    event.noteId = static_cast<Steinberg::int32>(noteId);
+    event.value = static_cast<float>(value);
     return true;
   }
 
@@ -271,6 +294,51 @@ std::string programListToJson(
            << "}";
   }
   output << "]}";
+  return output.str();
+}
+
+std::string noteExpressionInfoToJson(
+    const Steinberg::Vst::NoteExpressionTypeInfo& info,
+    Steinberg::int32 busIndex,
+    Steinberg::int16 channel) {
+  const auto name = cappedString(VST3::StringConvert::convert(info.title));
+  const auto shortName = cappedString(VST3::StringConvert::convert(info.shortTitle));
+  const auto unit = cappedString(VST3::StringConvert::convert(info.units), 64);
+  const auto minValue = std::clamp(info.valueDesc.minimum, 0.0, 1.0);
+  const auto maxValue = std::clamp(info.valueDesc.maximum, minValue, 1.0);
+  const auto defaultValue = std::clamp(info.valueDesc.defaultValue, minValue, maxValue);
+
+  std::ostringstream output;
+  output << "{\"typeId\":" << info.typeId
+         << ",\"name\":\"" << jsonEscape(name.empty() ? shortName : name) << "\""
+         << ",\"defaultValue\":" << defaultValue
+         << ",\"minValue\":" << minValue
+         << ",\"maxValue\":" << maxValue
+         << ",\"stepCount\":" << std::max<Steinberg::int32>(0, info.valueDesc.stepCount)
+         << ",\"busIndex\":" << busIndex
+         << ",\"channel\":" << channel;
+  if (!shortName.empty()) {
+    output << ",\"shortName\":\"" << jsonEscape(shortName) << "\"";
+  }
+  if (!unit.empty()) {
+    output << ",\"unit\":\"" << jsonEscape(unit) << "\"";
+  }
+  if (info.unitId >= 0) {
+    output << ",\"unitId\":" << info.unitId;
+  }
+  if ((info.flags & Steinberg::Vst::NoteExpressionTypeInfo::kIsBipolar) != 0) {
+    output << ",\"bipolar\":true";
+  }
+  if ((info.flags & Steinberg::Vst::NoteExpressionTypeInfo::kIsOneShot) != 0) {
+    output << ",\"oneShot\":true";
+  }
+  if ((info.flags & Steinberg::Vst::NoteExpressionTypeInfo::kIsAbsolute) != 0) {
+    output << ",\"absolute\":true";
+  }
+  if ((info.flags & Steinberg::Vst::NoteExpressionTypeInfo::kAssociatedParameterIDValid) != 0) {
+    output << ",\"associatedParameterId\":\"" << info.associatedParameterId << "\"";
+  }
+  output << "}";
   return output.str();
 }
 
@@ -556,7 +624,7 @@ bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinb
     event.noteOn.tuning = 0.0F;
     event.noteOn.velocity = std::clamp(pending.value, 0.0F, 1.0F);
     event.noteOn.length = 0;
-    event.noteOn.noteId = -1;
+    event.noteOn.noteId = pending.noteId;
     return true;
   }
   if (pending.type == PendingMidiEventType::NoteOff ||
@@ -565,7 +633,7 @@ bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinb
     event.noteOff.channel = static_cast<Steinberg::int16>(pending.channel);
     event.noteOff.pitch = static_cast<Steinberg::int16>(pending.note);
     event.noteOff.velocity = std::clamp(pending.value, 0.0F, 1.0F);
-    event.noteOff.noteId = -1;
+    event.noteOff.noteId = pending.noteId;
     event.noteOff.tuning = 0.0F;
     return true;
   }
@@ -574,10 +642,46 @@ bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinb
     event.polyPressure.channel = static_cast<Steinberg::int16>(pending.channel);
     event.polyPressure.pitch = static_cast<Steinberg::int16>(pending.note);
     event.polyPressure.pressure = std::clamp(pending.value, 0.0F, 1.0F);
-    event.polyPressure.noteId = -1;
+    event.polyPressure.noteId = pending.noteId;
+    return true;
+  }
+  if (pending.type == PendingMidiEventType::NoteExpression && pending.noteId >= 0) {
+    event.type = Steinberg::Vst::Event::kNoteExpressionValueEvent;
+    event.noteExpressionValue.typeId = pending.noteExpressionTypeId;
+    event.noteExpressionValue.noteId = pending.noteId;
+    event.noteExpressionValue.value = std::clamp(static_cast<double>(pending.value), 0.0, 1.0);
     return true;
   }
   return false;
+}
+
+std::string noteExpressionsToJson(Steinberg::Vst::INoteExpressionController* noteExpressionController) {
+  std::ostringstream output;
+  output << "{\"vst3NoteExpressions\":[";
+  if (noteExpressionController != nullptr) {
+    bool first = true;
+    Steinberg::int32 total = 0;
+    for (Steinberg::int16 channel = 0; channel < 16 && total < kMaxWorkerNoteExpressionTypes; ++channel) {
+      const auto count = std::clamp<Steinberg::int32>(
+          noteExpressionController->getNoteExpressionCount(0, channel),
+          0,
+          kMaxWorkerNoteExpressionTypes - total);
+      for (Steinberg::int32 index = 0; index < count && total < kMaxWorkerNoteExpressionTypes; ++index) {
+        Steinberg::Vst::NoteExpressionTypeInfo info {};
+        if (noteExpressionController->getNoteExpressionInfo(0, channel, index, info) != Steinberg::kResultOk) {
+          continue;
+        }
+        if (!first) {
+          output << ",";
+        }
+        output << noteExpressionInfoToJson(info, 0, channel);
+        first = false;
+        ++total;
+      }
+    }
+  }
+  output << "]}";
+  return output.str();
 }
 
 std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels) {

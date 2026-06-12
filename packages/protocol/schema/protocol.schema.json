@@ -111,6 +111,7 @@
                 "maxTransportTempoBpm": { "type": "number" },
                 "maxTransportPositionMusic": { "type": "number" },
                 "maxTransportSamplePosition": { "type": "number" },
+                "maxPluginNoteExpressions": { "type": "number" },
                 "maxWorkerStdoutLineBytes": { "type": "number" },
                 "maxWorkerCommandBytes": { "type": "number" },
                 "maxWorkerPendingCommandBytes": { "type": "number" },
@@ -302,6 +303,28 @@
         }
       }
     },
+    "pluginVst3NoteExpression": {
+      "type": "object",
+      "required": ["typeId", "name", "defaultValue", "minValue", "maxValue", "stepCount", "busIndex", "channel"],
+      "additionalProperties": false,
+      "properties": {
+        "typeId": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "name": { "type": "string", "maxLength": 160 },
+        "shortName": { "type": "string", "maxLength": 160 },
+        "unit": { "type": "string", "maxLength": 64 },
+        "unitId": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "defaultValue": { "type": "number", "minimum": 0, "maximum": 1 },
+        "minValue": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maxValue": { "type": "number", "minimum": 0, "maximum": 1 },
+        "stepCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "bipolar": { "type": "boolean" },
+        "oneShot": { "type": "boolean" },
+        "absolute": { "type": "boolean" },
+        "associatedParameterId": { "type": "string", "maxLength": 64 },
+        "busIndex": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "channel": { "type": "integer", "minimum": 0, "maximum": 15 }
+      }
+    },
     "pluginMetadata": {
       "type": "object",
       "required": ["pluginId", "format", "name", "vendor", "category", "kind", "inputs", "outputs", "parameters"],
@@ -331,6 +354,11 @@
           "type": "array",
           "maxItems": 1024,
           "items": { "$ref": "#/$defs/pluginParameter" }
+        },
+        "vst3NoteExpressions": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/pluginVst3NoteExpression" }
         },
         "presets": {
           "type": "array",
@@ -432,7 +460,8 @@
             "note": { "type": "integer", "minimum": 0, "maximum": 127 },
             "velocity": { "type": "number", "minimum": 0, "maximum": 1 },
             "time": { "type": "integer", "minimum": 0, "maximum": 8191 },
-            "channel": { "type": "integer", "minimum": 0, "maximum": 15 }
+            "channel": { "type": "integer", "minimum": 0, "maximum": 15 },
+            "noteId": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
           }
         },
         {
@@ -444,7 +473,8 @@
             "note": { "type": "integer", "minimum": 0, "maximum": 127 },
             "velocity": { "type": "number", "minimum": 0, "maximum": 1 },
             "time": { "type": "integer", "minimum": 0, "maximum": 8191 },
-            "channel": { "type": "integer", "minimum": 0, "maximum": 15 }
+            "channel": { "type": "integer", "minimum": 0, "maximum": 15 },
+            "noteId": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
           }
         },
         {
@@ -490,7 +520,8 @@
             "note": { "type": "integer", "minimum": 0, "maximum": 127 },
             "pressure": { "type": "number", "minimum": 0, "maximum": 1 },
             "time": { "type": "integer", "minimum": 0, "maximum": 8191 },
-            "channel": { "type": "integer", "minimum": 0, "maximum": 15 }
+            "channel": { "type": "integer", "minimum": 0, "maximum": 15 },
+            "noteId": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
           }
         },
         {
@@ -500,6 +531,19 @@
           "properties": {
             "type": { "const": "programChange" },
             "program": { "type": "integer", "minimum": 0, "maximum": 127 },
+            "time": { "type": "integer", "minimum": 0, "maximum": 8191 },
+            "channel": { "type": "integer", "minimum": 0, "maximum": 15 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "typeId", "noteId", "value"],
+          "additionalProperties": true,
+          "properties": {
+            "type": { "const": "noteExpression" },
+            "typeId": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+            "noteId": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+            "value": { "type": "number", "minimum": 0, "maximum": 1 },
             "time": { "type": "integer", "minimum": 0, "maximum": 8191 },
             "channel": { "type": "integer", "minimum": 0, "maximum": 15 }
           }

@@ -661,6 +661,33 @@ async function run() {
   );
   check(midiBadBend.code === "invalid_argument", "sendMidiEvents rejects out-of-range pitch bend fields");
 
+  const midiBadNoteExpression = await request(
+    main,
+    "sendMidiEvents",
+    { instanceId: created.instanceId, events: [{ type: "noteExpression", typeId: 0, noteId: -1, value: 0.5 }] },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(midiBadNoteExpression.code === "invalid_argument", "sendMidiEvents rejects out-of-range VST3 note-expression fields");
+
+  const midiUnsupportedNoteExpression = await request(
+    main,
+    "sendMidiEvents",
+    { instanceId: created.instanceId, events: [{ type: "noteExpression", typeId: 0, noteId: 1, value: 0.5 }] },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(
+    midiUnsupportedNoteExpression.code === "unsupported_midi_event",
+    "sendMidiEvents rejects VST3 note expressions for non-VST3 workers"
+  );
+
   // J. Parameter automation input is bounded before it reaches workers.
   const automation = await request(
     main,

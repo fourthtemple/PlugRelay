@@ -164,7 +164,7 @@ async function probePlugin(socket, session, plugin) {
       result.automationLanePointCount = lane.pointCount;
     }
 
-    const midiEvents = midiEventsForBlock();
+    const midiEvents = midiEventsForBlock(plugin.format);
     const midiAccepted = await phase(result, "sendMidiEvents", () =>
       request(socket, "sendMidiEvents", { instanceId, events: midiEvents }, true, session)
     );
@@ -204,7 +204,9 @@ async function probePlugin(socket, session, plugin) {
         "sendMidiEvents",
         {
           instanceId,
-          events: [{ type: "noteOff", note: 60, velocity: 0, channel: 0, time: 0 }]
+          events: [
+            { type: "noteOff", note: 60, velocity: 0, channel: 0, time: 0, ...(plugin.format === "vst3" ? { noteId: 77 } : {}) }
+          ]
         },
         true,
         session
@@ -277,15 +279,20 @@ function renderPayloadForLayout(instanceId, layout) {
   };
 }
 
-function midiEventsForBlock() {
+function midiEventsForBlock(format) {
   const offset = (fraction) => Math.min(MAX_BLOCK_SIZE - 1, Math.max(0, Math.floor(MAX_BLOCK_SIZE * fraction)));
-  return [
-    { type: "noteOn", note: 60, velocity: 0.7, channel: 0, time: 0 },
-    { type: "polyPressure", note: 60, pressure: 0.35, channel: 0, time: offset(0.125) },
+  const noteId = 77;
+  const events = [
+    { type: "noteOn", note: 60, velocity: 0.7, channel: 0, time: 0, ...(format === "vst3" ? { noteId } : {}) },
+    { type: "polyPressure", note: 60, pressure: 0.35, channel: 0, time: offset(0.125), ...(format === "vst3" ? { noteId } : {}) },
     { type: "controlChange", controller: 1, value: 0.4, channel: 0, time: offset(0.25) },
     { type: "pitchBend", value: 0.1, channel: 0, time: offset(0.375) },
     { type: "channelPressure", pressure: 0.3, channel: 0, time: offset(0.5) }
   ];
+  if (format === "vst3") {
+    events.splice(2, 0, { type: "noteExpression", typeId: 0, value: 0.5, noteId, channel: 0, time: offset(0.1875) });
+  }
+  return events;
 }
 
 function assertRenderMatchesLayout(rendered, layout) {

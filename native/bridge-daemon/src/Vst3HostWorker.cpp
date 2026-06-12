@@ -13,6 +13,7 @@
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstmidicontrollers.h"
+#include "pluginterfaces/vst/ivstnoteexpression.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/vst/ivstunits.h"
 #include "public.sdk/source/common/memorystream.h"
@@ -318,6 +319,10 @@ public:
     return output.str();
   }
 
+  std::string noteExpressionsToJson() const {
+    return vst3_worker::noteExpressionsToJson(noteExpressionController_);
+  }
+
   std::string setParameter(Steinberg::Vst::ParamID id, double value, std::uint32_t sampleOffset) {
     if (!controller_) {
       throw std::runtime_error("VST3 plugin does not expose an edit controller.");
@@ -497,6 +502,7 @@ private:
     controller_ = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(component_);
     if (controller_) {
       midiMapping_ = Steinberg::FUnknownPtr<Steinberg::Vst::IMidiMapping>(controller_);
+      noteExpressionController_ = Steinberg::FUnknownPtr<Steinberg::Vst::INoteExpressionController>(controller_);
       unitInfo_ = Steinberg::FUnknownPtr<Steinberg::Vst::IUnitInfo>(controller_);
       return;
     }
@@ -511,6 +517,7 @@ private:
       checkResult(controller_->initialize(&hostApplication_), "IEditController::initialize");
       controllerInitialized_ = true;
       midiMapping_ = Steinberg::FUnknownPtr<Steinberg::Vst::IMidiMapping>(controller_);
+      noteExpressionController_ = Steinberg::FUnknownPtr<Steinberg::Vst::INoteExpressionController>(controller_);
       unitInfo_ = Steinberg::FUnknownPtr<Steinberg::Vst::IUnitInfo>(controller_);
     }
   }
@@ -805,6 +812,7 @@ private:
   Steinberg::IPtr<Steinberg::Vst::IConnectionPoint> controllerConnection_;
   Steinberg::IPtr<Steinberg::Vst::IAudioProcessor> processor_;
   Steinberg::IPtr<Steinberg::Vst::IMidiMapping> midiMapping_;
+  Steinberg::IPtr<Steinberg::Vst::INoteExpressionController> noteExpressionController_;
   Steinberg::IPtr<Steinberg::Vst::IUnitInfo> unitInfo_;
   double sampleRate_ = 48000.0;
   std::uint32_t maxBlockSize_ = 128;
@@ -900,6 +908,11 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
 
         if (command == "parameters") {
           std::cout << host.parametersToJson() << std::endl;
+          continue;
+        }
+
+        if (command == "noteExpressions") {
+          std::cout << host.noteExpressionsToJson() << std::endl;
           continue;
         }
 

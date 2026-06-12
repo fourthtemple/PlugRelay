@@ -6,6 +6,7 @@
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
+#include "pluginterfaces/vst/ivstnoteexpression.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/vst/ivstunits.h"
 #include "public.sdk/source/vst/hosting/module.h"
@@ -25,6 +26,7 @@ constexpr std::size_t kMaxWorkerParameterStringBytes = 160;
 constexpr Steinberg::int32 kMaxWorkerProgramLists = 256;
 constexpr Steinberg::int32 kMaxWorkerProgramsPerParameter = 256;
 constexpr Steinberg::int32 kMaxWorkerUnits = 1024;
+constexpr Steinberg::int32 kMaxWorkerNoteExpressionTypes = 256;
 constexpr std::size_t kMaxWorkerStateBytes = 384 * 1024;
 constexpr std::uint32_t kMaxWorkerLatencySamples = 1'048'576;
 constexpr std::uint32_t kMaxWorkerTailSamples = 1'048'576;
@@ -42,7 +44,8 @@ enum class PendingMidiEventType {
   PitchBend,
   ChannelPressure,
   PolyPressure,
-  ProgramChange
+  ProgramChange,
+  NoteExpression
 };
 
 struct PendingMidiEvent {
@@ -50,6 +53,8 @@ struct PendingMidiEvent {
   std::uint8_t note = 60;
   std::uint8_t controller = 0;
   std::uint8_t program = 0;
+  Steinberg::Vst::NoteExpressionTypeID noteExpressionTypeId = 0;
+  Steinberg::int32 noteId = -1;
   float value = 0.8F;
   std::uint8_t channel = 0;
   std::uint32_t sampleOffset = 0;
@@ -102,6 +107,7 @@ bool parseAudioBuses(const std::string& encoded, std::uint32_t frames, std::vect
 const std::vector<std::vector<float>>* findBusChannels(const std::vector<IndexedAudioBus>& buses, std::uint32_t index);
 bool parseMidiEvents(const std::string& encoded, std::vector<PendingMidiEvent>& events);
 bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinberg::Vst::Event& event);
+std::string noteExpressionsToJson(Steinberg::Vst::INoteExpressionController* noteExpressionController);
 std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels);
 std::string renderedAudioToJson(const RenderedAudio& rendered);
 bool parameterIsAutomatable(const Steinberg::Vst::ParameterInfo& info);

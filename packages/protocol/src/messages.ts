@@ -79,6 +79,7 @@ export interface HelloResponse {
       maxWorkerStderrLineBytes?: number;
       maxWorkerStderrBytes?: number;
       maxWorkerDiagnosticLogChars?: number;
+      maxPluginNoteExpressions?: number;
       maxWorkerPendingCommands?: number;
       workerReadyTimeoutMs?: number;
       workerTerminationGraceMs?: number;
@@ -206,7 +207,26 @@ export interface PluginMetadata {
   outputs: number;
   metadata?: PluginClassMetadata;
   parameters: PluginParameter[];
+  vst3NoteExpressions?: PluginVst3NoteExpression[];
   presets?: PluginPreset[];
+}
+
+export interface PluginVst3NoteExpression {
+  typeId: number;
+  name: string;
+  shortName?: string;
+  unit?: string;
+  unitId?: number;
+  defaultValue: number;
+  minValue: number;
+  maxValue: number;
+  stepCount: number;
+  bipolar?: boolean;
+  oneShot?: boolean;
+  absolute?: boolean;
+  associatedParameterId?: string;
+  busIndex: number;
+  channel: number;
 }
 
 export interface PluginScanRequest {
@@ -410,6 +430,7 @@ export type MidiEvent =
       velocity: number;
       time?: number;
       channel?: number;
+      noteId?: number;
     }
   | {
       type: "noteOff";
@@ -417,6 +438,7 @@ export type MidiEvent =
       velocity?: number;
       time?: number;
       channel?: number;
+      noteId?: number;
     }
   | {
       type: "controlChange";
@@ -443,10 +465,19 @@ export type MidiEvent =
       pressure: number;
       time?: number;
       channel?: number;
+      noteId?: number;
     }
   | {
       type: "programChange";
       program: number;
+      time?: number;
+      channel?: number;
+    }
+  | {
+      type: "noteExpression";
+      typeId: number;
+      noteId: number;
+      value: number;
       time?: number;
       channel?: number;
     };

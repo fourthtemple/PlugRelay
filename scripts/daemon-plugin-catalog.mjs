@@ -60,7 +60,7 @@ export function createPluginCatalogSupport({
   mockInstruments,
   limits
 }) {
-  const { clamp01, truncateText } = normalizers;
+  const { clamp01, normalizeVst3NoteExpressions, truncateText } = normalizers;
   const {
     makeGainParameter,
     makeInstrumentParameters,
@@ -69,6 +69,7 @@ export function createPluginCatalogSupport({
   } = mockInstruments;
   const {
     maxPluginMetadataTextBytes,
+    maxPluginNoteExpressions = 256,
     maxPluginParameters,
     maxPluginParameterTextBytes,
     maxPluginPresets
@@ -596,7 +597,7 @@ export function createPluginCatalogSupport({
   }
 
   function clonePluginMetadata(plugin) {
-    return {
+    const cloned = {
       pluginId: plugin.pluginId,
       format: plugin.format,
       name: plugin.name,
@@ -615,6 +616,12 @@ export function createPluginCatalogSupport({
         .map((preset, index) => normalizePresetSnapshot(preset, index))
         .filter(Boolean)
     };
+    const noteExpressions = normalizeVst3NoteExpressions(plugin.vst3NoteExpressions)
+      .slice(0, maxPluginNoteExpressions);
+    if (noteExpressions.length > 0) {
+      cloned.vst3NoteExpressions = noteExpressions;
+    }
+    return cloned;
   }
 
   function normalizePresetSnapshot(preset, index) {

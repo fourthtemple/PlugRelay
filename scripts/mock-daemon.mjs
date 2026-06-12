@@ -55,6 +55,7 @@ const EDITOR_SESSION_TTL_MS = envInteger("SOUNDBRIDGE_EDITOR_SESSION_TTL_MS", 10
 const MAX_PLUGIN_PARAMETERS = envInteger("SOUNDBRIDGE_MAX_PLUGIN_PARAMETERS", 1024);
 const MAX_PLUGIN_PRESETS = Math.min(envInteger("SOUNDBRIDGE_MAX_PLUGIN_PRESETS", 256), 256);
 const MAX_PLUGIN_PROGRAMS = Math.min(envInteger("SOUNDBRIDGE_MAX_PLUGIN_PROGRAMS", 256), 256);
+const MAX_PLUGIN_NOTE_EXPRESSIONS = Math.min(envInteger("SOUNDBRIDGE_MAX_PLUGIN_NOTE_EXPRESSIONS", 256), 256);
 const MAX_PLUGIN_PARAMETER_TEXT_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_PARAMETER_TEXT_BYTES", 160);
 const MAX_PLUGIN_METADATA_TEXT_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_METADATA_TEXT_BYTES", 256);
 const MAX_PLUGIN_STATE_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_STATE_BYTES", 384 * 1024);
@@ -85,6 +86,7 @@ const normalizers = createDaemonNormalizers({
   maxPluginBuses: MAX_PLUGIN_BUSES,
   maxPluginLatencySamples: MAX_PLUGIN_LATENCY_SAMPLES,
   maxPluginParameters: MAX_PLUGIN_PARAMETERS,
+  maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
   maxPluginParameterTextBytes: MAX_PLUGIN_PARAMETER_TEXT_BYTES,
   maxPluginPrograms: MAX_PLUGIN_PROGRAMS,
   maxPluginStateBytes: MAX_PLUGIN_STATE_BYTES,
@@ -133,6 +135,7 @@ const {
   mockInstruments,
   limits: {
     maxPluginMetadataTextBytes: MAX_PLUGIN_METADATA_TEXT_BYTES,
+    maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
     maxPluginParameters: MAX_PLUGIN_PARAMETERS,
     maxPluginParameterTextBytes: MAX_PLUGIN_PARAMETER_TEXT_BYTES,
     maxPluginPresets: MAX_PLUGIN_PRESETS
@@ -420,6 +423,7 @@ function helloResponse(paired) {
         maxTotalSessions: MAX_TOTAL_SESSIONS,
         maxAudioChannels: MAX_AUDIO_CHANNELS,
         maxBlockSize: MAX_BLOCK_SIZE,
+        maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
         maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST,
         maxAutomationCurvePoints: MAX_AUTOMATION_CURVE_POINTS,
         maxAutomationLanesPerInstance: MAX_AUTOMATION_LANES_PER_INSTANCE,
@@ -561,6 +565,7 @@ async function createInstance(payload, session) {
     outputChannels,
     layout: requestedLayout,
     parameters,
+    vst3NoteExpressions: [],
     nativeParameterIds: new Set(),
     pluginLatencySamples: 0,
     pluginTailSamples: 0,
@@ -580,6 +585,9 @@ async function createInstance(payload, session) {
       if (nativeParameters.length > 0) {
         instance.parameters = nativeParameters;
         instance.nativeParameterIds = new Set(nativeParameters.map((parameter) => parameter.id));
+      }
+      if (plugin.nativeHost.format === "vst3") {
+        instance.vst3NoteExpressions = await instance.worker.getVst3NoteExpressions();
       }
       const nativeLayout = await instance.worker.getLayout();
       instance.layout = nativeLayout;
@@ -609,7 +617,8 @@ async function createInstance(payload, session) {
       ...plugin,
       inputs: instance.inputChannels,
       outputs: instance.outputChannels,
-      parameters: instance.parameters
+      parameters: instance.parameters,
+      vst3NoteExpressions: instance.vst3NoteExpressions
     }),
     layout: clonePluginLayout(instance.layout),
     latencySamples: instance.pluginLatencySamples,
@@ -1076,6 +1085,9 @@ function getPlugin(pluginId) {
 async function sendMidiEvents(instanceId, events, session) {
   const instance = getInstance(instanceId, session);
   const acceptedEvents = normalizeMidiEvents(events, instance.maxBlockSize);
+  if (acceptedEvents.some((event) => event.type === "noteExpression") && instance.nativeHost?.format !== "vst3") {
+    throw protocolError("unsupported_midi_event", "VST3 note-expression events require a VST3 native worker.");
+  }
   const hasNativeMidiWorker =
     typeof instance.renderEngine === "string" &&
     instance.renderEngine.startsWith("native-") &&
