@@ -10,6 +10,7 @@ import { createDaemonLifecycle } from "./daemon-lifecycle.mjs";
 import { createDaemonLv2BlockProfileSupport } from "./daemon-lv2-block-profiles.mjs";
 import { createMockInstrumentSupport } from "./daemon-mock-instruments.mjs";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
+import { createDaemonPairing } from "./daemon-pairing.mjs";
 import { createPluginCatalogSupport, loadNativeHostStatus, resolveNativeRenderer } from "./daemon-plugin-catalog.mjs";
 import { createDaemonRuntimePayloads } from "./daemon-runtime-payloads.mjs";
 import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
@@ -314,8 +315,8 @@ const { useFileGrant } = createDaemonFileGrantOperations({
 const {
   assertPaired,
   cleanupConnection,
-  cleanupExpiredEditors,
   cleanupExpiredSessions,
+  cleanupExpiredEditors,
   destroyEditorRecord,
   destroyInstanceRecord,
   sessionsForOrigin
@@ -359,21 +360,26 @@ const {
   protocolError,
   requireIntInRange
 });
+const { createConnectionContext, pair } = createDaemonPairing({
+  allowedOrigins: ALLOWED_ORIGINS,
+  cleanupExpiredSessions,
+  makeProtocolError: protocolError,
+  maxPairAttemptsPerConnection: MAX_PAIR_ATTEMPTS_PER_CONNECTION,
+  maxSessionsPerOrigin: MAX_SESSIONS_PER_ORIGIN,
+  maxTotalSessions: MAX_TOTAL_SESSIONS,
+  pairingToken: PAIRING_TOKEN,
+  sessionTtlMs: SESSION_TTL_MS,
+  sessions,
+  sessionsForOrigin,
+  tokenEquals
+});
 
 const server = createDaemonWebSocketServer({
   host: HOST,
   port: PORT,
   maxWebSocketMessageBytes: MAX_WEBSOCKET_MESSAGE_BYTES,
   isLoopbackHostHeader,
-  createConnectionContext({ requestOrigin, terminate }) {
-    return {
-      connectionId: crypto.randomUUID(),
-      requestOrigin,
-      sessionTokens: new Set(),
-      pairFailures: 0,
-      terminate
-    };
-  },
+  createConnectionContext,
   handleRequest,
   cleanupConnection
 });
@@ -550,67 +556,6 @@ async function dispatchCommand(envelope, context) {
     default:
       throw protocolError("unknown_command", `Unknown command: ${command}`);
   }
-}
-
-function pair(payload, context) {
-  cleanupExpiredSessions();
-  if (context.pairFailures >= MAX_PAIR_ATTEMPTS_PER_CONNECTION) {
-    throw protocolError("pairing_locked", "Too many failed pairing attempts on this connection.");
-  }
-  const requestedOrigin = String(payload.origin ?? context.requestOrigin);
-  if (context.requestOrigin === "unknown-origin") {
-    throw protocolError("origin_required", "Pairing requires a WebSocket Origin header.");
-  }
-  if (!tokenEquals(payload.pairingToken, PAIRING_TOKEN)) {
-    context.pairFailures += 1;
-    if (context.pairFailures >= MAX_PAIR_ATTEMPTS_PER_CONNECTION) {
-      context.terminate?.();
-    }
-    throw protocolError("pairing_denied", "Invalid pairing token.");
-  }
-
-  if (context.requestOrigin !== "unknown-origin" && requestedOrigin !== context.requestOrigin) {
-    throw protocolError("origin_mismatch", "Pairing origin does not match the WebSocket Origin header.");
-  }
-
-  if (ALLOWED_ORIGINS.length > 0 && !ALLOWED_ORIGINS.includes(requestedOrigin)) {
-    throw protocolError("origin_not_allowed", "This browser origin is not allowed to pair with SoundBridge.", {
-      origin: requestedOrigin
-    });
-  }
-
-  if (sessionsForOrigin(requestedOrigin).length >= MAX_SESSIONS_PER_ORIGIN) {
-    throw protocolError("quota_exceeded", "Too many active SoundBridge sessions for this origin.", {
-      origin: requestedOrigin,
-      maxSessionsPerOrigin: MAX_SESSIONS_PER_ORIGIN
-    });
-  }
-
-  if (sessions.size >= MAX_TOTAL_SESSIONS) {
-    throw protocolError("quota_exceeded", "The local SoundBridge daemon has reached its total session limit.", {
-      maxTotalSessions: MAX_TOTAL_SESSIONS
-    });
-  }
-
-  const sessionToken = crypto.randomBytes(24).toString("base64url");
-  const expiresAt = Date.now() + SESSION_TTL_MS;
-  sessions.set(sessionToken, {
-    sessionToken,
-    origin: requestedOrigin,
-    connectionId: context.connectionId,
-    expiresAt,
-    instances: new Set(),
-    editors: new Set(),
-    fileGrants: new Set(),
-    createdAt: Date.now(),
-    lastSeenAt: Date.now()
-  });
-  context.sessionTokens.add(sessionToken);
-
-  return {
-    sessionToken,
-    expiresAt
-  };
 }
 
 function filterPlugins(payload, plugins) {
