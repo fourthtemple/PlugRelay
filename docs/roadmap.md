@@ -2,7 +2,7 @@
 
 This roadmap tracks what still needs to be completed for SoundBridge to become a dependable open standard and reference implementation for hosting local VST3, Audio Unit, and LV2 plugins from browser or desktop hosts.
 
-The current priority is core hosting compatibility first. OS-level sandboxing remains the final hardening layer, after the host adapters are feature-complete enough to exercise real plugin behavior.
+The current priority is core hosting compatibility first, with VST3 as the primary near-term target. OS-level sandboxing remains the final hardening layer, after the host adapters are feature-complete enough to exercise real plugin behavior.
 
 ## Current Baseline
 
@@ -22,6 +22,13 @@ SoundBridge already has the core security and host shape in place:
 ## Near-Term Core Hosting Work
 
 These are the next things that matter for musicians actually loading plugins.
+
+The compatibility strategy is intentionally practical:
+
+- VST3 gets the first deep compatibility push because it has the broadest musician-facing payoff and a more uniform host API.
+- AU follows as the macOS-native path, but unsupported or unusual AU profiles should stay discovery-only until concrete examples justify a bounded host profile.
+- LV2 grows by declared extension and option support, not by one-off per-plugin hacks.
+- Community probe reports are expected to drive a large part of prioritization because no single developer can own enough commercial and open-source plugin test cases.
 
 ### VST3
 
@@ -86,8 +93,12 @@ The reference implementation is macOS-first today.
 
 - Maintain an installed-plugin compatibility matrix by format, vendor, plugin type, and feature coverage.
 - Keep `npm run probe:installed` as the repeatable local compatibility harness.
+- Make community-submitted probe reports the primary way to discover real-world compatibility gaps, especially for paid VST3/AU plugins that cannot be committed as fixtures.
+- Publish a lightweight report format that asks for OS version, CPU architecture, plugin name/vendor/version, plugin format, probe command, pass/fail status, and sanitized failing command output.
+- Never require contributors to upload commercial plugin binaries, licenses, local filesystem paths, or private preset/sample data.
 - Add more native fixtures for edge cases that cannot run in CI with commercial plugins.
 - Track pass/fail separately for scanning, instantiation, parameters, preset snapshots, program data, state, file grants, MIDI, transport, rendering, bus layouts, latency, tail, and editor behavior.
+- Convert repeated community failures into small synthetic fixtures whenever the failing behavior can be reproduced without proprietary plugin code.
 - Keep CI focused on source-size guardrails, security smoke tests, worker IPC limits, and broker contracts.
 
 ## Documentation And Standardization
