@@ -56,6 +56,20 @@ process.stdin.on("data", (chunk) => {
           continue;
         }
       }
+      if (mode === "require-any-file-grant") {
+        const grant = Array.isArray(message.fileGrants) ? message.fileGrants[0] : undefined;
+        if (
+          !grant ||
+          grant.absolutePath !== expectedFileGrantPath ||
+          !/^filegrant-[0-9a-f-]{36}$/.test(grant.grantId) ||
+          grant.purpose !== "sample" ||
+          grant.access !== "read" ||
+          grant.kind !== "file"
+        ) {
+          process.stdout.write(`${JSON.stringify({ error: "missing_file_grants" })}\n`);
+          continue;
+        }
+      }
       process.stdout.write(
         `${JSON.stringify({
           ok: true,

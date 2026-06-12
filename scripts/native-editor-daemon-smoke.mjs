@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connect, createRequestClient } from "./security-smoke-client.mjs";
@@ -12,6 +14,10 @@ const ORIGIN = "http://127.0.0.1:5173";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(scriptDir, "native-editor-broker-fixture.mjs");
 const request = createRequestClient({ idPrefix: "native-editor-daemon", timeoutMs: 3000 });
+const grantRoot = await fs.mkdtemp(path.join(os.tmpdir(), "soundbridge-native-editor-"));
+const requestedFileGrantPath = path.join(grantRoot, "Kick.wav");
+await fs.writeFile(requestedFileGrantPath, "fixture sample data");
+const fixtureFileGrantPath = await fs.realpath(requestedFileGrantPath);
 
 const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
   env: {
@@ -19,8 +25,10 @@ const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
     SOUNDBRIDGE_HOST: HOST,
     SOUNDBRIDGE_PORT: String(PORT),
     SOUNDBRIDGE_PAIRING_TOKEN: TOKEN,
+    SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
+    SOUNDBRIDGE_FILE_GRANT_ROOTS: grantRoot,
     SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath])
+    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, "require-any-file-grant", fixtureFileGrantPath])
   },
   stdio: ["ignore", "pipe", "pipe"]
 });
@@ -31,6 +39,7 @@ try {
   await run();
 } finally {
   daemon.kill("SIGKILL");
+  await fs.rm(grantRoot, { recursive: true, force: true });
 }
 
 console.log("Native editor broker daemon smoke test passed.");
@@ -113,6 +122,25 @@ async function assertNativeEditorBrokerPath(main, session) {
     session
   );
   try {
+    const grant = await request(
+      main,
+      "createFileGrant",
+      { path: fixtureFileGrantPath, purpose: "sample", access: "read", kind: "file" },
+      true,
+      session
+    );
+    assert(/^filegrant-[0-9a-f-]{36}$/.test(grant.grantId), "native editor smoke creates a bounded opaque file grant");
+    assert(!hasPrivatePathFields(grant), "createFileGrant response stays path-free before native editor open");
+    const attachment = await request(
+      main,
+      "attachFileGrant",
+      { instanceId: created.instanceId, grantId: grant.grantId, purpose: "sample", access: "read", kind: "file" },
+      true,
+      session
+    );
+    assert(attachment.attached === true, "native editor smoke attaches a file grant to the native instance");
+    assert(!hasPrivatePathFields(attachment), "attachFileGrant response stays path-free before native editor open");
+
     const native = await request(
       main,
       "openEditor",
@@ -132,6 +160,7 @@ async function assertNativeEditorBrokerPath(main, session) {
     assert(!("executablePath" in native.plugin), "native editor response does not expose executable paths");
     assert(!("diagnostics" in native.plugin), "native editor response does not expose scanner diagnostics");
     assertPublicPluginMetadata(native.plugin, "native editor response exposes only path-free public plugin metadata");
+    assert(!hasPrivatePathFields(native), "native editor response keeps broker file grants out of browser-visible data");
 
     const closed = await request(main, "closeEditor", { editorId: native.editorId }, true, session);
     assert(closed.closed === true, "native broker editor closes through daemon ownership checks");
@@ -139,6 +168,21 @@ async function assertNativeEditorBrokerPath(main, session) {
   } finally {
     await request(main, "destroyInstance", { instanceId: created.instanceId }, true, session);
   }
+}
+
+function hasPrivatePathFields(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (["absolutePath", "bundlePath", "diagnostics", "executablePath", "nativeHost", "path", "rootId"].includes(key)) {
+      return true;
+    }
+    if (hasPrivatePathFields(child)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function assert(condition, message) {
