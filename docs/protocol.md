@@ -81,7 +81,7 @@ Example paired capability payload:
         "scan": true,
         "host": true,
         "exampleHost": true,
-        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, bounded buf-size/options host data including fixed/power-of-two block profiles, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled."
+        "notes": "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, synchronous LV2 worker scheduling, bounded buf-size/options host data including fixed/power-of-two block profiles, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, worker-native preset loading, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled."
       }
     },
     "security": {
@@ -114,7 +114,7 @@ Example paired capability payload:
 }
 ```
 
-`host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. The reference LV2 host currently means compatible basic audio/control LV2 plugins with optional atom/event MIDI input ports, bounded `buf-size:boundedBlockLength`, fixed/power-of-two block profiles, and `options#options` host data, bounded portable POD `state:interface` properties, and brokered file-backed state through LV2 state path features, not every LV2 extension profile. `notes` is optional human-readable status text from the native backend.
+`host` means the daemon can instantiate installed binary plugins for that format. `exampleHost` means the daemon can run SoundBridge's repo-local example bundles for that format through the same browser protocol path; it must not be treated as proof that arbitrary installed VST3, Audio Unit, or LV2 binaries can be hosted. The reference LV2 host currently means compatible basic audio/control LV2 plugins with optional atom/event MIDI input ports, bounded `buf-size:boundedBlockLength`, fixed/power-of-two block profiles, and `options#options` host data, bounded portable POD `state:interface` properties, worker-native preset-state loading through file grants, and brokered file-backed state through LV2 state path features, not every LV2 extension profile. `notes` is optional human-readable status text from the native backend.
 
 `capabilities.security` describes local multi-host protections and is safe to expose before pairing. Production hosts should require `sessionBoundToOrigin` and `instanceOwnership` before exposing installed plugins to arbitrary web origins.
 
@@ -744,7 +744,7 @@ Plugin instances can hold path-free references to session-owned file grants. Thi
 
 Supported operation names are `loadPreset`, `loadSample`, `openCacheDirectory`, `loadLicense`, `restoreState`, `saveStateDirectory`, and `other`. Operation names imply conservative purpose/access/kind constraints where possible; for example, `loadSample` requires a read-only sample file and `openCacheDirectory` requires a read/write cache directory. The daemon must reject mismatches before worker dispatch.
 
-The reference VST3/AU/LV2 native workers implement `restoreState` for bounded worker-native state files and `saveStateDirectory` for writing worker-native state into a granted state directory. AU and LV2 state files contain one base64 native-state token. VST3 state files contain a component-state token and optional controller-state token separated by whitespace; the missing controller token is represented internally as empty state. Saved state files use daemon-chosen filenames and are written through bounded native-worker file IO; browser responses do not include absolute paths. These files are daemon-to-worker interchange data, not a general browser-facing state format.
+The reference VST3/AU/LV2 native workers implement `restoreState` for bounded worker-native state files, `loadPreset` for bounded worker-native preset-state snapshot files, and `saveStateDirectory` for writing worker-native state into a granted state directory. AU and LV2 state/preset files contain one base64 native-state token. VST3 state/preset files contain a component-state token and optional controller-state token separated by whitespace; the missing controller token is represented internally as empty state. Saved state files use daemon-chosen filenames and are written through bounded native-worker file IO; browser responses do not include absolute paths. These files are daemon-to-worker interchange data, not a general browser-facing state format or a parser for arbitrary vendor preset formats.
 
 The daemon resolves the absolute path only after verifying that the paired session owns the instance, owns the grant, and has attached that grant to the instance. Browser responses stay path-free:
 

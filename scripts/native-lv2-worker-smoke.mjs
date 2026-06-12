@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const LV2_FIXTURE_BUNDLE = "native/example-plugins/LV2/soundbridge-example-gain.lv2";
 const LV2_BLOCK_PROFILE_BUNDLE = "native/example-plugins/LV2/soundbridge-block-profile-gain.lv2";
@@ -117,6 +120,29 @@ export async function runNativeLv2WorkerSmoke({ nativeRenderer, assert, assertLa
         Math.abs(restoredMode.normalizedValue - 2 / 3) < 0.000001,
       "native LV2 worker restores bounded control state"
     );
+
+    const presetDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-lv2-preset-"));
+    try {
+      const presetPath = path.join(presetDirectory, "Gain Snapshot.preset");
+      fs.writeFileSync(presetPath, `${savedState.state}\n`, "utf8");
+      await requestWorker("setParameter gain 0.1 0");
+      await requestWorker("setParameter mode 0 0");
+      const loadedPreset = await requestWorker(
+        `fileGrant loadPreset preset read file filegrant-lv2-preset ${workerText("Gain Snapshot.preset")} ${workerText(presetPath)}`
+      );
+      assert(loadedPreset.applied === true && loadedPreset.status === "preset-loaded", "native LV2 worker loads preset grants");
+      const presetParameters = await requestWorker("parameters");
+      const presetGain = presetParameters.parameters?.find((parameter) => parameter.id === "gain");
+      const presetMode = presetParameters.parameters?.find((parameter) => parameter.id === "mode");
+      assert(
+        presetGain &&
+          Math.abs(presetGain.normalizedValue - 0.75) < 0.000001 &&
+          presetMode?.plainValue === 2,
+        "native LV2 worker applies bounded preset-state snapshots"
+      );
+    } finally {
+      fs.rmSync(presetDirectory, { force: true, recursive: true });
+    }
 
     const rendered = await requestWorker("render 4 48000 0.1,0.2,0.3,0.4|0.1,0.1,0.1,0.1");
     assert(rendered.channels?.length === 2, "native LV2 worker rendered stereo output");
@@ -291,4 +317,9 @@ export async function runNativeLv2WorkerSmoke({ nativeRenderer, assert, assertLa
       }
     }, 250).unref?.();
   }
+}
+
+function workerText(value) {
+  const text = String(value ?? "");
+  return text ? Buffer.from(text, "utf8").toString("base64") : "-";
 }

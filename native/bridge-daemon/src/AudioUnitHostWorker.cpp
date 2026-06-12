@@ -917,6 +917,11 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
             std::cout << fileGrantAppliedJson() << std::endl;
             continue;
           }
+          if (fileGrant.operation == "loadPreset") {
+            host.setState(readSinglePresetFile(fileGrant, kMaxWorkerStateBytes));
+            std::cout << fileGrantPresetLoadedJson() << std::endl;
+            continue;
+          }
           if (fileGrant.operation == "saveStateDirectory") {
             host.writeStateFile(fileGrant);
             std::cout << fileGrantSavedJson() << std::endl;
@@ -1022,7 +1027,7 @@ bool audioUnitHostAvailable() {
 
 std::string audioUnitHostStatus() {
 #ifdef SOUNDBRIDGE_MACOS
-  return "Audio Unit scanner and CoreAudio host worker are available.";
+  return "Audio Unit scanner and CoreAudio host worker are available with bounded preset/state file grants.";
 #else
   return "Audio Unit hosting is only available on macOS.";
 #endif

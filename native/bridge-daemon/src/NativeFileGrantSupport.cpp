@@ -88,12 +88,16 @@ std::size_t maxStateFileBytes(std::size_t maxDecodedBytes, std::size_t maxTokens
   return tokenBytes * maxTokens + maxTokens + 16;
 }
 
-void requireStateGrantKind(const NativeFileGrantCommand& command, const std::string& operation, const std::string& kind) {
+void requireGrantKind(
+    const NativeFileGrantCommand& command,
+    const std::string& operation,
+    const std::string& purpose,
+    const std::string& kind) {
   if (command.operation != operation) {
     throw std::runtime_error("unsupported_file_grant_operation");
   }
   if (
-      command.purpose != "state" ||
+      command.purpose != purpose ||
       command.kind != kind ||
       command.absolutePath.empty() ||
       hasControlCharacter(command.absolutePath) ||
@@ -102,15 +106,23 @@ void requireStateGrantKind(const NativeFileGrantCommand& command, const std::str
   }
 }
 
-void requireRestoreStateGrant(const NativeFileGrantCommand& command) {
-  requireStateGrantKind(command, "restoreState", "file");
+void requireReadFileGrant(const NativeFileGrantCommand& command, const std::string& operation, const std::string& purpose) {
+  requireGrantKind(command, operation, purpose, "file");
   if (command.access != "read" && command.access != "readWrite") {
     throw std::runtime_error("invalid_file_grant_arguments");
   }
 }
 
+void requireRestoreStateGrant(const NativeFileGrantCommand& command) {
+  requireReadFileGrant(command, "restoreState", "state");
+}
+
+void requireLoadPresetGrant(const NativeFileGrantCommand& command) {
+  requireReadFileGrant(command, "loadPreset", "preset");
+}
+
 void requireSaveStateDirectoryGrant(const NativeFileGrantCommand& command) {
-  requireStateGrantKind(command, "saveStateDirectory", "directory");
+  requireGrantKind(command, "saveStateDirectory", "state", "directory");
   if (command.access != "readWrite") {
     throw std::runtime_error("invalid_file_grant_arguments");
   }
@@ -396,8 +408,16 @@ void writeStateFileText(const NativeFileGrantCommand& command, const std::string
 #endif
 }
 
-std::vector<std::string> stateFileTokens(const NativeFileGrantCommand& command, std::size_t maxDecodedBytes, std::size_t maxTokens) {
-  requireRestoreStateGrant(command);
+std::vector<std::string> stateFileTokens(
+    const NativeFileGrantCommand& command,
+    std::size_t maxDecodedBytes,
+    std::size_t maxTokens,
+    bool preset) {
+  if (preset) {
+    requireLoadPresetGrant(command);
+  } else {
+    requireRestoreStateGrant(command);
+  }
   const auto text = readStateFileText(command.absolutePath, maxStateFileBytes(maxDecodedBytes, maxTokens));
   std::stringstream stream(text);
   std::vector<std::string> tokens;
@@ -433,7 +453,7 @@ NativeFileGrantCommand parseFileGrantCommand(std::istream& stream) {
 }
 
 std::string readSingleStateFile(const NativeFileGrantCommand& command, std::size_t maxBytes) {
-  const auto tokens = stateFileTokens(command, maxBytes, 1);
+  const auto tokens = stateFileTokens(command, maxBytes, 1, false);
   if (tokens.size() != 1) {
     throw std::runtime_error("invalid_file_grant_state_file");
   }
@@ -441,7 +461,23 @@ std::string readSingleStateFile(const NativeFileGrantCommand& command, std::size
 }
 
 DualStateFile readDualStateFile(const NativeFileGrantCommand& command, std::size_t maxBytes) {
-  const auto tokens = stateFileTokens(command, maxBytes, 2);
+  const auto tokens = stateFileTokens(command, maxBytes, 2, false);
+  return {
+    tokens[0],
+    tokens.size() > 1 ? tokens[1] : "-"
+  };
+}
+
+std::string readSinglePresetFile(const NativeFileGrantCommand& command, std::size_t maxBytes) {
+  const auto tokens = stateFileTokens(command, maxBytes, 1, true);
+  if (tokens.size() != 1) {
+    throw std::runtime_error("invalid_file_grant_state_file");
+  }
+  return tokens[0];
+}
+
+DualStateFile readDualPresetFile(const NativeFileGrantCommand& command, std::size_t maxBytes) {
+  const auto tokens = stateFileTokens(command, maxBytes, 2, true);
   return {
     tokens[0],
     tokens.size() > 1 ? tokens[1] : "-"
@@ -464,6 +500,10 @@ void writeDualStateFile(
 
 std::string fileGrantAppliedJson() {
   return "{\"applied\":true,\"status\":\"state-restored\"}";
+}
+
+std::string fileGrantPresetLoadedJson() {
+  return "{\"applied\":true,\"status\":\"preset-loaded\"}";
 }
 
 std::string fileGrantSavedJson() {

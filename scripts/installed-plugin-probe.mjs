@@ -148,6 +148,7 @@ async function probePlugin(socket, session, plugin) {
     if (typeof state.state === "string" && state.state.length > 0) {
       await phase(result, "setState", () => request(socket, "setState", { instanceId, state: state.state }, true, session));
       await probeFileGrantStateRestore(socket, session, plugin, instanceId, state, result);
+      await probeFileGrantPresetLoad(socket, session, plugin, instanceId, state, result);
       await probeFileGrantStateSave(socket, session, instanceId, plugin, result);
     }
 
@@ -260,6 +261,38 @@ async function probeNativeEditorBroker(socket, session, plugin, instanceId, resu
   await phase(result, "closeNativeEditor", () =>
     request(socket, "closeEditor", { editorId: opened.editorId }, true, session)
   );
+}
+
+async function probeFileGrantPresetLoad(socket, session, plugin, instanceId, state, result) {
+  const presetText = nativeStateFileText(plugin.format, state.state);
+  if (!presetText) {
+    result.fileGrantPresetLoad = "skipped";
+    return;
+  }
+  const presetPath = path.join(FILE_GRANT_ROOT, `${safeFilename(plugin.pluginId)}.preset`);
+  fs.writeFileSync(presetPath, presetText, "utf8");
+  let grantId = "";
+  try {
+    const grant = await phase(result, "createPresetFileGrant", () =>
+      request(socket, "createFileGrant", { path: presetPath, purpose: "preset", access: "read", kind: "file" }, true, session)
+    );
+    grantId = grant.grantId;
+    await phase(result, "attachPresetFileGrant", () =>
+      request(socket, "attachFileGrant", { instanceId, grantId, purpose: "preset", access: "read", kind: "file" }, true, session)
+    );
+    const loaded = await phase(result, "useFileGrantLoadPreset", () =>
+      request(socket, "useFileGrant", { instanceId, grantId, operation: "loadPreset" }, true, session)
+    );
+    assertProbe(loaded.applied === true, "bad_file_grant_preset_load", "file grant preset load was not applied");
+    assertNoNativeLaunchData(loaded, "file grant preset response");
+    result.fileGrantPresetLoad = "applied";
+  } finally {
+    if (grantId) {
+      await request(socket, "detachFileGrant", { instanceId, grantId }, true, session).catch(() => undefined);
+      await request(socket, "revokeFileGrant", { grantId }, true, session).catch(() => undefined);
+    }
+    fs.rmSync(presetPath, { force: true });
+  }
 }
 
 async function probeFileGrantStateRestore(socket, session, plugin, instanceId, state, result) {

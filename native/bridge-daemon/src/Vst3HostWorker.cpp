@@ -1028,6 +1028,12 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
             std::cout << fileGrantAppliedJson() << std::endl;
             continue;
           }
+          if (fileGrant.operation == "loadPreset") {
+            const auto presetFile = readDualPresetFile(fileGrant, kMaxWorkerStateBytes);
+            host.setState(presetFile.primary, presetFile.secondary);
+            std::cout << fileGrantPresetLoadedJson() << std::endl;
+            continue;
+          }
           if (fileGrant.operation == "saveStateDirectory") {
             host.writeStateFile(fileGrant);
             std::cout << fileGrantSavedJson() << std::endl;
@@ -1132,7 +1138,7 @@ bool vst3HostWorkerAvailable() {
 
 std::string vst3HostWorkerStatus() {
 #ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
-  return "VST3 SDK host worker is available for installed audio-effect bundles.";
+  return "VST3 SDK host worker is available for installed bundles with bounded preset/state file grants.";
 #else
   return "VST3 SDK host worker is not linked; scanner-only VST3 support is active.";
 #endif

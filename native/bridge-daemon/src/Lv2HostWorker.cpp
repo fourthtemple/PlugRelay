@@ -1044,6 +1044,11 @@ int runLv2HostWorkerNative(int argc, char** argv) {
             std::cout << fileGrantAppliedJson() << std::endl;
             continue;
           }
+          if (fileGrant.operation == "loadPreset") {
+            host.setState(readSinglePresetFile(fileGrant, kMaxWorkerStateBytes));
+            std::cout << fileGrantPresetLoadedJson() << std::endl;
+            continue;
+          }
           if (fileGrant.operation == "saveStateDirectory") {
             host.writeStateFile(fileGrant);
             std::cout << fileGrantSavedJson() << std::endl;
@@ -1148,7 +1153,7 @@ bool lv2HostWorkerAvailable() {
 
 std::string lv2HostWorkerStatus() {
 #ifndef _WIN32
-  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, bounded buf-size/options host data including fixed/power-of-two block profiles, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled.";
+  return "Basic LV2 audio/control host worker is available with bounded atom MIDI, atom time-position transport, bounded buf-size/options host data including fixed/power-of-two block profiles, synchronous LV2 worker scheduling, LV2 port-group bus routing with per-port fallback, standard latency output-port reporting, worker-native preset loading, and brokered portable/file-backed state delivery; LV2 UI hosting remains disabled.";
 #else
   return "LV2 host worker is not available on this platform build.";
 #endif

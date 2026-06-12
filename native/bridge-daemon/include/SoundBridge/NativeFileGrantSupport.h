@@ -24,6 +24,8 @@ struct DualStateFile {
 NativeFileGrantCommand parseFileGrantCommand(std::istream& stream);
 std::string readSingleStateFile(const NativeFileGrantCommand& command, std::size_t maxBytes);
 DualStateFile readDualStateFile(const NativeFileGrantCommand& command, std::size_t maxBytes);
+std::string readSinglePresetFile(const NativeFileGrantCommand& command, std::size_t maxBytes);
+DualStateFile readDualPresetFile(const NativeFileGrantCommand& command, std::size_t maxBytes);
 void writeSingleStateFile(const NativeFileGrantCommand& command, const std::string& state, std::size_t maxBytes);
 void writeDualStateFile(
     const NativeFileGrantCommand& command,
@@ -31,6 +33,7 @@ void writeDualStateFile(
     const std::string& secondary,
     std::size_t maxBytes);
 std::string fileGrantAppliedJson();
+std::string fileGrantPresetLoadedJson();
 std::string fileGrantSavedJson();
 
 } // namespace soundbridge::worker_file_grants
