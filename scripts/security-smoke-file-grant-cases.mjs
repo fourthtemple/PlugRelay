@@ -445,6 +445,37 @@ export function createSecurityFileGrantCases({
           afterRevoke.grants.length === 0,
         "owner session can revoke its file grant"
       );
+      owner.socket?.destroy();
+      other.socket?.destroy();
+      await checkDisconnectCleansFileGrants({ root, samplePath, secondPath });
+    } finally {
+      daemon.kill("SIGKILL");
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  }
+
+  async function checkDisconnectCleansFileGrants({ root, samplePath, secondPath }) {
+    const cleanupPort = port + 8;
+    const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
+      env: {
+        ...process.env,
+        SOUNDBRIDGE_HOST: host,
+        SOUNDBRIDGE_PORT: String(cleanupPort),
+        SOUNDBRIDGE_PAIRING_TOKEN: token,
+        SOUNDBRIDGE_FILE_GRANT_ROOTS: root,
+        SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
+        SOUNDBRIDGE_MAX_FILE_GRANTS_PER_SESSION: "1",
+        SOUNDBRIDGE_MAX_TOTAL_FILE_GRANTS: "1"
+      },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    daemon.stderr.on("data", () => {});
+
+    try {
+      await waitForListen(daemon);
+      const owner = await connect(host, cleanupPort, `${host}:${cleanupPort}`, origin);
+      const ownerPair = await request(owner, "pair", { origin, pairingToken: token }, false);
       await request(
         owner,
         "createFileGrant",
@@ -454,6 +485,9 @@ export function createSecurityFileGrantCases({
       );
       sendCloseFrame(owner);
       await waitForClose(owner);
+
+      const other = await connect(host, cleanupPort, `${host}:${cleanupPort}`, origin);
+      const otherPair = await request(other, "pair", { origin, pairingToken: token }, false);
       const afterDisconnect = await request(
         other,
         "createFileGrant",
@@ -470,8 +504,6 @@ export function createSecurityFileGrantCases({
       other.socket?.destroy();
     } finally {
       daemon.kill("SIGKILL");
-      fs.rmSync(root, { recursive: true, force: true });
-      fs.rmSync(outsideRoot, { recursive: true, force: true });
     }
   }
 
