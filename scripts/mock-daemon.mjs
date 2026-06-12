@@ -149,6 +149,7 @@ const {
   makeNativeUpdatedParameter,
   makeUpdatedParameter,
   midiNoteToFrequency,
+  normalizedValueFromDisplayValue,
   normalizedGainToDb,
   parameterValue,
   synthesizeInstrumentBlock
@@ -186,6 +187,7 @@ const {
   normalizeParameterCurve,
   normalizeParameterEvents,
   requireParameterId,
+  requireParameterDisplayValue,
   requirePresetId
 } = createDaemonControlEvents({
   clamp01,
@@ -196,6 +198,7 @@ const {
     maxMidiEventsPerRequest: MAX_MIDI_EVENTS_PER_REQUEST,
     maxNoteExpressionTextBytes: MAX_NOTE_EXPRESSION_TEXT_BYTES,
     maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST,
+    maxPluginParameterTextBytes: MAX_PLUGIN_PARAMETER_TEXT_BYTES,
     maxTransportSamplePosition: MAX_TRANSPORT_SAMPLE_POSITION
   },
   makeProtocolError: protocolError,
@@ -283,6 +286,7 @@ const helloResponse = createDaemonHelloResponse({
     maxPluginProgramDataEnvelopeBytes: MAX_PLUGIN_PROGRAM_DATA_ENVELOPE_BYTES,
     maxPluginProgramLists: MAX_PLUGIN_PROGRAM_LISTS,
     maxPluginPrograms: MAX_PLUGIN_PROGRAMS,
+    maxPluginParameterTextBytes: MAX_PLUGIN_PARAMETER_TEXT_BYTES,
     maxTotalEditors: MAX_TOTAL_EDITORS,
     maxTotalFileGrants: MAX_TOTAL_FILE_GRANTS,
     maxTotalInstances: MAX_TOTAL_INSTANCES,
@@ -464,6 +468,9 @@ async function dispatchCommand(envelope, context) {
 
     case "setParameter":
       return setParameter(payload.instanceId, payload.parameterId, payload.normalizedValue, session);
+
+    case "setParameterDisplayValue":
+      return setParameterDisplayValue(payload.instanceId, payload.parameterId, payload.displayValue, session);
 
     case "setPreset":
       return setPreset(payload.instanceId, payload.presetId, session);
@@ -766,6 +773,23 @@ async function setParameter(instanceId, parameterId, normalizedValue, session) {
   };
 }
 
+async function setParameterDisplayValue(instanceId, parameterId, displayValue, session) {
+  const instance = getInstance(instanceId, session);
+  const safeParameterId = requireParameterId(parameterId, "parameterId");
+  const parameterIndex = instance.parameters.findIndex((parameter) => parameter.id === safeParameterId);
+  if (parameterIndex < 0) {
+    throw protocolError("parameter_not_found", `Unknown parameter: ${safeParameterId}`);
+  }
+  assertParameterWritable(instance.parameters[parameterIndex]);
+
+  const safeDisplayValue = requireParameterDisplayValue(displayValue, "displayValue");
+  await applyParameterDisplayValue(instance, parameterIndex, safeDisplayValue);
+
+  return {
+    parameter: { ...instance.parameters[parameterIndex] }
+  };
+}
+
 async function setPreset(instanceId, presetId, session) {
   const instance = getInstance(instanceId, session);
   const safePresetId = requirePresetId(presetId, "presetId");
@@ -922,6 +946,27 @@ async function applyParameterValue(instance, parameterIndex, normalizedValue, sa
   }
 
   instance.parameters[parameterIndex] = makeUpdatedParameter(parameter, normalizedValue);
+}
+
+async function applyParameterDisplayValue(instance, parameterIndex, displayValue) {
+  const parameter = instance.parameters[parameterIndex];
+  if (
+    instance.nativeParameterIds.has(parameter.id) &&
+    instance.worker &&
+    typeof instance.worker.setParameterDisplayValue === "function"
+  ) {
+    const nativeParameter = await instance.worker.setParameterDisplayValue(parameter.id, displayValue);
+    if (nativeParameter) {
+      instance.parameters[parameterIndex] = makeNativeUpdatedParameter(nativeParameter, nativeParameter.normalizedValue);
+      return;
+    }
+  }
+
+  const normalizedValue = normalizedValueFromDisplayValue(parameter, displayValue);
+  if (!Number.isFinite(normalizedValue)) {
+    throw protocolError("invalid_argument", "displayValue could not be parsed for this parameter.");
+  }
+  await applyParameterValue(instance, parameterIndex, requireNumberInRange(normalizedValue, 0, 1, "displayValue"));
 }
 
 async function getState(instanceId, session) {

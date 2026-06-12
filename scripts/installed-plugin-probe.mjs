@@ -148,6 +148,7 @@ async function probePlugin(socket, session, plugin) {
           session
         )
       );
+      await probeParameterDisplayInput(socket, session, instanceId, writableParameter, result);
     }
 
     const state = await phase(result, "getState", () => request(socket, "getState", { instanceId }, true, session));
@@ -293,6 +294,24 @@ function assertParameterDisplayMetadata(plugin, parameters) {
     assertProbe(ok, "bad_parameter_display_value", `${plugin.pluginId} parameter ${index} returned an unbounded displayValue`);
   }
   return count;
+}
+
+async function probeParameterDisplayInput(socket, session, instanceId, parameter, result) {
+  if (typeof parameter.displayValue !== "string" || parameter.displayValue.length === 0) {
+    result.parameterDisplayInput = "skipped";
+    return;
+  }
+  const response = await phase(result, "setParameterDisplayValue", () =>
+    request(
+      socket,
+      "setParameterDisplayValue",
+      { instanceId, parameterId: parameter.id, displayValue: parameter.displayValue },
+      true,
+      session
+    )
+  );
+  assertProbe(response.parameter?.id === parameter.id, "bad_parameter_display_input", "display text updated the wrong parameter");
+  result.parameterDisplayInput = "applied";
 }
 
 async function probeNativeEditorBroker(socket, session, plugin, instanceId, result) {

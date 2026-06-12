@@ -381,6 +381,17 @@ process.stdin.on("data", (chunk) => {
     const line = buffer.slice(0, newline).trim();
     buffer = buffer.slice(newline + 1);
     const parts = line.split(" ");
+    if (parts[0] === "setParameterDisplayValue") {
+      const displayValue = Buffer.from(parts[2] === "-" ? "" : parts[2], "base64").toString("utf8");
+      process.stdout.write(JSON.stringify({
+        parameter: {
+          id: parts[1],
+          normalizedValue: displayValue === "0.0 dB" ? 0.5 : 0,
+          displayValue
+        }
+      }) + "\\n");
+      continue;
+    }
     if (parts[0] !== "fileGrant") {
       process.stdout.write(JSON.stringify({ error: "unknown_command" }) + "\\n");
       continue;
@@ -452,6 +463,19 @@ setTimeout(() => {}, 30000);
     stateDirectoryGrantWorkerResult.applied === true && stateDirectoryGrantWorkerResult.status === "state-dir-ok",
     "native host workers encode bounded directory file grant commands"
   );
+  const textWorker = new grantWorkers.NativeHostWorker(
+    { format: "vst3", bundlePath: tempDir, renderEngine: "native-vst3" },
+    nativeWorkerInstance()
+  );
+  await textWorker.ready;
+  const textParameter = await textWorker.setParameterDisplayValue("42", "0.0 dB");
+  check(
+    textParameter?.id === "42" &&
+      textParameter.displayValue === "0.0 dB" &&
+      Math.abs(textParameter.normalizedValue - 0.5) < 0.000001,
+    "native host workers encode bounded parameter display text commands"
+  );
+  textWorker.destroy();
   grantWorker.destroy();
 
   const fileGrantOperation = await exerciseDaemonFileGrantOperation(fixtureGrantPath);

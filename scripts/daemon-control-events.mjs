@@ -11,6 +11,7 @@ export function createDaemonControlEvents({
     maxMidiEventsPerRequest,
     maxNoteExpressionTextBytes,
     maxParameterEventsPerRequest,
+    maxPluginParameterTextBytes,
     maxTransportSamplePosition
   } = limits;
   const {
@@ -341,6 +342,21 @@ export function createDaemonControlEvents({
     return text;
   }
 
+  function requireParameterDisplayValue(value, label) {
+    const limit = Number.isInteger(maxPluginParameterTextBytes) && maxPluginParameterTextBytes > 0
+      ? Math.min(maxPluginParameterTextBytes, 1024)
+      : 160;
+    if (typeof value !== "string") {
+      throw makeProtocolError("invalid_argument", `${label} must be a string.`);
+    }
+    if (Buffer.byteLength(value, "utf8") === 0 || Buffer.byteLength(value, "utf8") > limit || value.includes("\u0000")) {
+      throw makeProtocolError("invalid_argument", `${label} must be 1..${limit} UTF-8 bytes without NUL characters.`, {
+        maxPluginParameterTextBytes: limit
+      });
+    }
+    return value;
+  }
+
   function assertParameterWritable(parameter) {
     if (parameter?.readOnly === true) {
       throw makeProtocolError("parameter_read_only", `Parameter is read-only: ${parameter.id}`, {
@@ -367,6 +383,7 @@ export function createDaemonControlEvents({
     normalizeParameterCurve,
     normalizeParameterEvents,
     requireParameterId,
+    requireParameterDisplayValue,
     requirePresetId
   };
 }

@@ -11,6 +11,7 @@ export function createMockInstrumentSupport({ clamp01, finiteNumber }) {
         minPlain: 0,
         maxPlain: 100,
         plainValue: clamp01(values.tone) * 100,
+        displayValue: `${(clamp01(values.tone) * 100).toFixed(1)} %`,
         automatable: true
       },
       {
@@ -22,6 +23,7 @@ export function createMockInstrumentSupport({ clamp01, finiteNumber }) {
         minPlain: -12,
         maxPlain: 12,
         plainValue: normalizedDetuneToCents(values.detune),
+        displayValue: `${normalizedDetuneToCents(values.detune).toFixed(1)} ct`,
         automatable: true
       }
     ];
@@ -177,6 +179,33 @@ export function createMockInstrumentSupport({ clamp01, finiteNumber }) {
     return instance.parameters.find((parameter) => parameter.id === parameterId)?.normalizedValue ?? fallback;
   }
 
+  function normalizedValueFromDisplayValue(parameter, displayValue) {
+    const text = String(displayValue ?? "").trim();
+    if (parameter.programChange) {
+      const program = parameter.programList?.programs?.find((candidate) => candidate.name === text);
+      return program?.normalizedValue;
+    }
+    const plainValue = Number(text.replace(/[^0-9+.-]/g, ""));
+    if (!Number.isFinite(plainValue)) {
+      return undefined;
+    }
+    if (parameter.id === "gain") {
+      return (plainValue + 24) / 48;
+    }
+    if (parameter.id === "detune") {
+      return (plainValue + 12) / 24;
+    }
+    if (parameter.id === "tone" || parameter.id === "output-level") {
+      return plainValue / 100;
+    }
+    const minPlain = finiteNumber(parameter.minPlain, 0);
+    const maxPlain = finiteNumber(parameter.maxPlain, 1);
+    if (Math.abs(maxPlain - minPlain) < 0.000001) {
+      return undefined;
+    }
+    return (plainValue - minPlain) / (maxPlain - minPlain);
+  }
+
   function synthesizeInstrumentBlock(instance, frames, sampleRate) {
     const output = Array.from({ length: instance.outputChannels }, () => new Array(frames).fill(0));
     if (instance.voices.size === 0) {
@@ -230,6 +259,7 @@ export function createMockInstrumentSupport({ clamp01, finiteNumber }) {
     makeProgramParameter,
     makeUpdatedParameter,
     midiNoteToFrequency,
+    normalizedValueFromDisplayValue,
     normalizedGainToDb,
     parameterValue,
     synthesizeInstrumentBlock

@@ -371,6 +371,21 @@ public:
     throw std::runtime_error("unknown_parameter");
   }
 
+  std::string setParameterDisplayValue(Steinberg::Vst::ParamID id, const std::string& displayValue) {
+    if (!controller_) {
+      throw std::runtime_error("VST3 plugin does not expose an edit controller.");
+    }
+    Steinberg::Vst::String128 text {};
+    if (!VST3::StringConvert::convert(displayValue, text)) {
+      throw std::runtime_error("invalid_parameter_display_value");
+    }
+    Steinberg::Vst::ParamValue normalizedValue = 0.0;
+    if (controller_->getParamValueByString(id, text, normalizedValue) != Steinberg::kResultOk) {
+      throw std::runtime_error("parameter_display_value_not_supported");
+    }
+    return setParameter(id, std::clamp(normalizedValue, 0.0, 1.0), 0);
+  }
+
   std::string stateToJson() const {
     std::ostringstream output;
     output << "{\"state\":{"
@@ -1074,6 +1089,26 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
             continue;
           }
           std::cout << host.setParameter(parameterId, value, sampleOffset) << std::endl;
+          continue;
+        }
+
+        if (command == "setParameterDisplayValue") {
+          std::string parameterIdText;
+          std::string displayValueText;
+          Steinberg::Vst::ParamID parameterId = 0;
+          stream >> parameterIdText;
+          stream >> displayValueText;
+          if (!parseParamIdArg(parameterIdText.c_str(), parameterId) || displayValueText.empty() || displayValueText == "-") {
+            std::cout << "{\"error\":\"invalid_parameter_display_arguments\"}" << std::endl;
+            continue;
+          }
+          const auto decoded = base64Decode(displayValueText, kMaxWorkerParameterStringBytes);
+          if (decoded.empty() || std::find(decoded.begin(), decoded.end(), 0) != decoded.end()) {
+            std::cout << "{\"error\":\"invalid_parameter_display_arguments\"}" << std::endl;
+            continue;
+          }
+          const std::string displayValue(decoded.begin(), decoded.end());
+          std::cout << host.setParameterDisplayValue(parameterId, displayValue) << std::endl;
           continue;
         }
 

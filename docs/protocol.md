@@ -241,9 +241,9 @@ Releases an instance.
 
 ### `getParameters`
 
-Returns parameter metadata and current normalized values. All automatable parameter values are normalized to `0..1`; display mapping is metadata.
+Returns parameter metadata and current normalized values. All automatable parameter values are normalized to `0..1`; display mapping is metadata. `displayValue`, when present, is plugin-controlled display text capped to 160 bytes.
 
-Parameter metadata is plugin-controlled and must be bounded before it reaches a host UI. The reference daemon caps native parameters to 1024 items per instance, parameter ids to 64 bytes, parameter names to 160 bytes, and units to 64 bytes. Native VST3 parameters are enumerated from the plugin edit controller after instance creation; native AU parameters are enumerated from CoreAudio parameter metadata.
+Parameter metadata is plugin-controlled and must be bounded before it reaches a host UI. The reference daemon caps native parameters to 1024 items per instance, parameter ids to 64 bytes, parameter names and display values to 160 bytes, and units to 64 bytes. Native VST3 parameters are enumerated from the plugin edit controller after instance creation; native AU parameters are enumerated from CoreAudio parameter metadata.
 
 VST3 parameters may include bounded `vst3Unit` metadata from the SDK `IUnitInfo` interface: `id`, `parentUnitId`, `name`, and optional `programListId`. Unit names use the same 160-byte cap as parameter names, and the worker inspects at most 1024 units. VST3 parameters flagged by the SDK as program-change parameters include `programChange: true`. When the parameter's unit can be associated with a VST3 program list, the worker may include a bounded `programList` with at most 256 named programs and normalized values suitable for `setParameter`.
 
@@ -340,6 +340,20 @@ Returns the negotiated channel and bus layout for an instance. `requestedInputCh
 Sets one normalized parameter value. Values outside `0..1` are rejected. For installed VST3 plugins, the reference daemon updates the edit controller and queues a processor-side `IParameterChanges` point for the next render block. For installed Audio Units, the reference daemon maps normalized values onto the CoreAudio parameter range and calls `AudioUnitSetParameter`. For compatible LV2 audio/control plugins, the reference daemon maps normalized values onto bounded LV2 input control ports parsed from bundle TTL and rounds toggled/integer/enumeration controls to legal plain values.
 
 Parameters marked `readOnly: true` are display-only. Conforming daemons must reject `setParameter` for those ids with `parameter_read_only` before dispatching to native workers.
+
+### `setParameterDisplayValue`
+
+Asks the daemon to parse one bounded plugin display string and apply it as a parameter value.
+
+```json
+{
+  "instanceId": "inst-2",
+  "parameterId": "gain",
+  "displayValue": "0.0 dB"
+}
+```
+
+`displayValue` is capped to the same 160-byte parameter display-text limit advertised as `hello.capabilities.security.maxPluginParameterTextBytes`, must not contain NUL characters, and still requires paired session ownership of the instance. Parameters marked `readOnly: true` must be rejected with `parameter_read_only` before native worker dispatch. The reference VST3 worker uses `IEditController::getParamValueByString`, the AU worker uses CoreAudio `kAudioUnitProperty_ParameterValueFromString` where supported, and LV2/basic mock parameters fall back to bounded numeric or daemon-listed program display parsing before applying the same normalized `setParameter` path.
 
 ### `setPreset`
 

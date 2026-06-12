@@ -146,6 +146,32 @@ public:
     return std::string("{\"parameter\":") + parameterInfoToJson(parameterId, info) + "}";
   }
 
+  std::string setParameterDisplayValue(AudioUnitParameterID parameterId, const std::string& displayValue) {
+    AudioUnitParameterInfo info {};
+    UInt32 infoSize = sizeof(info);
+    checkStatus(
+        AudioUnitGetProperty(unit_, kAudioUnitProperty_ParameterInfo, kAudioUnitScope_Global, parameterId, &info, &infoSize),
+        "AudioUnitGetProperty ParameterInfo");
+    CFStringRef text = CFStringCreateWithCString(kCFAllocatorDefault, displayValue.c_str(), kCFStringEncodingUTF8);
+    if (text == nullptr) {
+      throw std::runtime_error("invalid_parameter_display_value");
+    }
+    AudioUnitParameterValueFromString request {};
+    request.inParamID = parameterId;
+    request.inString = text;
+    UInt32 requestSize = sizeof(request);
+    const auto status = AudioUnitGetProperty(
+        unit_,
+        kAudioUnitProperty_ParameterValueFromString,
+        kAudioUnitScope_Global,
+        0,
+        &request,
+        &requestSize);
+    CFRelease(text);
+    checkStatus(status, "AudioUnitGetProperty ParameterValueFromString");
+    return setParameter(parameterId, normalizedValueForPlain(info, request.outValue), 0);
+  }
+
   std::string stateToJson() const {
     return std::string("{\"state\":\"") + stateBase64() + "\"}";
   }
@@ -986,6 +1012,27 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
             continue;
           }
           std::cout << host.setParameter(parameterId, value, sampleOffset) << std::endl;
+          continue;
+        }
+
+        if (command == "setParameterDisplayValue") {
+          std::string parameterIdText;
+          std::string displayValueText;
+          std::uint32_t parameterId = 0;
+          stream >> parameterIdText;
+          stream >> displayValueText;
+          if (!parseUint32Arg(parameterIdText.c_str(), 0, std::numeric_limits<std::uint32_t>::max(), parameterId) ||
+              displayValueText.empty() || displayValueText == "-") {
+            std::cout << "{\"error\":\"invalid_parameter_display_arguments\"}" << std::endl;
+            continue;
+          }
+          const auto decoded = base64Decode(displayValueText, kMaxWorkerParameterStringBytes);
+          if (decoded.empty() || std::find(decoded.begin(), decoded.end(), 0) != decoded.end()) {
+            std::cout << "{\"error\":\"invalid_parameter_display_arguments\"}" << std::endl;
+            continue;
+          }
+          const std::string displayValue(decoded.begin(), decoded.end());
+          std::cout << host.setParameterDisplayValue(parameterId, displayValue) << std::endl;
           continue;
         }
 

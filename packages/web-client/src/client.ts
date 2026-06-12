@@ -130,6 +130,10 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("setParameter", { instanceId, parameterId, normalizedValue });
   }
 
+  setParameterDisplayValue(instanceId: string, parameterId: string, displayValue: string): Promise<{ parameter: PluginParameter }> {
+    return this.request("setParameterDisplayValue", { instanceId, parameterId, displayValue });
+  }
+
   setPreset(instanceId: string, presetId: string): Promise<{
     applied: boolean;
     presetId: string;

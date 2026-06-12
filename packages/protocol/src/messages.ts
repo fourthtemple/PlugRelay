@@ -7,6 +7,7 @@ export type ProtocolCommand =
   | "destroyInstance"
   | "getParameters"
   | "setParameter"
+  | "setParameterDisplayValue"
   | "setPreset"
   | "getVst3ProgramData"
   | "setVst3ProgramData"
@@ -104,6 +105,7 @@ export interface HelloResponse {
       maxPluginProgramDataEnvelopeBytes?: number;
       maxPluginProgramLists?: number;
       maxPluginPrograms?: number;
+      maxPluginParameterTextBytes?: number;
       maxNoteExpressionTextBytes?: number;
       maxWorkerPendingCommands?: number;
       workerReadyTimeoutMs?: number;
@@ -484,6 +486,22 @@ export interface SetStateRequest {
 export interface SetStateResponse {
   restored: boolean;
   parameters: PluginParameter[];
+}
+
+export interface SetParameterRequest {
+  instanceId: string;
+  parameterId: string;
+  normalizedValue: number;
+}
+
+export interface SetParameterDisplayValueRequest {
+  instanceId: string;
+  parameterId: string;
+  displayValue: string;
+}
+
+export interface SetParameterResponse {
+  parameter: PluginParameter;
 }
 
 export interface SetPresetRequest {

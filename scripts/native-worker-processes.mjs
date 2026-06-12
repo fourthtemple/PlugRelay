@@ -387,6 +387,17 @@ export function createNativeWorkerProcesses({
       return normalizeWorkerParameter(parsed.parameter);
     }
 
+    async setParameterDisplayValue(parameterId, displayValue) {
+      if (!["au", "vst3"].includes(this.nativeHost.format)) {
+        return undefined;
+      }
+      const parsed = await this.request(`setParameterDisplayValue ${parameterId} ${encodeWorkerText(displayValue)}`);
+      if (!parsed.parameter) {
+        return undefined;
+      }
+      return normalizeWorkerParameter(parsed.parameter);
+    }
+
     async getState() {
       if (!["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
         return undefined;

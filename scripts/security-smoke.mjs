@@ -111,6 +111,7 @@ async function run() {
     "destroyInstance",
     "getParameters",
     "setParameter",
+    "setParameterDisplayValue",
     "setPreset",
     "getVst3ProgramData",
     "setVst3ProgramData",
@@ -182,6 +183,11 @@ async function run() {
   const session = paired.sessionToken;
   const pairedHello = await request(main, "hello", {}, true, session);
   check(pairedHello.capabilities?.automation === true, "paired hello advertises bounded parameter automation");
+  check(
+    pairedHello.capabilities?.parameterDisplayInput === true &&
+      pairedHello.capabilities?.security?.maxPluginParameterTextBytes === 160,
+    "paired hello advertises bounded parameter display input"
+  );
   check(
     pairedHello.capabilities?.security?.maxAutomationLanesPerInstance >= 1 &&
       pairedHello.capabilities?.security?.maxAutomationLanePoints >= 1,
@@ -392,6 +398,52 @@ async function run() {
       displayGain.parameter.displayValue.includes("dB"),
     "setParameter returns bounded display text for generic editor values"
   );
+  const textGain = await request(
+    main,
+    "setParameterDisplayValue",
+    { instanceId: created.instanceId, parameterId: "gain", displayValue: "0.0 dB" },
+    true,
+    session
+  );
+  check(
+    Math.abs(textGain.parameter?.normalizedValue - 0.5) < 0.000001 &&
+      textGain.parameter.displayValue === "0.0 dB",
+    "setParameterDisplayValue accepts bounded plugin display text"
+  );
+  const textProgram = await request(
+    main,
+    "setParameterDisplayValue",
+    { instanceId: created.instanceId, parameterId: "program", displayValue: "Warm" },
+    true,
+    session
+  );
+  check(
+    textProgram.parameter?.displayValue === "Warm" &&
+      Math.abs(textProgram.parameter.normalizedValue - 1 / 3) < 0.000001,
+    "setParameterDisplayValue accepts bounded program display text"
+  );
+  const oversizedDisplay = await request(
+    main,
+    "setParameterDisplayValue",
+    { instanceId: created.instanceId, parameterId: "gain", displayValue: "x".repeat(161) },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(oversizedDisplay.code === "invalid_argument", "setParameterDisplayValue rejects oversized display text");
+  const nulDisplay = await request(
+    main,
+    "setParameterDisplayValue",
+    { instanceId: created.instanceId, parameterId: "gain", displayValue: "0\u0000dB" },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(nulDisplay.code === "invalid_argument", "setParameterDisplayValue rejects NUL display text");
   const readOnlyParameter = created.plugin?.parameters?.find((parameter) => parameter.id === "output-level");
   check(
     readOnlyParameter?.readOnly === true && readOnlyParameter.automatable === false,
@@ -408,6 +460,17 @@ async function run() {
     (error) => ({ code: error.code })
   );
   check(readOnlyWrite.code === "parameter_read_only", "setParameter rejects read-only parameters before worker dispatch");
+  const readOnlyTextWrite = await request(
+    main,
+    "setParameterDisplayValue",
+    { instanceId: created.instanceId, parameterId: "output-level", displayValue: "100 %" },
+    true,
+    session
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(readOnlyTextWrite.code === "parameter_read_only", "setParameterDisplayValue rejects read-only parameters before worker dispatch");
   check(
     Array.isArray(created.plugin?.presets) &&
       created.plugin.presets.length >= 2 &&
