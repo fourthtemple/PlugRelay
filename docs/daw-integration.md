@@ -41,7 +41,7 @@ Hosts should:
 - store opaque plugin state without editing it
 - account for `getLatency()` in timeline scheduling and monitoring UI
 - send bounded `processAudioBlock.transport` context when the host knows play state, sample position, tempo, time signature, or loop range
-- apply only daemon-listed preset ids and pass real preset/sample/cache/license paths through opaque session-owned file grants instead of exposing arbitrary filesystem access
+- apply only daemon-listed preset ids and pass native-approved preset/sample/cache/license paths through opaque session-owned file grants instead of exposing arbitrary filesystem access
 - degrade gracefully when the daemon disconnects
 
 ## Current Prototype Limitations

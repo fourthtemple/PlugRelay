@@ -257,6 +257,7 @@ async function run() {
   check(
     pairedHello.capabilities?.fileAccess === false &&
       pairedHello.capabilities?.security?.fileBroker === false &&
+      pairedHello.capabilities?.security?.browserFileGrantPaths === false &&
       pairedHello.capabilities?.security?.maxFileGrantsPerSession > 0 &&
       pairedHello.capabilities?.security?.maxFileGrantPathBytes <= 4096,
     "paired hello advertises file brokering as disabled by default"

@@ -10,6 +10,7 @@ export function createDaemonFileGrants({
   fileGrants,
   sessions,
   roots,
+  allowBrowserPaths = false,
   limits,
   makeProtocolError
 }) {
@@ -26,10 +27,20 @@ export function createDaemonFileGrants({
     return allowedRoots.length > 0;
   }
 
+  function browserPathGrantsAvailable() {
+    return available() && allowBrowserPaths === true;
+  }
+
   function createFileGrant(payload, session) {
     cleanupExpiredFileGrants();
     if (!available()) {
       throw makeProtocolError("file_broker_unavailable", "File grants require configured broker roots.");
+    }
+    if (!browserPathGrantsAvailable()) {
+      throw makeProtocolError(
+        "file_grant_approval_required",
+        "Browser-supplied file paths require an explicit native approval broker or development opt-in."
+      );
     }
     ensureSessionGrantSet(session);
     if (session.fileGrants.size >= maxFileGrantsPerSession) {
@@ -184,6 +195,7 @@ export function createDaemonFileGrants({
 
   return {
     available,
+    browserPathGrantsAvailable,
     cleanupExpiredFileGrants,
     createFileGrant,
     destroyFileGrantRecord,

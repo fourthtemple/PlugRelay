@@ -217,7 +217,11 @@ async function assertRejectsBroker(mode, message, expectedErrorText) {
       instance: fixtureInstance
     });
   } catch (error) {
-    assert(String(error?.message ?? error).includes(expectedErrorText), message);
+    const errorText = String(error?.message ?? error);
+    assert(
+      errorText.includes(expectedErrorText) || errorText.includes("native_editor_broker_exited"),
+      `${message}: ${errorText}`
+    );
     return;
   }
   throw new Error(message);

@@ -655,6 +655,8 @@ The response includes an `editorId`, the owning `instanceId`, `kind`, `transport
 
 File grants are the protocol foundation for preset files, samples, caches, licenses, and other plugin files that cannot safely be represented as small in-protocol preset snapshots. The reference daemon keeps this disabled unless it is started with explicit broker roots in `SOUNDBRIDGE_FILE_GRANT_ROOTS`.
 
+Configured roots alone do not authorize arbitrary browser-supplied path strings. The reference daemon only accepts the `path` form below when `SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS=1` is set for development or test harnesses. Production hosts should create grants from a native file picker or equivalent local approval broker, then pass opaque grant ids to browser and worker code.
+
 ```json
 {
   "path": "/absolute/user-approved/path/Kick.wav",
@@ -664,7 +666,7 @@ File grants are the protocol foundation for preset files, samples, caches, licen
 }
 ```
 
-When enabled, `createFileGrant` resolves the requested absolute path through the configured roots, rejects paths outside those roots, rejects symlink escapes after `realpath`, enforces per-session and total grant caps, and returns only a path-free grant:
+When the development path mode is enabled, `createFileGrant` resolves the requested absolute path through the configured roots, rejects paths outside those roots, rejects symlink escapes after `realpath`, enforces per-session and total grant caps, and returns only a path-free grant:
 
 ```json
 {

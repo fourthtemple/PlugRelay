@@ -89,6 +89,7 @@ const MIN_SAMPLE_RATE = 8000;
 const MAX_SAMPLE_RATE = 384000;
 const ALLOWED_ORIGINS = envList("SOUNDBRIDGE_ALLOWED_ORIGINS");
 const FILE_GRANT_ROOTS = envList("SOUNDBRIDGE_FILE_GRANT_ROOTS");
+const ALLOW_BROWSER_FILE_GRANT_PATHS = process.env.SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS === "1";
 const validators = createDaemonValidators({
   minSampleRate: MIN_SAMPLE_RATE,
   maxSampleRate: MAX_SAMPLE_RATE,
@@ -230,6 +231,7 @@ const fileGrantSupport = createDaemonFileGrants({
   fileGrants,
   sessions,
   roots: FILE_GRANT_ROOTS,
+  allowBrowserPaths: ALLOW_BROWSER_FILE_GRANT_PATHS,
   limits: {
     fileGrantTtlMs: FILE_GRANT_TTL_MS,
     maxFileGrantDisplayNameBytes: MAX_FILE_GRANT_DISPLAY_NAME_BYTES,
@@ -490,7 +492,7 @@ function helloResponse(paired) {
             automation: true,
             transport: true,
             genericEditor: true,
-            fileAccess: fileGrantSupport.available(),
+            fileAccess: fileGrantSupport.browserPathGrantsAvailable(),
             nativeExampleRenderer: Boolean(NATIVE_RENDERER),
             nativeEditor: Boolean(nativeEditorBroker?.available)
           }
@@ -503,6 +505,7 @@ function helloResponse(paired) {
         cleanupOnDisconnect: true,
         hostHeaderValidation: true,
         fileBroker: fileGrantSupport.available(),
+        browserFileGrantPaths: fileGrantSupport.browserPathGrantsAvailable(),
         nativeEditorBroker: Boolean(nativeEditorBroker?.available),
         maxInstancesPerSession: MAX_INSTANCES_PER_SESSION,
         maxTotalInstances: MAX_TOTAL_INSTANCES,

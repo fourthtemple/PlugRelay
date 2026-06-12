@@ -43,7 +43,50 @@ export function createSecurityFileGrantCases({
       fs.symlinkSync(outsidePath, symlinkPath);
     } catch {}
 
-    const brokerPort = port + 4;
+    const approvalPort = port + 4;
+    const approvalDaemon = spawn("node", ["scripts/mock-daemon.mjs"], {
+      env: {
+        ...process.env,
+        SOUNDBRIDGE_HOST: host,
+        SOUNDBRIDGE_PORT: String(approvalPort),
+        SOUNDBRIDGE_PAIRING_TOKEN: token,
+        SOUNDBRIDGE_FILE_GRANT_ROOTS: root
+      },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    approvalDaemon.stderr.on("data", () => {});
+
+    try {
+      await waitForListen(approvalDaemon);
+      const approval = await connect(host, approvalPort, `${host}:${approvalPort}`, origin);
+      const approvalPair = await request(approval, "pair", { origin, pairingToken: token }, false);
+      const hello = await request(approval, "hello", {}, true, approvalPair.sessionToken);
+      check(
+        hello.capabilities?.fileAccess === false &&
+          hello.capabilities?.security?.fileBroker === true &&
+          hello.capabilities?.security?.browserFileGrantPaths === false,
+        "configured file roots still require native approval or development opt-in"
+      );
+      const approvalRequired = await request(
+        approval,
+        "createFileGrant",
+        { path: samplePath, purpose: "sample", access: "read", kind: "file" },
+        true,
+        approvalPair.sessionToken
+      ).then(
+        () => ({ ok: true }),
+        (error) => ({ code: error.code })
+      );
+      check(
+        approvalRequired.code === "file_grant_approval_required",
+        "browser-supplied file paths are denied without explicit development opt-in"
+      );
+      approval.socket?.destroy();
+    } finally {
+      approvalDaemon.kill("SIGKILL");
+    }
+
+    const brokerPort = port + 5;
     const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
@@ -51,6 +94,7 @@ export function createSecurityFileGrantCases({
         SOUNDBRIDGE_PORT: String(brokerPort),
         SOUNDBRIDGE_PAIRING_TOKEN: token,
         SOUNDBRIDGE_FILE_GRANT_ROOTS: root,
+        SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
         SOUNDBRIDGE_MAX_FILE_GRANTS_PER_SESSION: "1",
         SOUNDBRIDGE_MAX_TOTAL_FILE_GRANTS: "1"
       },
@@ -66,8 +110,9 @@ export function createSecurityFileGrantCases({
       check(
         hello.capabilities?.fileAccess === true &&
           hello.capabilities?.security?.fileBroker === true &&
+          hello.capabilities?.security?.browserFileGrantPaths === true &&
           hello.capabilities?.security?.maxFileGrantsPerSession === 1,
-        "paired hello advertises opt-in bounded file brokering"
+        "development opt-in advertises bounded browser-path file brokering"
       );
 
       const outside = await request(

@@ -73,6 +73,7 @@ export interface HelloResponse {
       maxTotalEditors?: number;
       maxEditorSessionTtlMs?: number;
       fileBroker?: boolean;
+      browserFileGrantPaths?: boolean;
       maxFileGrantsPerSession?: number;
       maxTotalFileGrants?: number;
       maxFileGrantTtlMs?: number;
