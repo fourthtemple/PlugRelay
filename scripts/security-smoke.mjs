@@ -5,11 +5,9 @@ import {
   connect,
   createRequestClient,
   rawHandshake,
-  rawHttpRequest,
-  sendCloseFrame,
-  sendOversizedTextFrame,
-  waitForClose
+  rawHttpRequest
 } from "./security-smoke-client.mjs";
+import { createSecurityDaemonCases, waitForListen } from "./security-smoke-daemon-cases.mjs";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.SOUNDBRIDGE_PORT ?? 47991);
@@ -29,6 +27,16 @@ function check(condition, message) {
     console.log(`  FAIL- ${message}`);
   }
 }
+
+const daemonCases = createSecurityDaemonCases({
+  check,
+  disallowedOrigin: DISALLOWED_ORIGIN,
+  host: HOST,
+  origin: ORIGIN,
+  port: PORT,
+  request,
+  token: TOKEN
+});
 
 const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
   env: {
@@ -63,13 +71,13 @@ async function run() {
   rebind.socket?.destroy();
 
   // A2. Origin allowlists must deny unapproved origins while preserving approved origins.
-  await checkOriginAllowlist();
+  await daemonCases.checkOriginAllowlist();
 
   // A3. Oversized frames must be rejected before pairing or command dispatch.
-  await checkPrePairingMessageSizeCap();
+  await daemonCases.checkPrePairingMessageSizeCap();
 
   // A4. Disconnecting a browser session must destroy session-owned instances.
-  await checkDisconnectCleansUpInstances();
+  await daemonCases.checkDisconnectCleansUpInstances();
 
   // B. Loopback Host header upgrades normally.
   const main = await connect(HOST, PORT, `${HOST}:${PORT}`, ORIGIN);
@@ -1005,125 +1013,6 @@ async function run() {
   main.socket?.destroy();
 }
 
-// ---- helpers ----
-async function checkOriginAllowlist() {
-  const allowlistPort = PORT + 1;
-  const allowlisted = spawn("node", ["scripts/mock-daemon.mjs"], {
-    env: {
-      ...process.env,
-      SOUNDBRIDGE_HOST: HOST,
-      SOUNDBRIDGE_PORT: String(allowlistPort),
-      SOUNDBRIDGE_PAIRING_TOKEN: TOKEN,
-      SOUNDBRIDGE_ALLOWED_ORIGINS: ORIGIN
-    },
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  allowlisted.stderr.on("data", () => {});
-  try {
-    await waitForListen(allowlisted);
-    const denied = await connect(HOST, allowlistPort, `${HOST}:${allowlistPort}`, DISALLOWED_ORIGIN);
-    const deniedPair = await request(
-      denied,
-      "pair",
-      { origin: DISALLOWED_ORIGIN, pairingToken: TOKEN },
-      false
-    ).then(
-      () => ({ ok: true }),
-      (error) => ({ code: error.code })
-    );
-    check(deniedPair.code === "origin_not_allowed", "origin allowlist rejects unapproved browser origins");
-    denied.socket?.destroy();
-
-    const approved = await connect(HOST, allowlistPort, `${HOST}:${allowlistPort}`, ORIGIN);
-    const approvedPair = await request(approved, "pair", { origin: ORIGIN, pairingToken: TOKEN }, false);
-    check(
-      typeof approvedPair.sessionToken === "string" && approvedPair.sessionToken.length > 0,
-      "origin allowlist accepts approved browser origins"
-    );
-    const hello = await request(approved, "hello", {}, true, approvedPair.sessionToken);
-    check(hello.capabilities?.security?.originAllowlist === true, "hello advertises active origin allowlist");
-    approved.socket?.destroy();
-  } finally {
-    allowlisted.kill("SIGKILL");
-  }
-}
-
-async function checkPrePairingMessageSizeCap() {
-  const cappedPort = PORT + 2;
-  const capped = spawn("node", ["scripts/mock-daemon.mjs"], {
-    env: {
-      ...process.env,
-      SOUNDBRIDGE_HOST: HOST,
-      SOUNDBRIDGE_PORT: String(cappedPort),
-      SOUNDBRIDGE_PAIRING_TOKEN: TOKEN,
-      SOUNDBRIDGE_MAX_WEBSOCKET_MESSAGE_BYTES: "128"
-    },
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  capped.stderr.on("data", () => {});
-  try {
-    await waitForListen(capped);
-    const oversized = await connect(HOST, cappedPort, `${HOST}:${cappedPort}`, ORIGIN);
-    sendOversizedTextFrame(oversized, 129);
-    check(await waitForClose(oversized), "oversized pre-pairing WebSocket frames are rejected");
-  } finally {
-    capped.kill("SIGKILL");
-  }
-}
-
-async function checkDisconnectCleansUpInstances() {
-  const cleanupPort = PORT + 3;
-  const cleanupDaemon = spawn("node", ["scripts/mock-daemon.mjs"], {
-    env: {
-      ...process.env,
-      SOUNDBRIDGE_HOST: HOST,
-      SOUNDBRIDGE_PORT: String(cleanupPort),
-      SOUNDBRIDGE_PAIRING_TOKEN: TOKEN,
-      SOUNDBRIDGE_MAX_TOTAL_INSTANCES: "1"
-    },
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  cleanupDaemon.stderr.on("data", () => {});
-  try {
-    await waitForListen(cleanupDaemon);
-    const owner = await connect(HOST, cleanupPort, `${HOST}:${cleanupPort}`, ORIGIN);
-    const ownerPair = await request(owner, "pair", { origin: ORIGIN, pairingToken: TOKEN }, false);
-    await request(owner, "createInstance", { pluginId: "mock.gain" }, true, ownerPair.sessionToken);
-
-    const other = await connect(HOST, cleanupPort, `${HOST}:${cleanupPort}`, ORIGIN);
-    const otherPair = await request(other, "pair", { origin: ORIGIN, pairingToken: TOKEN }, false);
-    const blocked = await request(other, "createInstance", { pluginId: "mock.gain" }, true, otherPair.sessionToken).then(
-      () => ({ ok: true }),
-      (error) => ({ code: error.code })
-    );
-    check(blocked.code === "quota_exceeded", "live session-owned instances count against daemon-wide quotas");
-
-    sendCloseFrame(owner);
-    await waitForClose(owner);
-    const afterDisconnect = await createInstanceAfterDisconnectCleanup(other, otherPair.sessionToken);
-    check(
-      typeof afterDisconnect?.instanceId === "string",
-      "disconnecting a WebSocket destroys session-owned plugin instances"
-    );
-    other.socket?.destroy();
-  } finally {
-    cleanupDaemon.kill("SIGKILL");
-  }
-}
-
-function waitForListen(child) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("daemon did not start")), 8000);
-    child.stdout.on("data", (chunk) => {
-      if (String(chunk).includes("listening")) {
-        clearTimeout(timer);
-        setTimeout(resolve, 150);
-      }
-    });
-    child.on("exit", (code) => reject(new Error(`daemon exited early code=${code}`)));
-  });
-}
-
 async function pairAttempt(ctx, token) {
   if (ctx.closed) return { closed: true };
   try {
@@ -1133,24 +1022,6 @@ async function pairAttempt(ctx, token) {
     if (error.code === "closed" || error.code === "timeout") return { closed: true };
     return { code: error.code };
   }
-}
-
-async function createInstanceAfterDisconnectCleanup(ctx, sessionToken) {
-  const deadline = Date.now() + 1500;
-  while (Date.now() < deadline) {
-    const result = await request(ctx, "createInstance", { pluginId: "mock.gain" }, true, sessionToken).then(
-      (payload) => ({ payload }),
-      (error) => ({ code: error.code })
-    );
-    if (result.payload) {
-      return result.payload;
-    }
-    if (result.code !== "quota_exceeded") {
-      return undefined;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  return undefined;
 }
 
 function publicPluginsArePathFree(plugins) {
