@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import {
   connect,
+  requestEnvelope,
   sendCloseFrame,
   sendOversizedTextFrame,
   waitForClose
@@ -80,6 +81,62 @@ export function createSecurityDaemonCases({
     }
   }
 
+  async function checkRequestEnvelopeValidation() {
+    const ctx = await connect(host, port, `${host}:${port}`, origin);
+    try {
+      for (const [envelope, code, message] of [
+        [
+          { type: "request", id: "missing-payload", command: "hello" },
+          "bad_payload",
+          "request envelopes require a payload object"
+        ],
+        [
+          { type: "request", id: "null-payload", command: "hello", payload: null },
+          "bad_payload",
+          "request envelopes reject null payloads"
+        ],
+        [
+          { type: "request", id: "array-payload", command: "hello", payload: [] },
+          "bad_payload",
+          "request envelopes reject array payloads"
+        ],
+        [
+          { type: "request", id: "missing-command", payload: {} },
+          "bad_command",
+          "request envelopes require a known command"
+        ],
+        [
+          { type: "request", id: "unknown-command", command: "scanSecrets", payload: {} },
+          "bad_command",
+          "request envelopes reject unknown commands"
+        ],
+        [
+          { type: "request", id: "bad-session", command: "hello", payload: {}, sessionToken: 42 },
+          "bad_envelope",
+          "request envelopes reject non-string session tokens"
+        ],
+        [
+          { type: "request", id: "", command: "hello", payload: {} },
+          "bad_envelope",
+          "request envelopes reject empty ids"
+        ],
+        [
+          { type: "request", id: "extra-field", command: "hello", payload: {}, unexpected: true },
+          "bad_envelope",
+          "request envelopes reject unsupported top-level fields"
+        ]
+      ]) {
+        const result = await requestEnvelope(ctx, envelope).then(
+          () => ({ ok: true }),
+          (error) => ({ code: error.code })
+        );
+        check(result.code === code, message);
+      }
+    } finally {
+      ctx.socket?.destroy();
+    }
+  }
+
   async function checkDisconnectCleansUpInstances() {
     const cleanupPort = port + 3;
     const cleanupDaemon = spawn("node", ["scripts/mock-daemon.mjs"], {
@@ -141,7 +198,8 @@ export function createSecurityDaemonCases({
   return {
     checkDisconnectCleansUpInstances,
     checkOriginAllowlist,
-    checkPrePairingMessageSizeCap
+    checkPrePairingMessageSizeCap,
+    checkRequestEnvelopeValidation
   };
 }
 

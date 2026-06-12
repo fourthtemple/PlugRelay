@@ -125,31 +125,36 @@ export function createRequestClient({ idPrefix = "sec", timeoutMs = 3000 } = {})
     const id = `${idPrefix}-${++seq}`;
     const envelope = { type: "request", id, command, payload };
     if (includeSession) envelope.sessionToken = sessionToken;
-    ctx.socket.write(encodeFrame(Buffer.from(JSON.stringify(envelope), "utf8")));
-    return new Promise((resolve, reject) => {
-      const onMessage = (message) => {
-        if (message.id !== id) return;
-        cleanup();
-        if (message.ok) resolve(message.payload);
-        else reject(Object.assign(new Error(message.error?.code), { code: message.error?.code }));
-      };
-      const onClose = () => {
-        cleanup();
-        reject(Object.assign(new Error("closed"), { code: "closed" }));
-      };
-      const cleanup = () => {
-        ctx.socket.off("sb", onMessage);
-        ctx.socket.off("close", onClose);
-        clearTimeout(timer);
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(Object.assign(new Error("timeout"), { code: "timeout" }));
-      }, timeoutMs);
-      ctx.socket.on("sb", onMessage);
-      ctx.socket.on("close", onClose);
-    });
+    return requestEnvelope(ctx, envelope, { timeoutMs });
   };
+}
+
+export function requestEnvelope(ctx, envelope, { timeoutMs = 3000 } = {}) {
+  const id = typeof envelope?.id === "string" && envelope.id.length > 0 ? envelope.id : "unknown";
+  ctx.socket.write(encodeFrame(Buffer.from(JSON.stringify(envelope), "utf8")));
+  return new Promise((resolve, reject) => {
+    const onMessage = (message) => {
+      if (message.id !== id) return;
+      cleanup();
+      if (message.ok) resolve(message.payload);
+      else reject(Object.assign(new Error(message.error?.code), { code: message.error?.code }));
+    };
+    const onClose = () => {
+      cleanup();
+      reject(Object.assign(new Error("closed"), { code: "closed" }));
+    };
+    const cleanup = () => {
+      ctx.socket.off("sb", onMessage);
+      ctx.socket.off("close", onClose);
+      clearTimeout(timer);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(Object.assign(new Error("timeout"), { code: "timeout" }));
+    }, timeoutMs);
+    ctx.socket.on("sb", onMessage);
+    ctx.socket.on("close", onClose);
+  });
 }
 
 export function sendOversizedTextFrame(ctx, payloadLength) {

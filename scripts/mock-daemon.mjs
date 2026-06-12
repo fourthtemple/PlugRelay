@@ -13,6 +13,7 @@ import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { createDaemonPairing } from "./daemon-pairing.mjs";
 import { applyNativeParameterSnapshot, parameterSnapshotResponse } from "./daemon-parameter-snapshots.mjs";
 import { createPluginCatalogSupport, loadNativeHostStatus, resolveNativeRenderer } from "./daemon-plugin-catalog.mjs";
+import { requestEnvelopeError, requestEnvelopeResponseId } from "./daemon-request-envelope.mjs";
 import { createDaemonRuntimePayloads } from "./daemon-runtime-payloads.mjs";
 import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
 import { createDaemonConfig } from "./daemon-config.mjs";
@@ -394,8 +395,10 @@ async function handleRequest(rawMessage, context, send) {
     return;
   }
 
-  if (!envelope || envelope.type !== "request" || typeof envelope.id !== "string") {
-    sendError(send, "unknown", "bad_envelope", "Request envelope is invalid.");
+  const envelopeError = requestEnvelopeError(envelope);
+  if (envelopeError) {
+    const { code, details, message } = envelopeError;
+    sendError(send, requestEnvelopeResponseId(envelope), code, message, details);
     return;
   }
 
@@ -419,7 +422,7 @@ async function handleRequest(rawMessage, context, send) {
 }
 
 async function dispatchCommand(envelope, context) {
-  const { command, payload = {} } = envelope;
+  const { command, payload } = envelope;
   let session;
 
   if (command === "hello" && envelope.sessionToken) {

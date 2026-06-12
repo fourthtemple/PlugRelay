@@ -94,11 +94,11 @@ async function run() {
   const rebind = await rawHandshake(HOST, PORT, "evil.example", ORIGIN);
   check(rebind.status !== "101", "WS upgrade with non-loopback Host header is rejected (DNS-rebinding defense)");
   rebind.socket?.destroy();
-
   // A2. Origin allowlists must deny unapproved origins while preserving approved origins.
   await daemonCases.checkOriginAllowlist();
 
-  // A3. Oversized frames must be rejected before pairing or command dispatch.
+  // A3. Malformed envelopes and oversized frames must fail before command dispatch.
+  await daemonCases.checkRequestEnvelopeValidation();
   await daemonCases.checkPrePairingMessageSizeCap();
 
   // A4. Disconnecting a browser session must destroy session-owned instances.
