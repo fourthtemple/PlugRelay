@@ -8,6 +8,7 @@ import {
   rawHttpRequest
 } from "./security-smoke-client.mjs";
 import { createSecurityDaemonCases, waitForListen } from "./security-smoke-daemon-cases.mjs";
+import { createSecurityMidiCases } from "./security-smoke-midi-cases.mjs";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.SOUNDBRIDGE_PORT ?? 47991);
@@ -37,6 +38,7 @@ const daemonCases = createSecurityDaemonCases({
   request,
   token: TOKEN
 });
+const midiCases = createSecurityMidiCases({ check, request });
 
 const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
   env: {
@@ -199,6 +201,10 @@ async function run() {
     pairedHello.capabilities?.security?.maxPluginProgramLists > 0 &&
       pairedHello.capabilities?.security?.maxPluginPrograms > 0,
     "paired hello advertises bounded program-list metadata"
+  );
+  check(
+    pairedHello.capabilities?.security?.maxNoteExpressionTextBytes > 0,
+    "paired hello advertises bounded note-expression text"
   );
   check(
     pairedHello.capabilities?.security?.maxWorkerPendingCommands > 0,
@@ -619,81 +625,7 @@ async function run() {
   check(tooManyInputBuses.code === "invalid_argument", "processAudioBlock rejects oversized input bus lists");
 
   // I. MIDI input is bounded even when the target plugin is not MIDI-capable.
-  const tooManyMidiEvents = Array.from({ length: 4097 }, () => ({ type: "noteOn", note: 60, velocity: 0.8 }));
-  const midiTooLarge = await request(
-    main,
-    "sendMidiEvents",
-    { instanceId: created.instanceId, events: tooManyMidiEvents },
-    true,
-    session
-  ).then(
-    () => ({ ok: true }),
-    (error) => ({ code: error.code })
-  );
-  check(midiTooLarge.code === "invalid_argument", "sendMidiEvents rejects oversized MIDI batches");
-
-  const midiBadChannel = await request(
-    main,
-    "sendMidiEvents",
-    { instanceId: created.instanceId, events: [{ type: "noteOn", note: 60, velocity: 0.8, channel: 99 }] },
-    true,
-    session
-  ).then(
-    () => ({ ok: true }),
-    (error) => ({ code: error.code })
-  );
-  check(midiBadChannel.code === "invalid_argument", "sendMidiEvents rejects out-of-range MIDI fields");
-
-  const midiBadController = await request(
-    main,
-    "sendMidiEvents",
-    { instanceId: created.instanceId, events: [{ type: "controlChange", controller: 999, value: 0.5 }] },
-    true,
-    session
-  ).then(
-    () => ({ ok: true }),
-    (error) => ({ code: error.code })
-  );
-  check(midiBadController.code === "invalid_argument", "sendMidiEvents rejects out-of-range MIDI CC fields");
-
-  const midiBadBend = await request(
-    main,
-    "sendMidiEvents",
-    { instanceId: created.instanceId, events: [{ type: "pitchBend", value: 2 }] },
-    true,
-    session
-  ).then(
-    () => ({ ok: true }),
-    (error) => ({ code: error.code })
-  );
-  check(midiBadBend.code === "invalid_argument", "sendMidiEvents rejects out-of-range pitch bend fields");
-
-  const midiBadNoteExpression = await request(
-    main,
-    "sendMidiEvents",
-    { instanceId: created.instanceId, events: [{ type: "noteExpression", typeId: 0, noteId: -1, value: 0.5 }] },
-    true,
-    session
-  ).then(
-    () => ({ ok: true }),
-    (error) => ({ code: error.code })
-  );
-  check(midiBadNoteExpression.code === "invalid_argument", "sendMidiEvents rejects out-of-range VST3 note-expression fields");
-
-  const midiUnsupportedNoteExpression = await request(
-    main,
-    "sendMidiEvents",
-    { instanceId: created.instanceId, events: [{ type: "noteExpression", typeId: 0, noteId: 1, value: 0.5 }] },
-    true,
-    session
-  ).then(
-    () => ({ ok: true }),
-    (error) => ({ code: error.code })
-  );
-  check(
-    midiUnsupportedNoteExpression.code === "unsupported_midi_event",
-    "sendMidiEvents rejects VST3 note expressions for non-VST3 workers"
-  );
+  await midiCases.checkMidiValidation(main, session, created.instanceId);
 
   // J. Parameter automation input is bounded before it reaches workers.
   const automation = await request(

@@ -82,6 +82,7 @@ export interface HelloResponse {
       maxPluginNoteExpressions?: number;
       maxPluginProgramLists?: number;
       maxPluginPrograms?: number;
+      maxNoteExpressionTextBytes?: number;
       maxWorkerPendingCommands?: number;
       workerReadyTimeoutMs?: number;
       workerTerminationGraceMs?: number;
@@ -482,6 +483,14 @@ export type MidiEvent =
       typeId: number;
       noteId: number;
       value: number;
+      time?: number;
+      channel?: number;
+    }
+  | {
+      type: "noteExpressionText";
+      typeId: number;
+      noteId: number;
+      text: string;
       time?: number;
       channel?: number;
     };

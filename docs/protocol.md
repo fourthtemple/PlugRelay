@@ -245,7 +245,7 @@ VST3 parameters may include bounded `vst3Unit` metadata from the SDK `IUnitInfo`
 
 VST3 plugin snapshots may include `vst3ProgramLists`, a bounded list of all SDK program lists exposed by `IUnitInfo`, with at most 256 lists and 256 named programs per list. Program-list names and program names use the same 160-byte cap as parameter names; `unitId` is included when the SDK ties a list to a unit. This is display metadata. Hosts should use `programChange` parameters for selection when present and must not treat program-list metadata as permission to read, write, import, or load arbitrary preset files.
 
-VST3 plugin snapshots may include `vst3NoteExpressions`, a bounded list from the SDK `INoteExpressionController` for event bus 0 and channels 0-15. The daemon exposes at most 256 value-style expression definitions with capped display text, `typeId`, optional `unitId` and `associatedParameterId`, normalized value bounds, flags, `busIndex`, and `channel`. Text-style note-expression events remain disabled until they have separate string-size and UI handling.
+VST3 plugin snapshots may include `vst3NoteExpressions`, a bounded list from the SDK `INoteExpressionController` for event bus 0 and channels 0-15. The daemon exposes at most 256 expression definitions with capped display text, `typeId`, optional `unitId` and `associatedParameterId`, normalized value bounds, flags, `busIndex`, and `channel`. Value-style note-expression events use normalized `value`; text-style note-expression events use bounded UTF-8 `text` and are still VST3-only.
 
 Compatible LV2 control ports marked with `lv2:toggled`, `lv2:integer`, or `lv2:enumeration` expose bounded `stepCount` metadata. The reference LV2 worker caps reported step counts and quantizes normalized writes back to legal plain values before writing the plugin port.
 
@@ -502,7 +502,7 @@ Block size is bounded: the daemon clamps the frame count to the instance's `maxB
 
 ### `sendMidiEvents`
 
-Sends MIDI-like events to an instrument, MIDI effect, or native plugin worker that accepts MIDI. The reference daemon validates bounded note, control-change, pitch-bend, channel-pressure, poly-pressure, program-change, and VST3 value-style note-expression events before worker dispatch. VST3 workers deliver note, poly-pressure, and note-expression value events through `IEventList`; control-change, pitch-bend, and channel-pressure use VST3 `IMidiMapping` when the plugin exposes a parameter mapping. Audio Units receive short MIDI messages through `MusicDeviceMIDIEvent` where the CoreAudio unit supports them. Compatible LV2 atom/event MIDI input ports receive bounded MIDI events as LV2 atom sequences on the next render block; if an LV2 plugin has no compatible MIDI input port, the worker validates and acknowledges the bounded batch without delivery.
+Sends MIDI-like events to an instrument, MIDI effect, or native plugin worker that accepts MIDI. The reference daemon validates bounded note, control-change, pitch-bend, channel-pressure, poly-pressure, program-change, and VST3 note-expression events before worker dispatch. VST3 workers deliver note, poly-pressure, note-expression value, and bounded note-expression text events through `IEventList`; control-change, pitch-bend, and channel-pressure use VST3 `IMidiMapping` when the plugin exposes a parameter mapping. Audio Units receive short MIDI messages through `MusicDeviceMIDIEvent` where the CoreAudio unit supports them. Compatible LV2 atom/event MIDI input ports receive bounded MIDI events as LV2 atom sequences on the next render block; if an LV2 plugin has no compatible MIDI input port, the worker validates and acknowledges the bounded batch without delivery.
 
 Request:
 
@@ -542,12 +542,20 @@ Request:
       "value": 0.5,
       "channel": 0,
       "time": 80
+    },
+    {
+      "type": "noteExpressionText",
+      "typeId": 6,
+      "noteId": 42,
+      "text": "ah",
+      "channel": 0,
+      "time": 96
     }
   ]
 }
 ```
 
-`events` is bounded to 4096 items per request. Supported event types are `noteOn`, `noteOff`, `controlChange`, `pitchBend`, `channelPressure`, `polyPressure`, `programChange`, and `noteExpression`. `note`, `controller`, and `program` are `0..127`; optional VST3 `noteId` values on note events and required `noteId` values on `noteExpression` are `0..2147483647`; note-expression `typeId` is `0..4294967295`; `velocity`, `value` for control change or note expression, and `pressure` are `0..1`; pitch-bend `value` is `-1..1`; `channel` is `0..15`; and `time` is an integer sample offset into the next render block. Daemons must reject malformed or out-of-range MIDI events before dispatching them to a native worker. `noteExpression` currently requires a native VST3 worker and is rejected for AU, LV2, mock, or example-only targets.
+`events` is bounded to 4096 items per request. Supported event types are `noteOn`, `noteOff`, `controlChange`, `pitchBend`, `channelPressure`, `polyPressure`, `programChange`, `noteExpression`, and `noteExpressionText`. `note`, `controller`, and `program` are `0..127`; optional VST3 `noteId` values on note events and required `noteId` values on note-expression events are `0..2147483647`; note-expression `typeId` is `0..4294967295`; `velocity`, `value` for control change or value-style note expression, and `pressure` are `0..1`; text-style note-expression `text` is 1..256 UTF-8 bytes without NUL characters; pitch-bend `value` is `-1..1`; `channel` is `0..15`; and `time` is an integer sample offset into the next render block. Daemons must reject malformed or out-of-range MIDI events before dispatching them to a native worker. `noteExpression` and `noteExpressionText` currently require a native VST3 worker and are rejected for AU, LV2, mock, or example-only targets.
 
 Response:
 

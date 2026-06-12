@@ -47,6 +47,10 @@ export function createDaemonNormalizers(options = {}) {
         if (event.type === "noteExpression" && format === "vst3") {
           return ["expr", event.typeId, event.value, event.noteId, event.channel, event.time].join(":");
         }
+        if (event.type === "noteExpressionText" && format === "vst3") {
+          const encodedText = Buffer.from(event.text, "utf8").toString("base64");
+          return ["exprText", event.typeId, encodedText, event.noteId, event.channel, event.time].join(":");
+        }
         throw protocolError("invalid_argument", `Unsupported MIDI event type: ${event.type}`);
       })
       .join(";");

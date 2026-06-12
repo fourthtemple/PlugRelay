@@ -628,6 +628,7 @@ const nativeVst3Midi = await request(
       { type: "noteOn", note: 64, velocity: 0.5, channel: 0, time: 0, noteId: 42 },
       { type: "polyPressure", note: 64, pressure: 0.35, channel: 0, time: 12, noteId: 42 },
       { type: "noteExpression", typeId: 0, value: 0.5, noteId: 42, channel: 0, time: 14 },
+      { type: "noteExpressionText", typeId: 6, text: "ah", noteId: 42, channel: 0, time: 15 },
       { type: "controlChange", controller: 1, value: 0.25, channel: 0, time: 16 },
       { type: "pitchBend", value: 0.1, channel: 0, time: 24 },
       { type: "channelPressure", pressure: 0.4, channel: 0, time: 32 },
@@ -639,8 +640,8 @@ const nativeVst3Midi = await request(
   pair.sessionToken
 );
 assert(
-  nativeVst3Midi.accepted === true && nativeVst3Midi.eventCount === 8,
-  "installed VST3 host worker accepts bounded note-expression event lists"
+  nativeVst3Midi.accepted === true && nativeVst3Midi.eventCount === 9,
+  "installed VST3 host worker accepts bounded note-expression value/text event lists"
 );
 const nativeVst3Block = await request(
   socket,

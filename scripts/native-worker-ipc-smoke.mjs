@@ -80,10 +80,11 @@ try {
     unitNormalizers.encodeMidiEvents(
       [
         { type: "noteOn", note: 60, velocity: 0.8, channel: 0, time: 0, noteId: 42 },
-        { type: "noteExpression", typeId: 0, value: 0.5, noteId: 42, channel: 0, time: 1 }
+        { type: "noteExpression", typeId: 0, value: 0.5, noteId: 42, channel: 0, time: 1 },
+        { type: "noteExpressionText", typeId: 6, text: "ah", noteId: 42, channel: 0, time: 2 }
       ],
       "vst3"
-    ) === "on:60:0.8:0:0:42;expr:0:0.5:42:0:1",
+    ) === "on:60:0.8:0:0:42;expr:0:0.5:42:0:1;exprText:6:YWg=:42:0:2",
     "daemon normalizers encode VST3 note-expression worker events"
   );
 

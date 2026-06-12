@@ -35,6 +35,7 @@ const MAX_AUDIO_CHANNELS = envInteger("SOUNDBRIDGE_MAX_AUDIO_CHANNELS", 32);
 const MAX_PLUGIN_BUSES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_BUSES", 32);
 const MAX_BLOCK_SIZE = envInteger("SOUNDBRIDGE_MAX_BLOCK_SIZE", 8192);
 const MAX_MIDI_EVENTS_PER_REQUEST = envInteger("SOUNDBRIDGE_MAX_MIDI_EVENTS_PER_REQUEST", 4096);
+const MAX_NOTE_EXPRESSION_TEXT_BYTES = Math.min(envInteger("SOUNDBRIDGE_MAX_NOTE_EXPRESSION_TEXT_BYTES", 256), 1024);
 const MAX_PARAMETER_EVENTS_PER_REQUEST = envInteger("SOUNDBRIDGE_MAX_PARAMETER_EVENTS_PER_REQUEST", 4096);
 const MAX_AUTOMATION_CURVE_POINTS = Math.min(
   envInteger("SOUNDBRIDGE_MAX_AUTOMATION_CURVE_POINTS", 256),
@@ -160,6 +161,7 @@ const {
     maxAutomationLanePoints: MAX_AUTOMATION_LANE_POINTS,
     maxBlockSize: MAX_BLOCK_SIZE,
     maxMidiEventsPerRequest: MAX_MIDI_EVENTS_PER_REQUEST,
+    maxNoteExpressionTextBytes: MAX_NOTE_EXPRESSION_TEXT_BYTES,
     maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST,
     maxTransportSamplePosition: MAX_TRANSPORT_SAMPLE_POSITION
   },
@@ -428,6 +430,7 @@ function helloResponse(paired) {
         maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
         maxPluginProgramLists: MAX_PLUGIN_PROGRAM_LISTS,
         maxPluginPrograms: MAX_PLUGIN_PROGRAMS,
+        maxNoteExpressionTextBytes: MAX_NOTE_EXPRESSION_TEXT_BYTES,
         maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST,
         maxAutomationCurvePoints: MAX_AUTOMATION_CURVE_POINTS,
         maxAutomationLanesPerInstance: MAX_AUTOMATION_LANES_PER_INSTANCE,
@@ -1092,7 +1095,10 @@ function getPlugin(pluginId) {
 async function sendMidiEvents(instanceId, events, session) {
   const instance = getInstance(instanceId, session);
   const acceptedEvents = normalizeMidiEvents(events, instance.maxBlockSize);
-  if (acceptedEvents.some((event) => event.type === "noteExpression") && instance.nativeHost?.format !== "vst3") {
+  const hasVst3NoteExpressionEvent = acceptedEvents.some((event) =>
+    event.type === "noteExpression" || event.type === "noteExpressionText"
+  );
+  if (hasVst3NoteExpressionEvent && instance.nativeHost?.format !== "vst3") {
     throw protocolError("unsupported_midi_event", "VST3 note-expression events require a VST3 native worker.");
   }
   const hasNativeMidiWorker =

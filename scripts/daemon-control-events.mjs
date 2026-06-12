@@ -9,6 +9,7 @@ export function createDaemonControlEvents({
     maxAutomationLanePoints,
     maxBlockSize,
     maxMidiEventsPerRequest,
+    maxNoteExpressionTextBytes,
     maxParameterEventsPerRequest,
     maxTransportSamplePosition
   } = limits;
@@ -106,11 +107,35 @@ export function createDaemonControlEvents({
           time
         };
       }
+      if (type === "noteExpressionText") {
+        return {
+          type,
+          typeId: requireIntegerInRange(event.typeId, 0, 4_294_967_295, `events[${index}].typeId`),
+          noteId: requireIntegerInRange(event.noteId, 0, 2_147_483_647, `events[${index}].noteId`),
+          text: requireBoundedEventText(event.text, maxNoteExpressionTextBytes, `events[${index}].text`),
+          channel,
+          time
+        };
+      }
       throw makeProtocolError(
         "invalid_argument",
-        `events[${index}].type must be noteOn, noteOff, controlChange, pitchBend, channelPressure, polyPressure, programChange, or noteExpression.`
+        `events[${index}].type must be noteOn, noteOff, controlChange, pitchBend, channelPressure, polyPressure, programChange, noteExpression, or noteExpressionText.`
       );
     });
+  }
+
+  function requireBoundedEventText(value, maxBytes, fieldName) {
+    if (typeof value !== "string") {
+      throw makeProtocolError("invalid_argument", `${fieldName} must be a string.`);
+    }
+    const limit = Number.isInteger(maxBytes) && maxBytes > 0 ? maxBytes : 256;
+    const byteLength = Buffer.byteLength(value, "utf8");
+    if (byteLength === 0 || byteLength > limit || value.includes("\u0000")) {
+      throw makeProtocolError("invalid_argument", `${fieldName} must be 1..${limit} UTF-8 bytes without NUL characters.`, {
+        maxNoteExpressionTextBytes: limit
+      });
+    }
+    return value;
   }
 
   function addOptionalNoteId(normalized, event, index) {

@@ -27,6 +27,7 @@ constexpr Steinberg::int32 kMaxWorkerProgramLists = 256;
 constexpr Steinberg::int32 kMaxWorkerProgramsPerParameter = 256;
 constexpr Steinberg::int32 kMaxWorkerUnits = 1024;
 constexpr Steinberg::int32 kMaxWorkerNoteExpressionTypes = 256;
+constexpr std::size_t kMaxWorkerNoteExpressionTextBytes = 256;
 constexpr std::size_t kMaxWorkerStateBytes = 384 * 1024;
 constexpr std::uint32_t kMaxWorkerLatencySamples = 1'048'576;
 constexpr std::uint32_t kMaxWorkerTailSamples = 1'048'576;
@@ -45,7 +46,8 @@ enum class PendingMidiEventType {
   ChannelPressure,
   PolyPressure,
   ProgramChange,
-  NoteExpression
+  NoteExpression,
+  NoteExpressionText
 };
 
 struct PendingMidiEvent {
@@ -55,6 +57,7 @@ struct PendingMidiEvent {
   std::uint8_t program = 0;
   Steinberg::Vst::NoteExpressionTypeID noteExpressionTypeId = 0;
   Steinberg::int32 noteId = -1;
+  std::u16string noteExpressionText;
   float value = 0.8F;
   std::uint8_t channel = 0;
   std::uint32_t sampleOffset = 0;

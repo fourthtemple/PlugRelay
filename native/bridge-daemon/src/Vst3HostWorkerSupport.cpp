@@ -2,6 +2,7 @@
 
 #ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
 
+#include "SoundBridge/Base64.h"
 #include "SoundBridge/NativePlugin.h"
 
 #include "public.sdk/source/vst/hosting/stringconvert.h"
@@ -169,6 +170,36 @@ bool parseMidiEventToken(const std::string& token, PendingMidiEvent& event) {
     event.noteExpressionTypeId = typeId;
     event.noteId = static_cast<Steinberg::int32>(noteId);
     event.value = static_cast<float>(value);
+    return true;
+  }
+
+  if (parts[0] == "exprText") {
+    if (parts.size() != 6) {
+      return false;
+    }
+    std::uint32_t typeId = 0;
+    std::uint32_t noteId = 0;
+    if (!parseUint32Arg(parts[1].c_str(), 0, 4294967295U, typeId) ||
+        !parseUint32Arg(parts[3].c_str(), 0, 2147483647U, noteId) ||
+        !parseChannelAndOffset(4, 5)) {
+      return false;
+    }
+    try {
+      const auto decoded = soundbridge::base64Decode(parts[2], kMaxWorkerNoteExpressionTextBytes);
+      if (decoded.empty() || std::find(decoded.begin(), decoded.end(), 0) != decoded.end()) {
+        return false;
+      }
+      const std::string text(decoded.begin(), decoded.end());
+      event.noteExpressionText = VST3::StringConvert::convert(text);
+    } catch (...) {
+      return false;
+    }
+    if (event.noteExpressionText.empty()) {
+      return false;
+    }
+    event.type = PendingMidiEventType::NoteExpressionText;
+    event.noteExpressionTypeId = typeId;
+    event.noteId = static_cast<Steinberg::int32>(noteId);
     return true;
   }
 
@@ -688,6 +719,14 @@ bool makeVst3Event(const PendingMidiEvent& pending, std::uint32_t frames, Steinb
     event.noteExpressionValue.typeId = pending.noteExpressionTypeId;
     event.noteExpressionValue.noteId = pending.noteId;
     event.noteExpressionValue.value = std::clamp(static_cast<double>(pending.value), 0.0, 1.0);
+    return true;
+  }
+  if (pending.type == PendingMidiEventType::NoteExpressionText && pending.noteId >= 0 && !pending.noteExpressionText.empty()) {
+    event.type = Steinberg::Vst::Event::kNoteExpressionTextEvent;
+    event.noteExpressionText.typeId = pending.noteExpressionTypeId;
+    event.noteExpressionText.noteId = pending.noteId;
+    event.noteExpressionText.textLen = static_cast<Steinberg::uint32>(pending.noteExpressionText.size());
+    event.noteExpressionText.text = VST3::toTChar(pending.noteExpressionText);
     return true;
   }
   return false;
