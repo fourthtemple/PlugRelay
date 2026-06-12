@@ -98,6 +98,21 @@ export async function runNativeLv2WorkerSmoke({ nativeRenderer, assert, assertLa
       set.parameter?.id === "gain" && Math.abs(set.parameter.normalizedValue - 0.75) < 0.000001,
       "native LV2 worker updates a control port"
     );
+
+    worker.stdin.write("setParameter not-base64! 0.5 0\n", "utf8");
+    const malformedParameterToken = await readJsonLine();
+    assert(
+      malformedParameterToken.error === "invalid_parameter_arguments",
+      "native LV2 worker rejects malformed encoded parameter ids"
+    );
+
+    worker.stdin.write(`setParameter ${workerText("x".repeat(161))} 0.5 0\n`, "utf8");
+    const oversizedParameterToken = await readJsonLine();
+    assert(
+      oversizedParameterToken.error === "invalid_parameter_arguments",
+      "native LV2 worker rejects oversized encoded parameter ids"
+    );
+
     const modeSet = await requestWorker(`setParameter ${modeParameter} 0.6 0`);
     assert(
       modeSet.parameter?.id === "mode" &&

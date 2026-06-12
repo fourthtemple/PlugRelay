@@ -128,4 +128,14 @@ std::string base64DecodeTextToken(const std::string& text, std::size_t maxDecode
   return std::string(decoded.begin(), decoded.end());
 }
 
+bool tryBase64DecodeTextToken(const std::string& text, std::size_t maxDecodedBytes, std::string& output) {
+  try {
+    output = base64DecodeTextToken(text, maxDecodedBytes);
+    return true;
+  } catch (const std::runtime_error&) {
+    output.clear();
+    return false;
+  }
+}
+
 } // namespace soundbridge

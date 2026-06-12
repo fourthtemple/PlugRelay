@@ -174,8 +174,9 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
           stream >> parameterIdToken;
           stream >> valueText;
           stream >> sampleOffsetText;
-          const auto parameterIdText = base64DecodeTextToken(parameterIdToken, kMaxWorkerParameterStringBytes);
-          if (!parseUint32Arg(parameterIdText.c_str(), 0, 0xFFFFFFFFU, parameterId) ||
+          std::string parameterIdText;
+          if (!tryBase64DecodeTextToken(parameterIdToken, kMaxWorkerParameterStringBytes, parameterIdText) ||
+              !parseUint32Arg(parameterIdText.c_str(), 0, 0xFFFFFFFFU, parameterId) ||
               !parseDoubleArg(valueText.c_str(), 0.0, 1.0, value) ||
               (!sampleOffsetText.empty() && !parseUint32Arg(sampleOffsetText.c_str(), 0, kMaxWorkerFrames - 1, sampleOffset))) {
             std::cout << "{\"error\":\"invalid_parameter_arguments\"}" << std::endl;
@@ -191,14 +192,18 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
           std::uint32_t parameterId = 0;
           stream >> parameterIdToken;
           stream >> displayValueText;
-          const auto parameterIdText = base64DecodeTextToken(parameterIdToken, kMaxWorkerParameterStringBytes);
-          if (!parseUint32Arg(parameterIdText.c_str(), 0, std::numeric_limits<std::uint32_t>::max(), parameterId) ||
-              displayValueText.empty() || displayValueText == "-") {
+          std::string parameterIdText;
+          if (!tryBase64DecodeTextToken(parameterIdToken, kMaxWorkerParameterStringBytes, parameterIdText) ||
+              !parseUint32Arg(parameterIdText.c_str(), 0, std::numeric_limits<std::uint32_t>::max(), parameterId) ||
+              displayValueText.empty() ||
+              displayValueText == "-") {
             std::cout << "{\"error\":\"invalid_parameter_display_arguments\"}" << std::endl;
             continue;
           }
-          const auto displayValue = base64DecodeTextToken(displayValueText, kMaxWorkerParameterStringBytes);
-          if (displayValue.empty() || displayValue.find('\0') != std::string::npos) {
+          std::string displayValue;
+          if (!tryBase64DecodeTextToken(displayValueText, kMaxWorkerParameterStringBytes, displayValue) ||
+              displayValue.empty() ||
+              displayValue.find('\0') != std::string::npos) {
             std::cout << "{\"error\":\"invalid_parameter_display_arguments\"}" << std::endl;
             continue;
           }

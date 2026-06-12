@@ -156,8 +156,9 @@ int runLv2HostWorkerNative(int argc, char** argv) {
           stream >> parameterIdToken;
           stream >> valueText;
           stream >> sampleOffsetText;
-          const auto parameterId = base64DecodeTextToken(parameterIdToken, kMaxWorkerParameterStringBytes);
-          if (parameterId.empty() ||
+          std::string parameterId;
+          if (!tryBase64DecodeTextToken(parameterIdToken, kMaxWorkerParameterStringBytes, parameterId) ||
+              parameterId.empty() ||
               !parseDoubleArg(valueText.c_str(), 0.0, 1.0, value) ||
               (!sampleOffsetText.empty() && !parseUint32Arg(sampleOffsetText.c_str(), 0, kMaxWorkerFrames - 1, sampleOffset))) {
             std::cout << "{\"error\":\"invalid_parameter_arguments\"}" << std::endl;
