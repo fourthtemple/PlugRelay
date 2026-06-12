@@ -195,6 +195,15 @@ export interface PluginPreset {
   parameters: Record<string, number>;
 }
 
+export type AudioUnitHostProfile =
+  | "realtime-main-bus"
+  | "realtime-format-converter"
+  | "realtime-multi-source-merger"
+  | "realtime-multi-output-splitter"
+  | "offline-render"
+  | "multi-source-format-converter"
+  | "multi-output-splitter";
+
 export interface PluginClassMetadata {
   stableId?: string;
   bundleIdentifier?: string;
@@ -204,7 +213,7 @@ export interface PluginClassMetadata {
   componentType?: string;
   componentSubType?: string;
   componentManufacturer?: string;
-  audioUnitHostProfile?: string;
+  audioUnitHostProfile?: AudioUnitHostProfile;
   lv2Uri?: string;
   lv2BlockSizeProfile?: string;
   lv2UiTypes?: string;

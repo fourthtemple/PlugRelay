@@ -1,3 +1,4 @@
+import { isKnownAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
 import { FILE_GRANT_OPERATION_NAMES, isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
 
 const MAX_PLUGIN_LATENCY_SAMPLES = 1_048_576;
@@ -137,6 +138,9 @@ export function assertPublicPluginMetadata(plugin, message) {
       typeof value === "string" && Buffer.byteLength(value, "utf8") <= MAX_PLUGIN_METADATA_BYTES,
       `${message}: ${key} is a bounded string`
     );
+  }
+  if (metadata.audioUnitHostProfile) {
+    assert(isKnownAudioUnitHostProfile(metadata.audioUnitHostProfile), `${message}: audioUnitHostProfile is a known profile`);
   }
   if (metadata.vst3ClassId) {
     assert(metadata.stableId === `vst3:${metadata.vst3ClassId}`, `${message}: VST3 stableId uses the class id`);

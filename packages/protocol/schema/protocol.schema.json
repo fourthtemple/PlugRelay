@@ -471,7 +471,18 @@
         "componentType": { "type": "string", "maxLength": 16 },
         "componentSubType": { "type": "string", "maxLength": 16 },
         "componentManufacturer": { "type": "string", "maxLength": 16 },
-        "audioUnitHostProfile": { "type": "string", "maxLength": 64 },
+        "audioUnitHostProfile": {
+          "type": "string",
+          "enum": [
+            "realtime-main-bus",
+            "realtime-format-converter",
+            "realtime-multi-source-merger",
+            "realtime-multi-output-splitter",
+            "offline-render",
+            "multi-source-format-converter",
+            "multi-output-splitter"
+          ]
+        },
         "lv2Uri": { "type": "string", "maxLength": 256 },
         "lv2BlockSizeProfile": { "type": "string", "maxLength": 32 },
         "lv2UiTypes": { "type": "string", "maxLength": 256 },

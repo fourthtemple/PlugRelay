@@ -8,6 +8,12 @@ export const AUDIO_UNIT_HOST_PROFILES = Object.freeze({
   MULTI_OUTPUT_SPLITTER: "multi-output-splitter"
 });
 
+export const AUDIO_UNIT_HOST_PROFILE_NAMES = Object.freeze(Object.values(AUDIO_UNIT_HOST_PROFILES));
+
+export function isKnownAudioUnitHostProfile(value) {
+  return AUDIO_UNIT_HOST_PROFILE_NAMES.includes(value);
+}
+
 export function classifyAudioUnitHostProfile(plugin) {
   if (plugin?.format !== "au") {
     return {};

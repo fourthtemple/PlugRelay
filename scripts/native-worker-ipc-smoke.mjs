@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
+import { AUDIO_UNIT_HOST_PROFILES, isKnownAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
 import { exerciseDaemonFileGrantOperation } from "./daemon-file-grant-operations-smoke.mjs";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { applyNativeParameterSnapshot, parameterSnapshotResponse } from "./daemon-parameter-snapshots.mjs";
@@ -28,6 +29,12 @@ function protocolError(code, message, details) {
 }
 
 try {
+  check(
+    isKnownAudioUnitHostProfile(AUDIO_UNIT_HOST_PROFILES.REALTIME_MULTI_OUTPUT_SPLITTER) &&
+      !isKnownAudioUnitHostProfile("ambient-filesystem"),
+    "daemon Audio Unit host profiles use a known bounded vocabulary"
+  );
+
   const cappedParameterResponse = parameterSnapshotResponse({ parameters: [{ id: "a" }, { id: "b" }] }, 2);
   check(
     cappedParameterResponse.parameterMetadataAtLimit === true &&

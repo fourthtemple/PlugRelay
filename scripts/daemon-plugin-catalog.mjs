@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { classifyAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
+import { classifyAudioUnitHostProfile, isKnownAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
 import { FILE_GRANT_OPERATION_NAMES, isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -766,7 +766,10 @@ export function createPluginCatalogSupport({
     add("componentType", 16);
     add("componentSubType", 16);
     add("componentManufacturer", 16);
-    add("audioUnitHostProfile", 64);
+    const audioUnitHostProfile = truncateText(source.audioUnitHostProfile, 64);
+    if (isKnownAudioUnitHostProfile(audioUnitHostProfile)) {
+      metadata.audioUnitHostProfile = audioUnitHostProfile;
+    }
     add("lv2Uri");
     add("lv2BlockSizeProfile", 32);
     add("lv2UiTypes");
