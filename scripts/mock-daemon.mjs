@@ -3,6 +3,7 @@ import { createDaemonControlEvents } from "./daemon-control-events.mjs";
 import { createDaemonEditors } from "./daemon-editors.mjs";
 import { createDaemonFileGrants } from "./daemon-file-grants.mjs";
 import { createDaemonFileGrantOperations } from "./daemon-file-grant-operations.mjs";
+import { createDaemonHelloResponse } from "./daemon-hello-response.mjs";
 import { createDaemonInstanceFileGrants } from "./daemon-instance-file-grants.mjs";
 import { createDaemonInstrumentRendering } from "./daemon-instrument-rendering.mjs";
 import { createDaemonLifecycle } from "./daemon-lifecycle.mjs";
@@ -257,6 +258,45 @@ const fileGrantSupport = createDaemonFileGrants({
   },
   makeProtocolError: protocolError
 });
+const helloResponse = createDaemonHelloResponse({
+  allowedOrigins: ALLOWED_ORIGINS,
+  createPluginFormatCapabilities,
+  fileGrantSupport,
+  host: HOST,
+  limits: {
+    editorSessionTtlMs: EDITOR_SESSION_TTL_MS,
+    fileGrantTtlMs: FILE_GRANT_TTL_MS,
+    maxAudioChannels: MAX_AUDIO_CHANNELS,
+    maxAutomationCurvePoints: MAX_AUTOMATION_CURVE_POINTS,
+    maxAutomationLanePoints: MAX_AUTOMATION_LANE_POINTS,
+    maxAutomationLanesPerInstance: MAX_AUTOMATION_LANES_PER_INSTANCE,
+    maxBlockSize: MAX_BLOCK_SIZE,
+    maxEditorsPerSession: MAX_EDITORS_PER_SESSION,
+    maxFileGrantDisplayNameBytes: MAX_FILE_GRANT_DISPLAY_NAME_BYTES,
+    maxFileGrantPathBytes: MAX_FILE_GRANT_PATH_BYTES,
+    maxFileGrantsPerInstance: MAX_FILE_GRANTS_PER_INSTANCE,
+    maxFileGrantsPerSession: MAX_FILE_GRANTS_PER_SESSION,
+    maxNoteExpressionTextBytes: MAX_NOTE_EXPRESSION_TEXT_BYTES,
+    maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST,
+    maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
+    maxPluginProgramDataBytes: MAX_PLUGIN_PROGRAM_DATA_BYTES,
+    maxPluginProgramDataEnvelopeBytes: MAX_PLUGIN_PROGRAM_DATA_ENVELOPE_BYTES,
+    maxPluginProgramLists: MAX_PLUGIN_PROGRAM_LISTS,
+    maxPluginPrograms: MAX_PLUGIN_PROGRAMS,
+    maxTotalEditors: MAX_TOTAL_EDITORS,
+    maxTotalFileGrants: MAX_TOTAL_FILE_GRANTS,
+    maxTotalInstances: MAX_TOTAL_INSTANCES,
+    maxTotalSessions: MAX_TOTAL_SESSIONS,
+    maxTransportPositionMusic: MAX_TRANSPORT_POSITION_MUSIC,
+    maxTransportSamplePosition: MAX_TRANSPORT_SAMPLE_POSITION,
+    maxTransportTempoBpm: MAX_TRANSPORT_TEMPO_BPM
+  },
+  nativeEditorBroker,
+  nativeRenderer: NATIVE_RENDERER,
+  port: PORT,
+  protocolVersion: PROTOCOL_VERSION,
+  workerSecurityLimits
+});
 const instanceFileGrantSupport = createDaemonInstanceFileGrants({
   fileGrantSupport,
   maxFileGrantsPerInstance: MAX_FILE_GRANTS_PER_INSTANCE,
@@ -503,88 +543,6 @@ async function dispatchCommand(envelope, context) {
     default:
       throw protocolError("unknown_command", `Unknown command: ${command}`);
   }
-}
-
-function helloResponse(paired) {
-  return {
-    name: "soundbridge-mock-daemon",
-    protocolVersion: PROTOCOL_VERSION,
-    pairingRequired: true,
-    transports: [
-      {
-        kind: "websocket",
-        url: `ws://${HOST}:${PORT}/bridge`,
-        audioEncoding: "json-float32-arrays"
-      }
-    ],
-    capabilities: {
-      pluginFormats: paired ? createPluginFormatCapabilities() : {},
-      ...(paired
-        ? {
-            vst3: true,
-            au: true,
-            lv2: true,
-            mockPlugins: true,
-            state: true,
-            latency: true,
-            tail: true,
-            layout: true,
-            midi: true,
-            automation: true,
-            transport: true,
-            genericEditor: true,
-            fileAccess: fileGrantSupport.browserPathGrantsAvailable() || fileGrantSupport.nativeApprovalAvailable(),
-            fileGrantOperations: true,
-            nativeExampleRenderer: Boolean(NATIVE_RENDERER),
-            nativeEditor: Boolean(nativeEditorBroker?.available)
-          }
-        : {}),
-      security: {
-        originAllowlist: ALLOWED_ORIGINS.length > 0,
-        sessionBoundToConnection: true,
-        sessionBoundToOrigin: true,
-        instanceOwnership: true,
-        cleanupOnDisconnect: true,
-        hostHeaderValidation: true,
-        fileBroker: fileGrantSupport.available(),
-        fileGrantApprovalBroker: fileGrantSupport.nativeApprovalAvailable(),
-        browserFileGrantPaths: fileGrantSupport.browserPathGrantsAvailable(),
-        nativeEditorBroker: Boolean(nativeEditorBroker?.available),
-        nativeEditorFileDialogs: nativeEditorBroker?.capabilityPolicy?.fileDialogs === true,
-        nativeEditorClipboard: nativeEditorBroker?.capabilityPolicy?.clipboard === true,
-        nativeEditorDragAndDrop: nativeEditorBroker?.capabilityPolicy?.dragAndDrop === true,
-        maxInstancesPerSession: MAX_INSTANCES_PER_SESSION,
-        maxTotalInstances: MAX_TOTAL_INSTANCES,
-        maxEditorsPerSession: MAX_EDITORS_PER_SESSION,
-        maxTotalEditors: MAX_TOTAL_EDITORS,
-        maxEditorSessionTtlMs: EDITOR_SESSION_TTL_MS,
-        maxFileGrantsPerSession: MAX_FILE_GRANTS_PER_SESSION,
-        maxFileGrantsPerInstance: MAX_FILE_GRANTS_PER_INSTANCE,
-        maxTotalFileGrants: MAX_TOTAL_FILE_GRANTS,
-        maxFileGrantTtlMs: FILE_GRANT_TTL_MS,
-        maxFileGrantPathBytes: MAX_FILE_GRANT_PATH_BYTES,
-        maxFileGrantDisplayNameBytes: MAX_FILE_GRANT_DISPLAY_NAME_BYTES,
-        nativeWorkerFileGrants: true,
-        maxTotalSessions: MAX_TOTAL_SESSIONS,
-        maxAudioChannels: MAX_AUDIO_CHANNELS,
-        maxBlockSize: MAX_BLOCK_SIZE,
-        maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
-        maxPluginProgramDataBytes: MAX_PLUGIN_PROGRAM_DATA_BYTES,
-        maxPluginProgramDataEnvelopeBytes: MAX_PLUGIN_PROGRAM_DATA_ENVELOPE_BYTES,
-        maxPluginProgramLists: MAX_PLUGIN_PROGRAM_LISTS,
-        maxPluginPrograms: MAX_PLUGIN_PROGRAMS,
-        maxNoteExpressionTextBytes: MAX_NOTE_EXPRESSION_TEXT_BYTES,
-        maxParameterEventsPerRequest: MAX_PARAMETER_EVENTS_PER_REQUEST,
-        maxAutomationCurvePoints: MAX_AUTOMATION_CURVE_POINTS,
-        maxAutomationLanesPerInstance: MAX_AUTOMATION_LANES_PER_INSTANCE,
-        maxAutomationLanePoints: MAX_AUTOMATION_LANE_POINTS,
-        maxTransportTempoBpm: MAX_TRANSPORT_TEMPO_BPM,
-        maxTransportPositionMusic: MAX_TRANSPORT_POSITION_MUSIC,
-        maxTransportSamplePosition: MAX_TRANSPORT_SAMPLE_POSITION,
-        ...workerSecurityLimits
-      }
-    }
-  };
 }
 
 function pair(payload, context) {
