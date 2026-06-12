@@ -5,6 +5,7 @@ import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
+const TEST_READY_TIMEOUT_MS = 500;
 
 let passed = 0;
 const failures = [];
@@ -33,11 +34,19 @@ process.stdin.on("data", () => {
 setTimeout(() => {}, 30000);
 `
   );
+  const hangingNativeWorkerPath = writeExecutable(
+    "hanging-native-worker.mjs",
+    `#!/usr/bin/env node
+process.stdin.resume();
+setTimeout(() => {}, 30000);
+`
+  );
 
   const workers = createNativeWorkerProcesses({
     nativeRenderer: nativeWorkerPath,
     normalizers: createDaemonNormalizers(),
-    maxWorkerStdoutLineBytes: MAX_TEST_STDOUT_LINE_BYTES
+    maxWorkerStdoutLineBytes: MAX_TEST_STDOUT_LINE_BYTES,
+    workerReadyTimeoutMs: TEST_READY_TIMEOUT_MS
   });
 
   const exampleWorker = new workers.ExampleInstrumentWorker(exampleWorkerPath);
@@ -50,35 +59,7 @@ setTimeout(() => {}, 30000);
 
   const nativeWorker = new workers.NativeHostWorker(
     { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
-    {
-      sampleRate: 48000,
-      maxBlockSize: 1,
-      inputChannels: 0,
-      outputChannels: 1,
-      kind: "effect",
-      layout: {
-        requestedInputChannels: 0,
-        requestedOutputChannels: 1,
-        inputChannels: 0,
-        outputChannels: 1,
-        inputBuses: 0,
-        outputBuses: 1,
-        inputBusLayouts: [],
-        outputBusLayouts: [
-          {
-            index: 0,
-            direction: "output",
-            mediaType: "audio",
-            name: "Main Output",
-            type: "main",
-            channels: 1,
-            active: true
-          }
-        ],
-        sampleRate: 48000,
-        maxBlockSize: 1
-      }
-    }
+    nativeWorkerInstance()
   );
   await nativeWorker.ready;
   await expectRejected(
@@ -87,8 +68,57 @@ setTimeout(() => {}, 30000);
     "native host workers reject oversized stdout lines"
   );
   nativeWorker.destroy();
+
+  const hangingWorkers = createNativeWorkerProcesses({
+    nativeRenderer: hangingNativeWorkerPath,
+    normalizers: createDaemonNormalizers(),
+    maxWorkerStdoutLineBytes: MAX_TEST_STDOUT_LINE_BYTES,
+    workerReadyTimeoutMs: TEST_READY_TIMEOUT_MS
+  });
+  const hangingWorker = new hangingWorkers.NativeHostWorker(
+    { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
+    nativeWorkerInstance()
+  );
+  await expectRejected(
+    () => hangingWorker.ready,
+    "worker_ready_timeout",
+    "native host workers reject missing ready handshakes"
+  );
+  hangingWorker.destroy();
 } finally {
   fs.rmSync(tempDir, { force: true, recursive: true });
+}
+
+function nativeWorkerInstance() {
+  return {
+    sampleRate: 48000,
+    maxBlockSize: 1,
+    inputChannels: 0,
+    outputChannels: 1,
+    kind: "effect",
+    layout: {
+      requestedInputChannels: 0,
+      requestedOutputChannels: 1,
+      inputChannels: 0,
+      outputChannels: 1,
+      inputBuses: 0,
+      outputBuses: 1,
+      inputBusLayouts: [],
+      outputBusLayouts: [
+        {
+          index: 0,
+          direction: "output",
+          mediaType: "audio",
+          name: "Main Output",
+          type: "main",
+          channels: 1,
+          active: true
+        }
+      ],
+      sampleRate: 48000,
+      maxBlockSize: 1
+    }
+  };
 }
 
 console.log(`\n${passed} worker IPC checks passed, ${failures.length} failed.`);

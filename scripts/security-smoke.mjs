@@ -176,6 +176,10 @@ async function run() {
     "paired hello advertises bounded native worker stdout lines"
   );
   check(
+    pairedHello.capabilities?.security?.workerReadyTimeoutMs > 0,
+    "paired hello advertises bounded native worker startup"
+  );
+  check(
     pairedHello.capabilities?.genericEditor === true &&
       pairedHello.capabilities?.nativeEditor === false &&
       pairedHello.capabilities?.security?.maxEditorsPerSession > 0,

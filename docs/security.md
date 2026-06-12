@@ -111,9 +111,10 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Instances per session / total | 8 / 32 | `createInstance` |
 | Pairing attempts per connection | 5, then the connection is closed | `pair` |
 | WebSocket message size | 1 MiB, enforced before pairing | all frames |
+| Native worker ready timeout | 5 seconds, then the worker is rejected and terminated | VST3/AU/LV2 worker startup |
 | Native worker stdout line size | 16 MiB, then the worker is rejected and terminated | VST3/AU/LV2/example worker IPC responses |
 
-Out-of-range `createInstance` values fail with `invalid_argument`. Native host workers independently clamp block size and channel counts before allocating, so a misbehaving daemon layer cannot drive a worker into an oversized allocation. The daemon also caps worker stdout response lines before JSON parsing; an oversized or unterminated worker response rejects pending commands and terminates that worker process instead of growing daemon memory. `packages/protocol/schema/protocol.schema.json` encodes the browser-facing command bounds so other implementations can validate against the same contract.
+Out-of-range `createInstance` values fail with `invalid_argument`. Native host workers independently clamp block size and channel counts before allocating, so a misbehaving daemon layer cannot drive a worker into an oversized allocation. The daemon also caps worker startup and stdout response lines before JSON parsing; a missing ready handshake, oversized response, or unterminated response rejects pending commands and terminates that worker process instead of stranding requests or growing daemon memory. `packages/protocol/schema/protocol.schema.json` encodes the browser-facing command bounds so other implementations can validate against the same contract.
 
 ## Development Token
 

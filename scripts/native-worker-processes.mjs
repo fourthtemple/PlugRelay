@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
 
 export const DEFAULT_MAX_WORKER_STDOUT_LINE_BYTES = 16 * 1024 * 1024;
+export const DEFAULT_WORKER_READY_TIMEOUT_MS = 5000;
 
 export function createNativeWorkerProcesses({
   nativeRenderer,
   normalizers,
-  maxWorkerStdoutLineBytes = DEFAULT_MAX_WORKER_STDOUT_LINE_BYTES
+  maxWorkerStdoutLineBytes = DEFAULT_MAX_WORKER_STDOUT_LINE_BYTES,
+  workerReadyTimeoutMs = DEFAULT_WORKER_READY_TIMEOUT_MS
 }) {
   const {
     clonePluginLayout,
@@ -21,6 +23,7 @@ export function createNativeWorkerProcesses({
     normalizeWorkerState
   } = normalizers;
   const workerStdoutLineLimit = normalizeWorkerStdoutLineLimit(maxWorkerStdoutLineBytes);
+  const workerReadyTimeout = normalizeWorkerReadyTimeout(workerReadyTimeoutMs);
 
   class ExampleInstrumentWorker {
     constructor(executablePath) {
@@ -181,6 +184,10 @@ export function createNativeWorkerProcesses({
         this.resolveReady = resolve;
         this.rejectReady = reject;
       });
+      this.readyTimeout = setTimeout(() => {
+        this.abortWorker(workerReadyTimeoutError(workerReadyTimeout));
+      }, workerReadyTimeout);
+      this.readyTimeout.unref?.();
 
       this.process = spawn(nativeRenderer, nativeHostWorkerArgs(nativeHost, instance), {
         stdio: ["pipe", "pipe", "pipe"]
@@ -365,8 +372,7 @@ export function createNativeWorkerProcesses({
 
         if (!this.readySettled) {
           if (parsed.ok === true && parsed.ready === true) {
-            this.readySettled = true;
-            this.resolveReady(parsed);
+            this.setReadyOk(parsed);
           } else {
             this.setReadyError(new Error(parsed.error ?? "worker did not report ready"));
           }
@@ -393,11 +399,21 @@ export function createNativeWorkerProcesses({
       killWorkerProcess(this.process);
     }
 
+    setReadyOk(payload) {
+      if (this.readySettled) {
+        return;
+      }
+      this.readySettled = true;
+      clearTimeout(this.readyTimeout);
+      this.resolveReady(payload);
+    }
+
     setReadyError(error) {
       if (this.readySettled) {
         return;
       }
       this.readySettled = true;
+      clearTimeout(this.readyTimeout);
       this.rejectReady(error);
     }
 
@@ -467,12 +483,24 @@ function normalizeWorkerStdoutLineLimit(value) {
   return number;
 }
 
+function normalizeWorkerReadyTimeout(value) {
+  const number = Math.floor(Number(value));
+  if (!Number.isFinite(number) || number <= 0) {
+    return DEFAULT_WORKER_READY_TIMEOUT_MS;
+  }
+  return number;
+}
+
 function workerStdoutLineTooLarge(line, maxBytes) {
   return Buffer.byteLength(line, "utf8") > maxBytes;
 }
 
 function workerStdoutLineError(maxBytes) {
   return new Error(`worker_stdout_too_large: worker stdout line exceeded ${maxBytes} bytes`);
+}
+
+function workerReadyTimeoutError(timeoutMs) {
+  return new Error(`worker_ready_timeout: worker did not report ready within ${timeoutMs}ms`);
 }
 
 function killWorkerProcess(process) {
