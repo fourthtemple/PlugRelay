@@ -178,7 +178,11 @@ export function waitForClose(ctx, timeoutMs = 1200) {
   });
 }
 
-function encodeFrame(payload) {
+export function sendCloseFrame(ctx) {
+  ctx.socket.write(encodeFrame(Buffer.alloc(0), 0x8));
+}
+
+function encodeFrame(payload, opcode = 0x1) {
   const mask = crypto.randomBytes(4);
   const length = payload.length;
   let header;
@@ -195,7 +199,7 @@ function encodeFrame(payload) {
     header.writeUInt32BE(Math.floor(length / 2 ** 32), 2);
     header.writeUInt32BE(length >>> 0, 6);
   }
-  header[0] = 0x81;
+  header[0] = 0x80 | opcode;
   const masked = Buffer.from(payload);
   for (let i = 0; i < masked.length; i += 1) masked[i] ^= mask[i % 4];
   return Buffer.concat([header, mask, masked]);

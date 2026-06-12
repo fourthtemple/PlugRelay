@@ -6,6 +6,7 @@ import {
   createRequestClient,
   rawHandshake,
   rawHttpRequest,
+  sendCloseFrame,
   sendOversizedTextFrame,
   waitForClose
 } from "./security-smoke-client.mjs";
@@ -66,6 +67,9 @@ async function run() {
 
   // A3. Oversized frames must be rejected before pairing or command dispatch.
   await checkPrePairingMessageSizeCap();
+
+  // A4. Disconnecting a browser session must destroy session-owned instances.
+  await checkDisconnectCleansUpInstances();
 
   // B. Loopback Host header upgrades normally.
   const main = await connect(HOST, PORT, `${HOST}:${PORT}`, ORIGIN);
@@ -1067,6 +1071,46 @@ async function checkPrePairingMessageSizeCap() {
   }
 }
 
+async function checkDisconnectCleansUpInstances() {
+  const cleanupPort = PORT + 3;
+  const cleanupDaemon = spawn("node", ["scripts/mock-daemon.mjs"], {
+    env: {
+      ...process.env,
+      SOUNDBRIDGE_HOST: HOST,
+      SOUNDBRIDGE_PORT: String(cleanupPort),
+      SOUNDBRIDGE_PAIRING_TOKEN: TOKEN,
+      SOUNDBRIDGE_MAX_TOTAL_INSTANCES: "1"
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  cleanupDaemon.stderr.on("data", () => {});
+  try {
+    await waitForListen(cleanupDaemon);
+    const owner = await connect(HOST, cleanupPort, `${HOST}:${cleanupPort}`, ORIGIN);
+    const ownerPair = await request(owner, "pair", { origin: ORIGIN, pairingToken: TOKEN }, false);
+    await request(owner, "createInstance", { pluginId: "mock.gain" }, true, ownerPair.sessionToken);
+
+    const other = await connect(HOST, cleanupPort, `${HOST}:${cleanupPort}`, ORIGIN);
+    const otherPair = await request(other, "pair", { origin: ORIGIN, pairingToken: TOKEN }, false);
+    const blocked = await request(other, "createInstance", { pluginId: "mock.gain" }, true, otherPair.sessionToken).then(
+      () => ({ ok: true }),
+      (error) => ({ code: error.code })
+    );
+    check(blocked.code === "quota_exceeded", "live session-owned instances count against daemon-wide quotas");
+
+    sendCloseFrame(owner);
+    await waitForClose(owner);
+    const afterDisconnect = await createInstanceAfterDisconnectCleanup(other, otherPair.sessionToken);
+    check(
+      typeof afterDisconnect?.instanceId === "string",
+      "disconnecting a WebSocket destroys session-owned plugin instances"
+    );
+    other.socket?.destroy();
+  } finally {
+    cleanupDaemon.kill("SIGKILL");
+  }
+}
+
 function waitForListen(child) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("daemon did not start")), 8000);
@@ -1089,6 +1133,24 @@ async function pairAttempt(ctx, token) {
     if (error.code === "closed" || error.code === "timeout") return { closed: true };
     return { code: error.code };
   }
+}
+
+async function createInstanceAfterDisconnectCleanup(ctx, sessionToken) {
+  const deadline = Date.now() + 1500;
+  while (Date.now() < deadline) {
+    const result = await request(ctx, "createInstance", { pluginId: "mock.gain" }, true, sessionToken).then(
+      (payload) => ({ payload }),
+      (error) => ({ code: error.code })
+    );
+    if (result.payload) {
+      return result.payload;
+    }
+    if (result.code !== "quota_exceeded") {
+      return undefined;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return undefined;
 }
 
 function publicPluginsArePathFree(plugins) {
