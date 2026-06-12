@@ -41,7 +41,7 @@ export function createDaemonFileGrants({
     if (!available()) {
       throw makeProtocolError("file_broker_unavailable", "File grants require configured broker roots.");
     }
-    ensureSessionGrantSet(session);
+    pruneSessionFileGrants(session);
     if (session.fileGrants.size >= maxFileGrantsPerSession) {
       throw makeProtocolError("quota_exceeded", "This browser session has reached its file grant limit.", {
         maxFileGrantsPerSession
@@ -104,7 +104,7 @@ export function createDaemonFileGrants({
 
   function listFileGrants(payload, session) {
     cleanupExpiredFileGrants();
-    ensureSessionGrantSet(session);
+    pruneSessionFileGrants(session);
     const grants = Array.from(session.fileGrants)
       .map((grantId) => fileGrants.get(grantId))
       .filter(Boolean)
@@ -173,6 +173,16 @@ export function createDaemonFileGrants({
     for (const grant of Array.from(fileGrants.values())) {
       if (grant.expiresAt <= now) {
         destroyFileGrantRecord(grant);
+      }
+    }
+  }
+
+  function pruneSessionFileGrants(session) {
+    ensureSessionGrantSet(session);
+    for (const grantId of Array.from(session.fileGrants)) {
+      const grant = fileGrants.get(grantId);
+      if (!grant || grant.ownerSessionToken !== session.sessionToken) {
+        session.fileGrants.delete(grantId);
       }
     }
   }
