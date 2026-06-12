@@ -465,6 +465,8 @@
         "stableId": { "type": "string", "maxLength": 256 },
         "bundleIdentifier": { "type": "string", "maxLength": 256 },
         "version": { "type": "string", "maxLength": 80 },
+        "vst3ClassId": { "type": "string", "maxLength": 64 },
+        "vst3SdkVersion": { "type": "string", "maxLength": 80 },
         "componentType": { "type": "string", "maxLength": 16 },
         "componentSubType": { "type": "string", "maxLength": 16 },
         "componentManufacturer": { "type": "string", "maxLength": 16 },

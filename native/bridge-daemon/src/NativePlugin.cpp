@@ -93,7 +93,9 @@ std::string nativePluginInfoToJson(const NativePluginInfo& info) {
     output << "\"" << key << "\":\"" << jsonEscape(value) << "\"";
     wroteMetadata = true;
   };
-  if (!info.componentType.empty() && !info.componentSubType.empty() && !info.componentManufacturer.empty()) {
+  if (!info.vst3ClassId.empty()) {
+    writeMetadataString("stableId", "vst3:" + info.vst3ClassId);
+  } else if (!info.componentType.empty() && !info.componentSubType.empty() && !info.componentManufacturer.empty()) {
     writeMetadataString("stableId", info.componentManufacturer + ":" + info.componentType + ":" + info.componentSubType);
   } else if (!info.lv2Uri.empty()) {
     writeMetadataString("stableId", info.lv2Uri);
@@ -102,6 +104,8 @@ std::string nativePluginInfoToJson(const NativePluginInfo& info) {
   }
   writeMetadataString("bundleIdentifier", info.bundleIdentifier);
   writeMetadataString("version", info.version);
+  writeMetadataString("vst3ClassId", info.vst3ClassId);
+  writeMetadataString("vst3SdkVersion", info.vst3SdkVersion);
   writeMetadataString("componentType", info.componentType);
   writeMetadataString("componentSubType", info.componentSubType);
   writeMetadataString("componentManufacturer", info.componentManufacturer);
@@ -150,6 +154,12 @@ std::string nativePluginInfoToJson(const NativePluginInfo& info) {
   }
   if (!info.version.empty()) {
     output << ",\"version\":\"" << jsonEscape(info.version) << "\"";
+  }
+  if (!info.vst3ClassId.empty()) {
+    output << ",\"vst3ClassId\":\"" << jsonEscape(info.vst3ClassId) << "\"";
+  }
+  if (!info.vst3SdkVersion.empty()) {
+    output << ",\"vst3SdkVersion\":\"" << jsonEscape(info.vst3SdkVersion) << "\"";
   }
   if (!info.lv2Uri.empty()) {
     output << ",\"lv2Uri\":\"" << jsonEscape(info.lv2Uri) << "\"";

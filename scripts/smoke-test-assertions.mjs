@@ -135,6 +135,9 @@ export function assertPublicPluginMetadata(plugin, message) {
       `${message}: ${key} is a bounded string`
     );
   }
+  if (metadata.vst3ClassId) {
+    assert(metadata.stableId === `vst3:${metadata.vst3ClassId}`, `${message}: VST3 stableId uses the class id`);
+  }
 }
 
 export function assertSameLayout(actual, expected, message) {

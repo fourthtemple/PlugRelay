@@ -366,6 +366,12 @@ bool applyVst3FactoryMetadata(NativePluginInfo& info) {
   if (const auto version = capText(audioClass->version(), 80); !version.empty()) {
     info.version = version;
   }
+  if (const auto classId = capText(audioClass->ID().toString(false), 64); !classId.empty()) {
+    info.vst3ClassId = classId;
+  }
+  if (const auto sdkVersion = capText(audioClass->sdkVersion(), 80); !sdkVersion.empty()) {
+    info.vst3SdkVersion = sdkVersion;
+  }
   if (const auto category = capText(audioClass->subCategoriesString()); !category.empty()) {
     info.category = category;
   }
@@ -506,9 +512,25 @@ std::string vst3FactoryMetadataToJson(const std::filesystem::path& bundlePath) {
   output << "\"category\":\"" << jsonEscape(info.category) << "\",";
   output << "\"kind\":\"" << jsonEscape(info.kind) << "\",";
   output << "\"metadata\":{";
-  if (!info.version.empty()) {
-    output << "\"version\":\"" << jsonEscape(info.version) << "\"";
+  bool wroteMetadata = false;
+  const auto writeMetadataString = [&](const char* key, const std::string& value) {
+    if (value.empty()) {
+      return;
+    }
+    if (wroteMetadata) {
+      output << ",";
+    }
+    output << "\"" << key << "\":\"" << jsonEscape(value) << "\"";
+    wroteMetadata = true;
+  };
+  if (!info.vst3ClassId.empty()) {
+    writeMetadataString("stableId", "vst3:" + info.vst3ClassId);
   }
+  if (!info.version.empty()) {
+    writeMetadataString("version", info.version);
+  }
+  writeMetadataString("vst3ClassId", info.vst3ClassId);
+  writeMetadataString("vst3SdkVersion", info.vst3SdkVersion);
   output << "}";
   output << "}";
   output << "}";

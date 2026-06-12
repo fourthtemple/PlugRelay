@@ -138,7 +138,7 @@ export function createPluginCatalogSupport({
       if (!parsed || !Array.isArray(parsed.plugins) || parsed.plugins.length === 0) {
         return fallbackExamplePlugins();
       }
-      return parsed.plugins.map((plugin) => decorateExamplePlugin(plugin));
+      return parsed.plugins.map((plugin) => decorateExamplePlugin(enrichVst3PluginMetadata(plugin)));
     } catch (error) {
       console.warn(`Native example scan failed, using fallback examples: ${error.message}`);
       return fallbackExamplePlugins();
@@ -159,14 +159,14 @@ export function createPluginCatalogSupport({
       if (!parsed || !Array.isArray(parsed.plugins)) {
         return [];
       }
-      return parsed.plugins.map((plugin) => decorateInstalledPlugin(enrichInstalledPluginMetadata(plugin)));
+      return parsed.plugins.map((plugin) => decorateInstalledPlugin(enrichVst3PluginMetadata(plugin)));
     } catch (error) {
       console.warn(`Native installed plugin scan failed: ${error.message}`);
       return [];
     }
   }
 
-  function enrichInstalledPluginMetadata(plugin) {
+  function enrichVst3PluginMetadata(plugin) {
     if (plugin?.format !== "vst3") {
       return plugin;
     }
@@ -760,6 +760,8 @@ export function createPluginCatalogSupport({
     add("stableId");
     add("bundleIdentifier");
     add("version", 80);
+    add("vst3ClassId", 64);
+    add("vst3SdkVersion", 80);
     add("componentType", 16);
     add("componentSubType", 16);
     add("componentManufacturer", 16);
@@ -771,7 +773,9 @@ export function createPluginCatalogSupport({
     add("lv2UiBinaryCount", 16);
 
     if (!metadata.stableId) {
-      if (metadata.componentManufacturer && metadata.componentType && metadata.componentSubType) {
+      if (metadata.vst3ClassId) {
+        metadata.stableId = `vst3:${metadata.vst3ClassId}`;
+      } else if (metadata.componentManufacturer && metadata.componentType && metadata.componentSubType) {
         metadata.stableId = `${metadata.componentManufacturer}:${metadata.componentType}:${metadata.componentSubType}`;
       } else if (metadata.lv2Uri) {
         metadata.stableId = metadata.lv2Uri;

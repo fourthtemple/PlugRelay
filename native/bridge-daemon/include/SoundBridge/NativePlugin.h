@@ -27,6 +27,8 @@ struct NativePluginInfo {
   std::string executablePath;
   std::string bundleIdentifier;
   std::string version;
+  std::string vst3ClassId;
+  std::string vst3SdkVersion;
   std::string componentType;
   std::string componentSubType;
   std::string componentManufacturer;

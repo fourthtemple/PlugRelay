@@ -199,6 +199,8 @@ export interface PluginClassMetadata {
   stableId?: string;
   bundleIdentifier?: string;
   version?: string;
+  vst3ClassId?: string;
+  vst3SdkVersion?: string;
   componentType?: string;
   componentSubType?: string;
   componentManufacturer?: string;
