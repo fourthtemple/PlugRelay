@@ -6,7 +6,6 @@ const MAX_SOURCE_LINES = 1000;
 const NEAR_LIMIT_LINES = 750;
 
 const NEAR_LIMIT_BUDGETS = new Map([
-  ["native/bridge-daemon/src/Lv2Scanner.cpp", 883],
   ["native/bridge-daemon/src/Lv2HostedPlugin.cpp", 825]
 ]);
 
