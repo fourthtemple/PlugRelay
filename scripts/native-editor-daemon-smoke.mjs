@@ -44,6 +44,9 @@ async function run() {
     const hello = await request(main, "hello", {}, true, session);
     assert(hello.capabilities?.nativeEditor === true, "configured broker advertises nativeEditor capability");
     assert(hello.capabilities?.security?.nativeEditorBroker === true, "configured broker advertises security flag");
+    assert(hello.capabilities?.security?.nativeEditorFileDialogs === false, "native editor file dialogs are denied by default");
+    assert(hello.capabilities?.security?.nativeEditorClipboard === false, "native editor clipboard is denied by default");
+    assert(hello.capabilities?.security?.nativeEditorDragAndDrop === false, "native editor drag/drop is denied by default");
 
     const created = await request(main, "createInstance", { pluginId: "mock.gain" }, true, session);
     const denied = await request(

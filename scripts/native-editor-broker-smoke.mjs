@@ -60,6 +60,57 @@ assert(opened.capabilities.nativeWindow === true, "broker advertises native wind
 assert(opened.capabilities.fileDialogs === false, "broker capabilities default to denied file dialogs");
 await opened.brokerSession.close("editor-00000000-0000-4000-8000-000000000001");
 
+const privilegedBroker = new NativeEditorBroker({
+  executablePath: process.execPath,
+  args: [fixturePath, "privileged-capabilities"],
+  limits: {
+    maxWorkerStdoutLineBytes: 64 * 1024,
+    maxWorkerCommandBytes: 64 * 1024,
+    maxWorkerStderrLineBytes: 16 * 1024,
+    maxWorkerStderrBytes: 64 * 1024,
+    maxWorkerDiagnosticLogChars: 1024,
+    workerReadyTimeoutMs: 1000,
+    nativeWorkerCommandTimeoutMs: 1000,
+    workerTerminationGraceMs: 50
+  }
+});
+const privilegedDenied = await privilegedBroker.openEditor({
+  editor: fixtureEditor,
+  instance: fixtureInstance
+});
+assert(privilegedDenied.capabilities.fileDialogs === false, "broker file dialogs require daemon policy");
+assert(privilegedDenied.capabilities.clipboard === false, "broker clipboard requires daemon policy");
+assert(privilegedDenied.capabilities.dragAndDrop === false, "broker drag/drop requires daemon policy");
+await privilegedDenied.brokerSession.close("editor-00000000-0000-4000-8000-000000000001");
+
+const privilegedAllowedBroker = new NativeEditorBroker({
+  executablePath: process.execPath,
+  args: [fixturePath, "privileged-capabilities"],
+  policy: {
+    fileDialogs: true,
+    clipboard: true,
+    dragAndDrop: true
+  },
+  limits: {
+    maxWorkerStdoutLineBytes: 64 * 1024,
+    maxWorkerCommandBytes: 64 * 1024,
+    maxWorkerStderrLineBytes: 16 * 1024,
+    maxWorkerStderrBytes: 64 * 1024,
+    maxWorkerDiagnosticLogChars: 1024,
+    workerReadyTimeoutMs: 1000,
+    nativeWorkerCommandTimeoutMs: 1000,
+    workerTerminationGraceMs: 50
+  }
+});
+const privilegedAllowed = await privilegedAllowedBroker.openEditor({
+  editor: fixtureEditor,
+  instance: fixtureInstance
+});
+assert(privilegedAllowed.capabilities.fileDialogs === true, "daemon policy can allow broker file dialogs");
+assert(privilegedAllowed.capabilities.clipboard === true, "daemon policy can allow broker clipboard");
+assert(privilegedAllowed.capabilities.dragAndDrop === true, "daemon policy can allow broker drag/drop");
+await privilegedAllowed.brokerSession.close("editor-00000000-0000-4000-8000-000000000001");
+
 const grantAwareBroker = new NativeEditorBroker({
   executablePath: process.execPath,
   args: [fixturePath, "require-file-grants", fixtureFileGrantPath],
@@ -89,6 +140,22 @@ const configured = createConfiguredNativeEditorBroker({
   }
 });
 assert(configured?.available === true, "configured broker is available");
+assert(configured.capabilityPolicy.fileDialogs === false, "configured broker denies file dialogs by default");
+const configuredWithPolicy = createConfiguredNativeEditorBroker({
+  env: {
+    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath]),
+    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_FILE_DIALOGS: "1",
+    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_CLIPBOARD: "1",
+    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_DRAG_DROP: "1"
+  }
+});
+assert(
+  configuredWithPolicy.capabilityPolicy.fileDialogs === true &&
+    configuredWithPolicy.capabilityPolicy.clipboard === true &&
+    configuredWithPolicy.capabilityPolicy.dragAndDrop === true,
+  "configured broker exposes explicit native editor capability policy"
+);
 const grantAwareConfigured = createConfiguredNativeEditorBroker({
   env: {
     SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,

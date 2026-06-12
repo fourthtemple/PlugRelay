@@ -63,9 +63,9 @@ process.stdin.on("data", (chunk) => {
           capabilities: {
             nativeWindow: true,
             parameterEditing: false,
-            fileDialogs: false,
-            clipboard: false,
-            dragAndDrop: false
+            fileDialogs: mode === "privileged-capabilities",
+            clipboard: mode === "privileged-capabilities",
+            dragAndDrop: mode === "privileged-capabilities"
           }
         })}\n`
       );

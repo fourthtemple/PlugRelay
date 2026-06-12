@@ -148,6 +148,9 @@
                 "exampleWorkerCommandTimeoutMs": { "type": "number" },
                 "nativeWorkerCommandTimeoutMs": { "type": "number" },
                 "nativeEditorBroker": { "type": "boolean" },
+                "nativeEditorFileDialogs": { "type": "boolean" },
+                "nativeEditorClipboard": { "type": "boolean" },
+                "nativeEditorDragAndDrop": { "type": "boolean" },
                 "nativeWorkerFileGrants": { "type": "boolean" }
               }
             },

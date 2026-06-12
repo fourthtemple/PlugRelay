@@ -23,19 +23,25 @@ export function createConfiguredNativeEditorBroker({ env = process.env, limits =
   return new NativeEditorBroker({
     args,
     executablePath,
-    limits
+    limits,
+    policy: nativeEditorPolicyFromEnv(env)
   });
 }
 
 export class NativeEditorBroker {
-  constructor({ executablePath, args = [], limits = {} }) {
+  constructor({ executablePath, args = [], limits = {}, policy = {} }) {
     this.executablePath = executablePath;
     this.args = args;
     this.limits = normalizeLimits(limits);
+    this.policy = normalizePolicy(policy);
   }
 
   get available() {
     return true;
+  }
+
+  get capabilityPolicy() {
+    return { ...this.policy };
   }
 
   async openEditor({ editor, fileGrants = [], instance }) {
@@ -61,7 +67,7 @@ export class NativeEditorBroker {
       return {
         brokerSession: session,
         brokerSessionId: safeText(opened.brokerSessionId, 80),
-        capabilities: normalizeBrokerCapabilities(opened.capabilities)
+        capabilities: normalizeBrokerCapabilities(opened.capabilities, this.policy)
       };
     } catch (error) {
       session.destroy();
@@ -270,14 +276,30 @@ function parseBrokerArgs(rawArgs) {
   });
 }
 
-function normalizeBrokerCapabilities(capabilities) {
+function normalizeBrokerCapabilities(capabilities, policy) {
   const value = capabilities && typeof capabilities === "object" ? capabilities : {};
   return {
     parameterEditing: value.parameterEditing === true,
     nativeWindow: true,
-    fileDialogs: value.fileDialogs === true,
-    clipboard: value.clipboard === true,
-    dragAndDrop: value.dragAndDrop === true
+    fileDialogs: value.fileDialogs === true && policy.fileDialogs === true,
+    clipboard: value.clipboard === true && policy.clipboard === true,
+    dragAndDrop: value.dragAndDrop === true && policy.dragAndDrop === true
+  };
+}
+
+function nativeEditorPolicyFromEnv(env) {
+  return {
+    fileDialogs: env.SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_FILE_DIALOGS === "1",
+    clipboard: env.SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_CLIPBOARD === "1",
+    dragAndDrop: env.SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_DRAG_DROP === "1"
+  };
+}
+
+function normalizePolicy(policy) {
+  return {
+    fileDialogs: policy.fileDialogs === true,
+    clipboard: policy.clipboard === true,
+    dragAndDrop: policy.dragAndDrop === true
   };
 }
 

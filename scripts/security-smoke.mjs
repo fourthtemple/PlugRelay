@@ -255,6 +255,9 @@ async function run() {
     pairedHello.capabilities?.genericEditor === true &&
       pairedHello.capabilities?.nativeEditor === false &&
       pairedHello.capabilities?.security?.nativeEditorBroker === false &&
+      pairedHello.capabilities?.security?.nativeEditorFileDialogs === false &&
+      pairedHello.capabilities?.security?.nativeEditorClipboard === false &&
+      pairedHello.capabilities?.security?.nativeEditorDragAndDrop === false &&
       pairedHello.capabilities?.security?.maxEditorsPerSession > 0,
     "paired hello advertises bounded generic editor brokering"
   );

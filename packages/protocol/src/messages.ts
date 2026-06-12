@@ -111,6 +111,9 @@ export interface HelloResponse {
       exampleWorkerCommandTimeoutMs?: number;
       nativeWorkerCommandTimeoutMs?: number;
       nativeEditorBroker?: boolean;
+      nativeEditorFileDialogs?: boolean;
+      nativeEditorClipboard?: boolean;
+      nativeEditorDragAndDrop?: boolean;
       nativeWorkerFileGrants?: boolean;
     };
     [key: string]: unknown;

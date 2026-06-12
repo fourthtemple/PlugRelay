@@ -15,6 +15,8 @@ SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS='["optional","args"]'
 
 `SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH` must be an absolute executable path. Args are optional and must be a JSON array of up to 16 strings, each capped at 4096 UTF-8 bytes. The daemon uses `spawn()` without a shell.
 
+Native editor file dialogs, clipboard access, and drag/drop reporting are denied by default even when the broker advertises them. A daemon must opt in with `SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_FILE_DIALOGS=1`, `SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_CLIPBOARD=1`, or `SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_DRAG_DROP=1` before those broker capabilities can appear in browser-visible editor responses.
+
 When no broker path is configured, `hello.capabilities.nativeEditor` and `hello.capabilities.security.nativeEditorBroker` remain `false`, and `openEditor({ mode: "native" })` fails closed.
 
 Plugin listings may still advertise `editorKinds: ["generic-parameters", "native-window"]` for installed native plugins. Hosts should treat that as per-plugin UI guidance, not authority: a native editor action should require both plugin `native-window` support and daemon `hello.capabilities.nativeEditor`.
@@ -99,6 +101,8 @@ Command errors should be returned as:
 ## Bounds And Cleanup
 
 The broker IPC uses the daemon worker limits for stdout line size, stderr line size and budget, command size, ready timeout, command timeout, diagnostic log length, and termination grace. These limits are advertised under `hello.capabilities.security`.
+
+The effective native editor policy is also advertised under `hello.capabilities.security.nativeEditorFileDialogs`, `nativeEditorClipboard`, and `nativeEditorDragAndDrop`. Hosts should treat `false` as unavailable even if a platform broker internally supports the surface.
 
 Malformed JSON, invalid ready handshakes, oversized stdout/stderr lines, missing responses, and broker-reported command errors fail closed and tear down the broker session.
 
