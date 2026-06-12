@@ -22,6 +22,7 @@ add_executable(soundbridge-daemon
   src/PluginCatalog.cpp
   src/Vst3Scanner.cpp
   src/Vst3Host.cpp
+  src/Vst3HostedEffect.cpp
   src/Vst3HostWorker.cpp
   src/Vst3HostInfoSupport.cpp
   src/Vst3HostWorkerProcessSupport.cpp
