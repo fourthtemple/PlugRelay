@@ -12,6 +12,7 @@ add_executable(soundbridge-daemon
   src/ExampleInstrumentRenderer.cpp
   src/Lv2AtomSupport.cpp
   src/Lv2BusSupport.cpp
+  src/Lv2HostedPlugin.cpp
   src/Lv2HostWorker.cpp
   src/Lv2HostWorkerSupport.cpp
   src/Lv2ParameterSupport.cpp
