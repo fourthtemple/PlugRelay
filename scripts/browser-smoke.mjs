@@ -33,6 +33,7 @@ try {
       kind: node.dataset.kind,
       format: node.dataset.format,
       hostable: node.dataset.hostable,
+      fileGrantOperations: node.dataset.fileGrantOperations ?? "",
       disabled: node.disabled
     }))
   );
@@ -57,11 +58,18 @@ try {
   assert(/playable/.test(pluginStatus ?? ""), "Browser demo reports playable plugin count.");
   assert(/scan only/.test(pluginStatus ?? ""), "Browser demo reports scan-only plugin count.");
 
+  const grantAwareOption = options.find((option) => option.hostable !== "false" && option.fileGrantOperations.includes("restoreState"));
+  if (grantAwareOption) {
+    await page.locator("#pluginSelect").selectOption(grantAwareOption.value);
+    await assertFileGrantControls(page, grantAwareOption, "grant-aware plugin");
+  }
+
   for (const format of ["vst3", "au", "lv2"]) {
     const option = options.find((candidate) => candidate.format === format && candidate.kind === "instrument" && candidate.hostable !== "false");
     assert(option, `${format} example instrument option exists.`);
 
     await page.locator("#pluginSelect").selectOption(option.value);
+    await assertFileGrantControls(page, option, `${format} example instrument`);
     await page.getByRole("button", { name: "Create Instance" }).click();
     await page.waitForFunction(() => document.querySelector("#engineStatus")?.textContent === "Engine running");
     await assertPresetApply(page, format);
@@ -98,18 +106,31 @@ async function processedBlocks(page) {
   return Number(await page.locator("#processedBlocks").textContent());
 }
 
+async function assertFileGrantControls(page, option, label) {
+  const operations = new Set(String(option.fileGrantOperations ?? "").split(",").filter(Boolean));
+  const controls = [
+    ["#grantRestoreStateButton", "restoreState"],
+    ["#grantLoadPresetButton", "loadPreset"],
+    ["#grantSaveStateButton", "saveStateDirectory"]
+  ];
+  for (const [selector, operation] of controls) {
+    const disabled = await page.locator(selector).evaluate((button) => button.disabled);
+    assert(disabled === !operations.has(operation), `${label} ${operation} grant action is gated by plugin metadata.`);
+  }
+}
+
 async function assertParameterStateRoundTrip(page, format) {
   const gainSlider = page.locator('.parameter-row[data-parameter-id="gain"] input[type="range"]');
   await gainSlider.waitFor({ state: "visible", timeout: 3000 });
 
   await setSliderValue(page, "gain", "0.25");
   await page.locator("#stateText").fill("");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.waitForFunction(() => (document.querySelector("#stateText")?.value ?? "").length > 0);
   const savedState = await page.locator("#stateText").inputValue();
 
   await setSliderValue(page, "gain", "0.9");
-  await page.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Restore", exact: true }).click();
   await page.waitForFunction(
     () => document.querySelector('.parameter-row[data-parameter-id="gain"] input[type="range"]')?.value === "0.25",
     undefined,

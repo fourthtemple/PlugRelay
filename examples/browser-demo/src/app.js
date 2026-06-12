@@ -19,6 +19,9 @@ const elements = {
   keyboard: document.querySelector("#keyboard"),
   saveStateButton: document.querySelector("#saveStateButton"),
   restoreStateButton: document.querySelector("#restoreStateButton"),
+  grantRestoreStateButton: document.querySelector("#grantRestoreStateButton"),
+  grantLoadPresetButton: document.querySelector("#grantLoadPresetButton"),
+  grantSaveStateButton: document.querySelector("#grantSaveStateButton"),
   latencyButton: document.querySelector("#latencyButton"),
   parameterControls: document.querySelector("#parameterControls"),
   stateText: document.querySelector("#stateText"),
@@ -73,6 +76,7 @@ elements.createInstanceButton.addEventListener("click", () => {
 elements.pluginSelect.addEventListener("change", () => {
   updatePluginStatus();
   updatePresetControls();
+  updateFileGrantControls();
   if (bridge) {
     void ensureBridgeInstance(true).catch(logError);
   }
@@ -103,6 +107,18 @@ elements.saveStateButton.addEventListener("click", () => {
 
 elements.restoreStateButton.addEventListener("click", () => {
   void restoreState();
+});
+
+elements.grantRestoreStateButton.addEventListener("click", () => {
+  void restoreStateFromGrant();
+});
+
+elements.grantLoadPresetButton.addEventListener("click", () => {
+  void loadPresetFromGrant();
+});
+
+elements.grantSaveStateButton.addEventListener("click", () => {
+  void saveStateToGrant();
 });
 
 elements.latencyButton.addEventListener("click", () => {
@@ -276,6 +292,7 @@ async function doEnsureBridgeInstance(recreate = false) {
   });
 
   setStatus(elements.engineStatus, "Engine running", "ready");
+  updateFileGrantControls();
   await refreshLatency();
   startScope();
   if (pluginKind === "instrument") {
@@ -385,6 +402,87 @@ async function restoreState() {
   }
 }
 
+async function restoreStateFromGrant() {
+  if (!client || !hasFileGrantOperation("restoreState")) {
+    return;
+  }
+  try {
+    const result = await useAttachedFileGrant({
+      access: "read",
+      kind: "file",
+      operation: "restoreState",
+      purpose: "state"
+    });
+    const { parameters } = await client.getParameters(selectedInstanceId);
+    renderParameterControls({
+      container: elements.parameterControls,
+      client,
+      instanceId: selectedInstanceId,
+      parameters
+    });
+    log(`State grant restored: ${formatFileGrantResult(result)}`);
+  } catch (error) {
+    logError(error);
+  }
+}
+
+async function loadPresetFromGrant() {
+  if (!client || !hasFileGrantOperation("loadPreset")) {
+    return;
+  }
+  try {
+    const result = await useAttachedFileGrant({
+      access: "read",
+      kind: "file",
+      operation: "loadPreset",
+      purpose: "preset"
+    });
+    const { parameters } = await client.getParameters(selectedInstanceId);
+    renderParameterControls({
+      container: elements.parameterControls,
+      client,
+      instanceId: selectedInstanceId,
+      parameters
+    });
+    log(`Preset grant loaded: ${formatFileGrantResult(result)}`);
+  } catch (error) {
+    logError(error);
+  }
+}
+
+async function saveStateToGrant() {
+  if (!client || !hasFileGrantOperation("saveStateDirectory")) {
+    return;
+  }
+  try {
+    const result = await useAttachedFileGrant({
+      access: "readWrite",
+      kind: "directory",
+      operation: "saveStateDirectory",
+      purpose: "state"
+    });
+    log(`State grant saved: ${formatFileGrantResult(result)}`);
+  } catch (error) {
+    logError(error);
+  }
+}
+
+async function useAttachedFileGrant({ access, kind, operation, purpose }) {
+  await ensureBridgeInstance();
+  const grant = await client.createFileGrant({ access, kind, purpose });
+  let attached = false;
+  try {
+    await client.attachFileGrant(selectedInstanceId, grant.grantId, { access, kind, purpose });
+    attached = true;
+    return await client.useFileGrant(selectedInstanceId, grant.grantId, { operation });
+  } finally {
+    if (attached) {
+      await client.detachFileGrant(selectedInstanceId, grant.grantId).catch(() => undefined);
+    }
+    await client.revokeFileGrant(grant.grantId).catch(() => undefined);
+  }
+}
+
 async function refreshLatency() {
   if (!client || !selectedInstanceId) {
     return;
@@ -461,6 +559,7 @@ function renderPluginOptions(plugins) {
     option.dataset.source = plugin.source ?? "unknown";
     option.dataset.hostable = String(plugin.hostable !== false);
     option.dataset.hostUnavailableReason = plugin.hostUnavailableReason ?? "";
+    option.dataset.fileGrantOperations = Array.isArray(plugin.fileGrantOperations) ? plugin.fileGrantOperations.join(",") : "";
     option.disabled = plugin.hostable === false;
     if (plugin.hostUnavailableReason) {
       option.title = plugin.hostUnavailableReason;
@@ -478,10 +577,11 @@ function renderPluginOptions(plugins) {
   elements.pluginSelect.dataset.scanOnlyCount = String(summary.scanOnly);
   updatePluginStatus();
   updatePresetControls();
+  updateFileGrantControls();
 }
 
 function updatePresetControls() {
-  const plugin = pluginMetadataById.get(elements.pluginSelect.value);
+  const plugin = selectedPluginMetadata();
   const presets = Array.isArray(plugin?.presets) ? plugin.presets : [];
   elements.presetSelect.replaceChildren();
 
@@ -495,6 +595,23 @@ function updatePresetControls() {
   const enabled = controlsEnabled && presets.length > 0 && plugin?.hostable !== false;
   elements.presetSelect.disabled = !enabled;
   elements.applyPresetButton.disabled = !enabled;
+}
+
+function updateFileGrantControls() {
+  const plugin = selectedPluginMetadata();
+  const enabled = controlsEnabled && plugin?.hostable !== false;
+  elements.grantRestoreStateButton.disabled = !(enabled && hasFileGrantOperation("restoreState"));
+  elements.grantLoadPresetButton.disabled = !(enabled && hasFileGrantOperation("loadPreset"));
+  elements.grantSaveStateButton.disabled = !(enabled && hasFileGrantOperation("saveStateDirectory"));
+}
+
+function selectedPluginMetadata() {
+  return pluginMetadataById.get(elements.pluginSelect.value);
+}
+
+function hasFileGrantOperation(operation) {
+  const plugin = selectedPluginMetadata();
+  return Array.isArray(plugin?.fileGrantOperations) && plugin.fileGrantOperations.includes(operation);
 }
 
 function updatePluginStatus() {
@@ -535,7 +652,7 @@ async function applySelectedPreset() {
     return;
   }
 
-  const plugin = pluginMetadataById.get(elements.pluginSelect.value);
+  const plugin = selectedPluginMetadata();
   const preset = plugin?.presets?.find((candidate) => candidate.id === elements.presetSelect.value);
   if (!preset) {
     return;
@@ -620,12 +737,16 @@ function setControlsEnabled(enabled) {
     elements.stopButton,
     elements.saveStateButton,
     elements.restoreStateButton,
+    elements.grantRestoreStateButton,
+    elements.grantLoadPresetButton,
+    elements.grantSaveStateButton,
     elements.latencyButton,
     ...elements.keyboard.querySelectorAll("button")
   ]) {
     control.disabled = !enabled;
   }
   updatePresetControls();
+  updateFileGrantControls();
 }
 
 async function noteOn(note, button) {
@@ -718,6 +839,11 @@ function logError(error) {
   const message = error?.message ?? String(error);
   elements.log.value = message;
   console.error(error);
+}
+
+function formatFileGrantResult(result) {
+  const status = result.workerStatus ? ` (${result.workerStatus})` : "";
+  return `${result.grant?.displayName ?? result.operation}${status}`;
 }
 
 function withTimeout(promise, timeoutMs, message) {
