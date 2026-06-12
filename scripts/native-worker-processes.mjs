@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 export const DEFAULT_MAX_WORKER_STDOUT_LINE_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_MAX_WORKER_STDERR_LINE_BYTES = 1024 * 1024;
 export const DEFAULT_MAX_WORKER_STDERR_BYTES = 4 * 1024 * 1024;
+export const DEFAULT_MAX_WORKER_PENDING_COMMANDS = 64;
 export const DEFAULT_WORKER_READY_TIMEOUT_MS = 5000;
 export const DEFAULT_EXAMPLE_WORKER_COMMAND_TIMEOUT_MS = 1500;
 export const DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS = 5000;
@@ -13,6 +14,7 @@ export function createNativeWorkerProcesses({
   maxWorkerStdoutLineBytes = DEFAULT_MAX_WORKER_STDOUT_LINE_BYTES,
   maxWorkerStderrLineBytes = DEFAULT_MAX_WORKER_STDERR_LINE_BYTES,
   maxWorkerStderrBytes = DEFAULT_MAX_WORKER_STDERR_BYTES,
+  maxWorkerPendingCommands = DEFAULT_MAX_WORKER_PENDING_COMMANDS,
   workerReadyTimeoutMs = DEFAULT_WORKER_READY_TIMEOUT_MS,
   exampleWorkerCommandTimeoutMs = DEFAULT_EXAMPLE_WORKER_COMMAND_TIMEOUT_MS,
   nativeWorkerCommandTimeoutMs = DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS
@@ -33,6 +35,7 @@ export function createNativeWorkerProcesses({
   const workerStdoutLineLimit = normalizeWorkerStdoutLineLimit(maxWorkerStdoutLineBytes);
   const workerStderrLineLimit = normalizeWorkerStderrLineLimit(maxWorkerStderrLineBytes);
   const workerStderrBudget = normalizeWorkerStderrBudget(maxWorkerStderrBytes);
+  const workerPendingCommandLimit = normalizeWorkerPendingCommandLimit(maxWorkerPendingCommands);
   const workerReadyTimeout = normalizeWorkerReadyTimeout(workerReadyTimeoutMs);
   const exampleCommandTimeout = normalizeWorkerCommandTimeout(
     exampleWorkerCommandTimeoutMs,
@@ -54,6 +57,7 @@ export function createNativeWorkerProcesses({
       this.maxStdoutLineBytes = workerStdoutLineLimit;
       this.maxStderrLineBytes = workerStderrLineLimit;
       this.maxStderrBytes = workerStderrBudget;
+      this.maxPendingCommands = workerPendingCommandLimit;
       this.commandTimeoutMs = exampleCommandTimeout;
       this.process = spawn(executablePath, ["--worker"], {
         stdio: ["pipe", "pipe", "pipe"]
@@ -106,6 +110,9 @@ export function createNativeWorkerProcesses({
     request(command) {
       if (!this.process || this.process.killed || !this.process.stdin.writable) {
         return Promise.reject(new Error("worker is not writable"));
+      }
+      if (this.pending.length >= this.maxPendingCommands) {
+        return Promise.reject(workerPendingCommandsError(this.maxPendingCommands));
       }
 
       return new Promise((resolve, reject) => {
@@ -207,6 +214,7 @@ export function createNativeWorkerProcesses({
       this.maxStdoutLineBytes = workerStdoutLineLimit;
       this.maxStderrLineBytes = workerStderrLineLimit;
       this.maxStderrBytes = workerStderrBudget;
+      this.maxPendingCommands = workerPendingCommandLimit;
       this.commandTimeoutMs = nativeCommandTimeout;
       this.readySettled = false;
       this.ready = new Promise((resolve, reject) => {
@@ -346,6 +354,9 @@ export function createNativeWorkerProcesses({
     request(command) {
       if (!this.process || this.process.killed || !this.process.stdin.writable) {
         return Promise.reject(new Error("worker is not writable"));
+      }
+      if (this.pending.length >= this.maxPendingCommands) {
+        return Promise.reject(workerPendingCommandsError(this.maxPendingCommands));
       }
 
       return new Promise((resolve, reject) => {
@@ -528,6 +539,14 @@ function normalizeWorkerStderrBudget(value) {
   return number;
 }
 
+function normalizeWorkerPendingCommandLimit(value) {
+  const number = Math.floor(Number(value));
+  if (!Number.isFinite(number) || number <= 0) {
+    return DEFAULT_MAX_WORKER_PENDING_COMMANDS;
+  }
+  return number;
+}
+
 function normalizeWorkerReadyTimeout(value) {
   const number = Math.floor(Number(value));
   if (!Number.isFinite(number) || number <= 0) {
@@ -614,6 +633,10 @@ function workerReadyTimeoutError(timeoutMs) {
 
 function workerReadyHandshakeError(message) {
   return new Error(`worker_ready_invalid: ${message}`);
+}
+
+function workerPendingCommandsError(maxCommands) {
+  return new Error(`worker_pending_commands_exceeded: worker has ${maxCommands} pending commands`);
 }
 
 function workerCommandTimeoutError(timeoutMs) {

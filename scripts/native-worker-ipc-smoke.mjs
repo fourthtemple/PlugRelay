@@ -7,6 +7,7 @@ import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
 const MAX_TEST_STDERR_LINE_BYTES = 128;
 const MAX_TEST_STDERR_BYTES = 64;
+const MAX_TEST_PENDING_COMMANDS = 8;
 const TEST_READY_TIMEOUT_MS = 500;
 const TEST_COMMAND_TIMEOUT_MS = 500;
 
@@ -295,6 +296,34 @@ setTimeout(() => {}, 30000);
   );
   unsolicitedNativeWorker.destroy();
 
+  const cappedExampleWorkers = createTestWorkers(hangingNativeCommandWorkerPath, { maxWorkerPendingCommands: 1 });
+  const cappedExampleWorker = new cappedExampleWorkers.ExampleInstrumentWorker(hangingExampleCommandWorkerPath);
+  const pendingExampleCommand = cappedExampleWorker
+    .render({ frames: 1, sampleRate: 48000, gain: 0.5, tone: 0.5, detune: 0.5 })
+    .catch(() => undefined);
+  await expectRejected(
+    () => cappedExampleWorker.render({ frames: 1, sampleRate: 48000, gain: 0.5, tone: 0.5, detune: 0.5 }),
+    "worker_pending_commands_exceeded",
+    "example instrument workers reject commands beyond the pending limit"
+  );
+  cappedExampleWorker.destroy();
+  await pendingExampleCommand;
+
+  const cappedNativeWorkers = createTestWorkers(hangingNativeCommandWorkerPath, { maxWorkerPendingCommands: 1 });
+  const cappedNativeWorker = new cappedNativeWorkers.NativeHostWorker(
+    { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
+    nativeWorkerInstance()
+  );
+  await cappedNativeWorker.ready;
+  const pendingNativeCommand = cappedNativeWorker.getParameters().catch(() => undefined);
+  await expectRejected(
+    () => cappedNativeWorker.getLatency(),
+    "worker_pending_commands_exceeded",
+    "native host workers reject commands beyond the pending limit"
+  );
+  cappedNativeWorker.destroy();
+  await pendingNativeCommand;
+
   const hangingWorkers = createTestWorkers(hangingNativeWorkerPath);
   const hangingWorker = new hangingWorkers.NativeHostWorker(
     { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
@@ -333,13 +362,14 @@ setTimeout(() => {}, 30000);
   fs.rmSync(tempDir, { force: true, recursive: true });
 }
 
-function createTestWorkers(nativeRenderer) {
+function createTestWorkers(nativeRenderer, options = {}) {
   return createNativeWorkerProcesses({
     nativeRenderer,
     normalizers: createDaemonNormalizers(),
     maxWorkerStdoutLineBytes: MAX_TEST_STDOUT_LINE_BYTES,
     maxWorkerStderrLineBytes: MAX_TEST_STDERR_LINE_BYTES,
     maxWorkerStderrBytes: MAX_TEST_STDERR_BYTES,
+    maxWorkerPendingCommands: options.maxWorkerPendingCommands ?? MAX_TEST_PENDING_COMMANDS,
     workerReadyTimeoutMs: TEST_READY_TIMEOUT_MS,
     exampleWorkerCommandTimeoutMs: TEST_COMMAND_TIMEOUT_MS,
     nativeWorkerCommandTimeoutMs: TEST_COMMAND_TIMEOUT_MS

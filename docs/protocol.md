@@ -99,6 +99,7 @@ Example paired capability payload:
       "maxWorkerStdoutLineBytes": 16777216,
       "maxWorkerStderrLineBytes": 1048576,
       "maxWorkerStderrBytes": 4194304,
+      "maxWorkerPendingCommands": 64,
       "workerReadyTimeoutMs": 5000,
       "exampleWorkerCommandTimeoutMs": 1500,
       "nativeWorkerCommandTimeoutMs": 5000
