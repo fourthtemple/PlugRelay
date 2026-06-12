@@ -194,6 +194,17 @@ For a compact pass/fail and feature-coverage report without the full per-plugin 
 SOUNDBRIDGE_PROBE_REPORT=summary SOUNDBRIDGE_PROBE_FILTER=Cymatics npm run probe:installed
 ```
 
+For GitHub plugin compatibility requests, attach a focused JSON probe report:
+
+```sh
+SOUNDBRIDGE_PROBE_REPORT=json \
+SOUNDBRIDGE_PROBE_FORMATS=vst3 \
+SOUNDBRIDGE_PROBE_FILTER="Plugin Name" \
+npm run --silent probe:installed > soundbridge-probe-report.json
+```
+
+Do not upload plugin binaries, licenses, private presets, samples, or local filesystem paths. See [Plugin compatibility reports](docs/compatibility-reports.md).
+
 To include the native editor broker open/close path against those installed instances:
 
 ```sh
@@ -253,6 +264,7 @@ npm run check
 - [Security](docs/security.md)
 - [Native editor broker](docs/native-editor-broker.md)
 - [File grant approval broker](docs/file-grant-approval-broker.md)
+- [Plugin compatibility reports](docs/compatibility-reports.md)
 - [Why browser plugin bridges need an open standard](docs/open-standard.md)
 - [Roadmap](docs/roadmap.md)
 - [Architecture](docs/architecture.md)

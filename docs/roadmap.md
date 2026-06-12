@@ -94,7 +94,7 @@ The reference implementation is macOS-first today.
 - Maintain an installed-plugin compatibility matrix by format, vendor, plugin type, and feature coverage.
 - Keep `npm run probe:installed` as the repeatable local compatibility harness.
 - Make community-submitted probe reports the primary way to discover real-world compatibility gaps, especially for paid VST3/AU plugins that cannot be committed as fixtures.
-- Publish a lightweight report format that asks for OS version, CPU architecture, plugin name/vendor/version, plugin format, probe command, pass/fail status, and sanitized failing command output.
+- Use [Plugin compatibility reports](compatibility-reports.md) as the GitHub request format for plugin-specific support work.
 - Never require contributors to upload commercial plugin binaries, licenses, local filesystem paths, or private preset/sample data.
 - Add more native fixtures for edge cases that cannot run in CI with commercial plugins.
 - Track pass/fail separately for scanning, instantiation, parameters, preset snapshots, program data, state, file grants, MIDI, transport, rendering, bus layouts, latency, tail, and editor behavior.
