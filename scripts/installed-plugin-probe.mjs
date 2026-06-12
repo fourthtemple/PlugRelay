@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
+import { createInstalledProbeReporter, installedProbeReportMode } from "./installed-plugin-probe-reporting.mjs";
 
 const HOST = process.env.SOUNDBRIDGE_HOST ?? "127.0.0.1";
 const ORIGIN = process.env.SOUNDBRIDGE_PROBE_ORIGIN ?? "http://127.0.0.1:5173";
@@ -16,6 +17,7 @@ const MAX_NATIVE_STATE_FILE_BYTES = 2 * Math.ceil((384 * 1024) / 3) * 4 + 32;
 const SAMPLE_RATE = intFromEnv("SOUNDBRIDGE_PROBE_SAMPLE_RATE", 48000, 8000, 384000);
 const LIMIT = intFromEnv("SOUNDBRIDGE_PROBE_LIMIT", 0, 0, 10000);
 const NAME_FILTER = process.env.SOUNDBRIDGE_PROBE_FILTER ?? "";
+const REPORT_MODE = installedProbeReportMode();
 const PROBE_NATIVE_EDITOR_BROKER = flagFromEnv("SOUNDBRIDGE_PROBE_NATIVE_EDITOR_BROKER");
 const NATIVE_EDITOR_BROKER_FIXTURE = fileURLToPath(new URL("./native-editor-broker-fixture.mjs", import.meta.url));
 const FORMATS = new Set(
@@ -60,27 +62,24 @@ async function runProbe(socket) {
   const { plugins } = await request(socket, "listPlugins", {}, true, session);
   const targets = plugins.filter(shouldProbePlugin);
   const selected = LIMIT > 0 ? targets.slice(0, LIMIT) : targets;
-
-  console.log(
-    `Probing ${selected.length} installed plugin(s) (${[...FORMATS].join(",")})` +
-      (NAME_FILTER ? ` matching "${NAME_FILTER}"` : "") +
-      ` with ${MAX_BLOCK_SIZE} frame blocks` +
-      (PROBE_NATIVE_EDITOR_BROKER ? " and native editor broker checks" : "") +
-      "."
-  );
+  const reporter = createInstalledProbeReporter({
+    formats: FORMATS,
+    maxBlockSize: MAX_BLOCK_SIZE,
+    mode: REPORT_MODE,
+    nameFilter: NAME_FILTER,
+    nativeEditorBroker: PROBE_NATIVE_EDITOR_BROKER
+  });
+  reporter.printIntro(selected.length);
 
   const results = [];
   for (const plugin of selected) {
     const result = await probePlugin(socket, session, plugin);
     results.push(result);
-    printResult(result);
+    reporter.printResult(result);
   }
 
-  const passed = results.filter((result) => result.ok).length;
-  const failed = results.length - passed;
-  console.log(`\n${passed}/${results.length} plugin(s) passed, ${failed} failed.`);
-  console.log(JSON.stringify({ passed, failed, results }, null, 2));
-  if (failed > 0) {
+  const summary = reporter.printSummary(results);
+  if (summary.failed > 0) {
     process.exitCode = 1;
   }
 }
@@ -681,13 +680,6 @@ function assertProbe(condition, code, message) {
     error.code = code;
     throw error;
   }
-}
-
-function printResult(result) {
-  const status = result.ok ? "ok" : "FAIL";
-  const failedPhase = result.phases.find((phaseResult) => !phaseResult.ok);
-  const suffix = failedPhase ? ` (${failedPhase.name}: ${failedPhase.error?.code ?? failedPhase.error?.message})` : "";
-  console.log(`${status.padEnd(4)} ${result.pluginId}${suffix}`);
 }
 
 function daemonEnvironment(port) {

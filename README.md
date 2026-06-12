@@ -188,6 +188,12 @@ SOUNDBRIDGE_PROBE_FILTER=Cymatics SOUNDBRIDGE_PROBE_FORMATS=vst3,au npm run prob
 
 The installed-plugin probe starts a temporary loopback daemon with a random pairing token and explicit origin allowlist, then runs bounded create, parameter, state, latency, tail, MIDI, render, output-bus layout, and destroy checks against matching installed plugins. Set `SOUNDBRIDGE_PROBE_FILTER` to a plugin or vendor substring. Leave it empty only when you deliberately want to load every matching installed plugin.
 
+For a compact pass/fail report without the full per-plugin JSON:
+
+```sh
+SOUNDBRIDGE_PROBE_REPORT=summary SOUNDBRIDGE_PROBE_FILTER=Cymatics npm run probe:installed
+```
+
 To include the native editor broker open/close path against those installed instances:
 
 ```sh
