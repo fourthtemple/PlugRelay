@@ -228,6 +228,11 @@ assert(nativeEditor.kind === "native-window", "daemon editor support returns nat
 assert(nativeEditor.native === true, "daemon editor support marks native editor sessions");
 assert(nativeEditor.transport === "native-broker", "daemon editor support returns native-broker transport");
 assert(nativeEditor.capabilities.nativeWindow === true, "daemon editor support returns broker capabilities");
+assert(
+  nativeEditor.plugin.editorKinds?.includes("native-window") &&
+    nativeEditor.plugin.editorKinds?.includes("generic-parameters"),
+  "daemon editor response advertises bounded editor kinds"
+);
 assert(!("nativeHost" in nativeEditor.plugin), "daemon editor support keeps native launch data out of public plugin metadata");
 assert(!hasPrivatePathFields(nativeEditor), "daemon editor response keeps broker file grants out of browser-visible data");
 editorSupport.closeEditor(nativeEditor.editorId, session);

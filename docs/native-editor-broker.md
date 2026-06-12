@@ -17,6 +17,8 @@ SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS='["optional","args"]'
 
 When no broker path is configured, `hello.capabilities.nativeEditor` and `hello.capabilities.security.nativeEditorBroker` remain `false`, and `openEditor({ mode: "native" })` fails closed.
 
+Plugin listings may still advertise `editorKinds: ["generic-parameters", "native-window"]` for installed native plugins. Hosts should treat that as per-plugin UI guidance, not authority: a native editor action should require both plugin `native-window` support and daemon `hello.capabilities.nativeEditor`.
+
 ## Process Contract
 
 The broker writes a ready line before accepting commands:

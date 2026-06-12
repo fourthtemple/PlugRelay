@@ -187,6 +187,8 @@ Returns plugin metadata:
 
 `presets` is optional bounded host-display metadata. Preset ids are capped at 64 bytes, names at 160 bytes, and the daemon exposes at most 256 presets per plugin. These presets are parameter snapshots; arbitrary preset files, sample locations, and licensing data require a separate brokered file-access path.
 
+`editorKinds` is an optional bounded list of editor surfaces the plugin can use after instantiation. `generic-parameters` means hosts can open the daemon-owned parameter editor data with `openEditor`; `native-window` means the plugin is an installed native VST3/AU/LV2 instance that can be handed to the native editor broker when `hello.capabilities.nativeEditor` is also true. The field is UI guidance only: `openEditor` still enforces pairing, instance ownership, broker configuration, and native-host checks.
+
 `fileGrantOperations` is an optional bounded list of `useFileGrant` operations the plugin can consume after a grant is attached to one of its instances. The global `hello.capabilities.fileGrantOperations` flag means the daemon understands the command; this per-plugin field is what host UIs should use before showing plugin-specific preset, sample, cache, license, or state-file actions. The reference native VST3/AU/LV2 workers currently advertise `loadPreset`, `restoreState`, and `saveStateDirectory` for hostable native plugins. Missing operations should be treated as unsupported unless a later plugin listing advertises them.
 
 `hostable` defaults to `true` when omitted. A scanned installed plugin with `hostable: false` should be shown as discovery-only by browser hosts; `createInstance` must reject it until the matching native binary host adapter or compatible host profile is available. For LV2, unsupported `lv2:requiredFeature` or `opts:requiredOption` declarations are reasons to keep a bundle discovery-only. For AU, `audioUnitHostProfile: "realtime-main-bus"` is the current installed-worker profile; offline effects and system units reported as `offline-render`, `multi-source-format-converter`, or `multi-output-splitter` remain discovery-only until those profiles are implemented. `hostUnavailableReason` is display text for that state and must not include private filesystem paths.
@@ -640,7 +642,7 @@ instance sample rate. Daemons must clamp reported tail samples to `0..1048576`.
 
 ### `openEditor` / `closeEditor`
 
-`openEditor` opens a bounded editor session for an existing plugin instance. The reference daemon supports `mode: "generic"` today and returns a `generic-parameters` editor that a web or desktop host can render using the bounded parameter metadata from the owning instance. `mode: "native"` is disabled by default and is only advertised when the daemon is started with an explicit native editor UI broker process.
+`openEditor` opens a bounded editor session for an existing plugin instance. The reference daemon supports `mode: "generic"` today and returns a `generic-parameters` editor that a web or desktop host can render using the bounded parameter metadata from the owning instance. Hosts should use plugin `editorKinds` plus daemon `hello.capabilities.nativeEditor` to decide whether to show native editor actions. `mode: "native"` is disabled by default and is only advertised when the daemon is started with an explicit native editor UI broker process.
 
 ```json
 {

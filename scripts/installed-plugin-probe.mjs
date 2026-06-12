@@ -107,6 +107,7 @@ async function probePlugin(socket, session, plugin) {
     vendor: plugin.vendor,
     kind: plugin.kind,
     audioUnitHostProfile: plugin.metadata?.audioUnitHostProfile,
+    editorKinds: plugin.editorKinds,
     fileGrantOperations: plugin.fileGrantOperations,
     ok: false,
     phases: []
@@ -114,6 +115,7 @@ async function probePlugin(socket, session, plugin) {
   let instanceId = "";
 
   try {
+    assertPluginEditorMetadata(plugin);
     assertFileGrantOperationMetadata(plugin);
     const createPayload = createInstancePayload(plugin);
     const created = await phase(result, "createInstance", () =>
@@ -260,6 +262,18 @@ function assertFileGrantOperationMetadata(plugin) {
     expectedOperations.every((operation) => operations.includes(operation)) &&
     operations.every((operation) => isKnownFileGrantOperation(operation));
   assertProbe(ok, "missing_file_grant_operations", `${plugin.pluginId} did not advertise bounded native file-grant operations`);
+}
+
+function assertPluginEditorMetadata(plugin) {
+  if (!isNativePluginFormat(plugin.format)) {
+    return;
+  }
+  const kinds = plugin.editorKinds;
+  const expectedKinds = ["generic-parameters", "native-window"];
+  const ok = Array.isArray(kinds) &&
+    expectedKinds.every((kind) => kinds.includes(kind)) &&
+    kinds.every((kind) => kind === "generic-parameters" || kind === "native-window");
+  assertProbe(ok, "missing_editor_kinds", `${plugin.pluginId} did not advertise bounded native editor kinds`);
 }
 
 async function probeNativeEditorBroker(socket, session, plugin, instanceId, result) {

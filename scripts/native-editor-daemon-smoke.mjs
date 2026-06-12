@@ -64,6 +64,10 @@ async function run() {
     const generic = await request(main, "openEditor", { instanceId: created.instanceId }, true, session);
     assert(generic.kind === "generic-parameters", "configured broker keeps generic editors available");
     assert(generic.native === false, "generic editor remains non-native");
+    assert(
+      generic.plugin.editorKinds?.length === 1 && generic.plugin.editorKinds[0] === "generic-parameters",
+      "generic editor response advertises only generic editor support for mock plugins"
+    );
     const closed = await request(main, "closeEditor", { editorId: generic.editorId }, true, session);
     assert(closed.closed === true, "generic editor closes under configured broker");
   } finally {

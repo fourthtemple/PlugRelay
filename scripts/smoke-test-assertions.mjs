@@ -5,6 +5,7 @@ const MAX_PLUGIN_TAIL_SAMPLES = 1_048_576;
 const MAX_AUDIO_CHANNELS = 32;
 const MAX_PLUGIN_BUSES = 32;
 const MAX_PLUGIN_METADATA_BYTES = 256;
+const KNOWN_PLUGIN_EDITOR_KINDS = new Set(["generic-parameters", "native-window"]);
 
 export function assert(condition, message) {
   if (!condition) {
@@ -91,6 +92,15 @@ export function assertOutputBuses(block, layout, message) {
 }
 
 export function assertPublicPluginMetadata(plugin, message) {
+  if (plugin.editorKinds != null) {
+    assert(
+      Array.isArray(plugin.editorKinds) &&
+        plugin.editorKinds.length <= KNOWN_PLUGIN_EDITOR_KINDS.size &&
+        new Set(plugin.editorKinds).size === plugin.editorKinds.length &&
+        plugin.editorKinds.every((kind) => KNOWN_PLUGIN_EDITOR_KINDS.has(kind)),
+      `${message}: editorKinds are bounded known editor kinds`
+    );
+  }
   if (plugin.fileGrantOperations != null) {
     assert(
       Array.isArray(plugin.fileGrantOperations) &&

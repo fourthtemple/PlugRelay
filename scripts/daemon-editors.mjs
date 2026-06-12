@@ -159,6 +159,7 @@ export function createDaemonEditors({
         inputs: instance.inputChannels,
         outputs: instance.outputChannels,
         parameters: instance.parameters,
+        editorKinds: editorKindsForInstance(instance),
         hostable: true
       }),
       parameters: instance.parameters.map((parameter) => ({ ...parameter })),
@@ -170,4 +171,8 @@ export function createDaemonEditors({
     closeEditor,
     openEditor
   };
+}
+
+function editorKindsForInstance(instance) {
+  return instance.nativeHost ? ["generic-parameters", "native-window"] : ["generic-parameters"];
 }

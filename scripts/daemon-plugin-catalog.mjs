@@ -7,6 +7,7 @@ import { FILE_GRANT_OPERATION_NAMES, isKnownFileGrantOperation } from "./daemon-
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NATIVE_FILE_GRANT_OPERATIONS = Object.freeze(["loadPreset", "restoreState", "saveStateDirectory"]);
+const PLUGIN_EDITOR_KINDS = Object.freeze(["generic-parameters", "native-window"]);
 
 export function resolveNativeRenderer() {
   const candidates = [
@@ -93,6 +94,7 @@ export function createPluginCatalogSupport({
           hostable: true,
           inputs: 2,
           outputs: 2,
+          editorKinds: ["generic-parameters"],
           parameters: [makeGainParameter(0.5), programParameter, makeOutputLevelParameter(0)],
           vst3ProgramLists: [programParameter.programList],
           presets: [
@@ -276,6 +278,7 @@ export function createPluginCatalogSupport({
       engine: defaults.engine,
       parameters: makeInstrumentParameters(defaults),
       presets,
+      editorKinds: editorKindsForHostableNativeHost(true, nativeHost),
       fileGrantOperations: fileGrantOperationsForNativeHost(nativeHost),
       nativeHost
     };
@@ -303,6 +306,7 @@ export function createPluginCatalogSupport({
       metadata: normalizePluginClassMetadata(publicPluginMetadata(plugin, auHostProfile), plugin.format),
       parameters: [],
       presets: [],
+      editorKinds: editorKindsForHostableNativeHost(hostable, nativeHost),
       fileGrantOperations: fileGrantOperationsForNativeHost(nativeHost),
       nativeHost
     };
@@ -429,6 +433,15 @@ export function createPluginCatalogSupport({
     return nativeHost && ["au", "vst3", "lv2"].includes(nativeHost.format)
       ? [...NATIVE_FILE_GRANT_OPERATIONS]
       : undefined;
+  }
+
+  function editorKindsForHostableNativeHost(hostable, nativeHost) {
+    if (!hostable) {
+      return undefined;
+    }
+    return nativeHost && ["au", "vst3", "lv2"].includes(nativeHost.format)
+      ? ["generic-parameters", "native-window"]
+      : ["generic-parameters"];
   }
 
   function defaultInputChannels(plugin) {
@@ -664,6 +677,10 @@ export function createPluginCatalogSupport({
     if (fileGrantOperations.length > 0) {
       cloned.fileGrantOperations = fileGrantOperations;
     }
+    const editorKinds = normalizeEditorKinds(plugin.editorKinds);
+    if (editorKinds.length > 0) {
+      cloned.editorKinds = editorKinds;
+    }
     const programLists = normalizeVst3ProgramLists(plugin.vst3ProgramLists);
     if (programLists.length > 0) {
       cloned.vst3ProgramLists = programLists;
@@ -686,6 +703,23 @@ export function createPluginCatalogSupport({
       }
     }
     return operations;
+  }
+
+  function normalizeEditorKinds(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const kinds = [];
+    for (const rawKind of value) {
+      const kind = String(rawKind ?? "");
+      if (PLUGIN_EDITOR_KINDS.includes(kind) && !kinds.includes(kind)) {
+        kinds.push(kind);
+      }
+      if (kinds.length >= PLUGIN_EDITOR_KINDS.length) {
+        break;
+      }
+    }
+    return kinds;
   }
 
   function normalizePresetSnapshot(preset, index) {

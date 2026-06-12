@@ -420,6 +420,12 @@
           "maxItems": 1024,
           "items": { "$ref": "#/$defs/pluginParameter" }
         },
+        "editorKinds": {
+          "type": "array",
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/pluginEditorKind" }
+        },
         "fileGrantOperations": {
           "type": "array",
           "maxItems": 7,
@@ -460,6 +466,10 @@
         "lv2UiCount": { "type": "string", "maxLength": 16 },
         "lv2UiBinaryCount": { "type": "string", "maxLength": 16 }
       }
+    },
+    "pluginEditorKind": {
+      "type": "string",
+      "enum": ["generic-parameters", "native-window"]
     },
     "pluginLayout": {
       "type": "object",

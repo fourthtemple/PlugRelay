@@ -241,6 +241,7 @@ export interface PluginMetadata {
   outputs: number;
   metadata?: PluginClassMetadata;
   parameters: PluginParameter[];
+  editorKinds?: PluginEditorKind[];
   fileGrantOperations?: FileGrantOperation[];
   vst3ProgramLists?: PluginProgramList[];
   vst3NoteExpressions?: PluginVst3NoteExpression[];

@@ -13,7 +13,7 @@ SoundBridge should feel like an AudioNode plus a plugin-management API.
 7. Connect source nodes into the bridge node and connect the bridge node to the destination.
 8. For instruments, send notes or MIDI clips through `sendMidiEvents()`; for VST3 note expression, include explicit bounded `noteId` values.
 9. Apply bounded listed presets with `setPreset()` when the selected plugin exposes preset metadata.
-10. Open a bounded generic parameter editor with `openEditor()` or bind host automation to `setParameter()`, `setParameterEvents()`, `setParameterCurve()`, or stored `setAutomationLane()` timeline lanes.
+10. Check the plugin's `editorKinds`, then open a bounded generic parameter editor with `openEditor()` or a configured native editor broker when both the plugin and daemon advertise it.
 11. Close editor sessions with `closeEditor()` when the UI tab or panel is done.
 12. Store `getState()` output in the DAW project.
 13. Restore using `setState()` when reopening the project.
@@ -41,6 +41,7 @@ Hosts should:
 - store opaque plugin state without editing it
 - account for `getLatency()` in timeline scheduling and monitoring UI
 - send bounded `processAudioBlock.transport` context when the host knows play state, sample position, tempo, time signature, or loop range
+- check each plugin's `editorKinds` before showing editor actions; native editor buttons should require both `editorKinds: ["native-window"]` and `hello.capabilities.nativeEditor`
 - apply only daemon-listed preset ids and pass native-approved preset/sample/cache/license files through opaque session-owned file grants attached to the owning plugin instance; check each plugin's `fileGrantOperations` before showing file-backed actions, use `useFileGrant restoreState` / `loadPreset` / `saveStateDirectory` for advertised worker-native preset/state files, and avoid arbitrary filesystem access for remaining file workflows
 - degrade gracefully when the daemon disconnects
 
