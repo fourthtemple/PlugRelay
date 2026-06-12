@@ -363,6 +363,19 @@ export function createNativeWorkerProcesses({
       return normalizeVst3ProgramData(parsed.programData);
     }
 
+    async setVst3ProgramData(programListId, programIndex, data) {
+      if (this.nativeHost.format !== "vst3") {
+        return undefined;
+      }
+      const programData = normalizeVst3ProgramData({ programListId, programIndex, data });
+      if (!programData) {
+        return undefined;
+      }
+      return this.request(
+        `setProgramData ${programData.programListId} ${programData.programIndex} ${programData.data || "-"}`
+      );
+    }
+
     async setParameter(parameterId, normalizedValue, sampleOffset = 0) {
       if (!["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
         return undefined;

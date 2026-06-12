@@ -22,6 +22,7 @@
         "setParameter",
         "setPreset",
         "getVst3ProgramData",
+        "setVst3ProgramData",
         "setParameterEvents",
         "setParameterCurve",
         "setAutomationLane",
@@ -114,6 +115,7 @@
                 "maxTransportSamplePosition": { "type": "number" },
                 "maxPluginNoteExpressions": { "type": "number" },
                 "maxPluginProgramDataBytes": { "type": "number" },
+                "maxPluginProgramDataEnvelopeBytes": { "type": "number" },
                 "maxPluginProgramLists": { "type": "number" },
                 "maxPluginPrograms": { "type": "number" },
                 "maxNoteExpressionTextBytes": { "type": "number" },
@@ -173,6 +175,10 @@
         {
           "if": { "properties": { "command": { "const": "getVst3ProgramData" } }, "required": ["command"] },
           "then": { "properties": { "payload": { "$ref": "#/$defs/getVst3ProgramDataRequest" } } }
+        },
+        {
+          "if": { "properties": { "command": { "const": "setVst3ProgramData" } }, "required": ["command"] },
+          "then": { "properties": { "payload": { "$ref": "#/$defs/setVst3ProgramDataRequest" } } }
         },
         {
           "if": { "properties": { "command": { "const": "setParameterEvents" } }, "required": ["command"] },
@@ -716,6 +722,15 @@
         "instanceId": { "type": "string", "minLength": 1 },
         "programListId": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
         "programIndex": { "type": "integer", "minimum": 0, "maximum": 255 }
+      }
+    },
+    "setVst3ProgramDataRequest": {
+      "type": "object",
+      "required": ["instanceId", "programData"],
+      "additionalProperties": true,
+      "properties": {
+        "instanceId": { "type": "string", "minLength": 1 },
+        "programData": { "type": "string", "minLength": 1, "maxLength": 1048576 }
       }
     },
     "setParameterEventsRequest": {

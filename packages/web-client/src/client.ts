@@ -18,7 +18,8 @@ import type {
   ProtocolCommand,
   RequestEnvelope,
   ResponseEnvelope,
-  SetAutomationLaneResponse
+  SetAutomationLaneResponse,
+  SetVst3ProgramDataResponse
 } from "../../protocol/src/messages";
 
 export interface SoundBridgeClientOptions {
@@ -141,6 +142,10 @@ export class SoundBridgeClient extends EventTarget {
     programIndex: number
   ): Promise<GetVst3ProgramDataResponse> {
     return this.request("getVst3ProgramData", { instanceId, programListId, programIndex });
+  }
+
+  setVst3ProgramData(instanceId: string, programData: string): Promise<SetVst3ProgramDataResponse> {
+    return this.request("setVst3ProgramData", { instanceId, programData });
   }
 
   setParameterEvents(

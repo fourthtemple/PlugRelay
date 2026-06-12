@@ -6,6 +6,7 @@ import { createMockInstrumentSupport } from "./daemon-mock-instruments.mjs";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { createPluginCatalogSupport, loadNativeHostStatus, resolveNativeRenderer } from "./daemon-plugin-catalog.mjs";
 import { createDaemonRuntimePayloads } from "./daemon-runtime-payloads.mjs";
+import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
 import {
   assertLoopbackHost,
   createDaemonValidators,
@@ -66,6 +67,7 @@ const MAX_PLUGIN_PROGRAM_DATA_BYTES = Math.min(
   MAX_PLUGIN_STATE_BYTES
 );
 const MAX_PLUGIN_STATE_ENVELOPE_BYTES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_STATE_ENVELOPE_BYTES", 1024 * 1024);
+const MAX_PLUGIN_PROGRAM_DATA_ENVELOPE_BYTES = MAX_PLUGIN_STATE_ENVELOPE_BYTES;
 const MAX_PLUGIN_LATENCY_SAMPLES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_LATENCY_SAMPLES", 1_048_576);
 const MAX_PLUGIN_TAIL_SAMPLES = envInteger("SOUNDBRIDGE_MAX_PLUGIN_TAIL_SAMPLES", 1_048_576);
 const MAX_TRANSPORT_TEMPO_BPM = envInteger("SOUNDBRIDGE_MAX_TRANSPORT_TEMPO_BPM", 960);
@@ -111,8 +113,7 @@ const {
   normalizeLatencySamples,
   normalizeNativeState,
   normalizePluginLayout,
-  normalizeTailSamples,
-  normalizeVst3ProgramData
+  normalizeTailSamples
 } = normalizers;
 const mockInstruments = createMockInstrumentSupport({
   clamp01,
@@ -222,6 +223,19 @@ const {
   instances,
   editors,
   makeProtocolError: protocolError
+});
+const {
+  getVst3ProgramData,
+  setVst3ProgramData
+} = createDaemonVst3ProgramData({
+  getInstance,
+  limits: {
+    maxPluginProgramDataEnvelopeBytes: MAX_PLUGIN_PROGRAM_DATA_ENVELOPE_BYTES,
+    maxPluginPrograms: MAX_PLUGIN_PROGRAMS
+  },
+  normalizers,
+  protocolError,
+  requireIntInRange
 });
 
 const server = createDaemonWebSocketServer({
@@ -339,6 +353,9 @@ async function dispatchCommand(envelope, context) {
     case "getVst3ProgramData":
       return getVst3ProgramData(payload.instanceId, payload.programListId, payload.programIndex, session);
 
+    case "setVst3ProgramData":
+      return setVst3ProgramData(payload.instanceId, payload.programData, session);
+
     case "setParameterEvents":
       return setParameterEvents(payload.instanceId, payload.events, session);
 
@@ -438,6 +455,7 @@ function helloResponse(paired) {
         maxBlockSize: MAX_BLOCK_SIZE,
         maxPluginNoteExpressions: MAX_PLUGIN_NOTE_EXPRESSIONS,
         maxPluginProgramDataBytes: MAX_PLUGIN_PROGRAM_DATA_BYTES,
+        maxPluginProgramDataEnvelopeBytes: MAX_PLUGIN_PROGRAM_DATA_ENVELOPE_BYTES,
         maxPluginProgramLists: MAX_PLUGIN_PROGRAM_LISTS,
         maxPluginPrograms: MAX_PLUGIN_PROGRAMS,
         maxNoteExpressionTextBytes: MAX_NOTE_EXPRESSION_TEXT_BYTES,
@@ -705,35 +723,6 @@ async function setPreset(instanceId, presetId, session) {
     presetId: preset.id,
     parameterCount: parameters.length,
     parameters
-  };
-}
-
-async function getVst3ProgramData(instanceId, programListId, programIndex, session) {
-  const instance = getInstance(instanceId, session);
-  if (instance.format !== "vst3" || !instance.worker || typeof instance.worker.getVst3ProgramData !== "function") {
-    throw protocolError("program_data_not_supported", "VST3 program data is available only for supported VST3 instances.");
-  }
-
-  const safeProgramListId = requireIntInRange(programListId, -2147483648, 2147483647, "programListId");
-  const safeProgramIndex = requireIntInRange(programIndex, 0, MAX_PLUGIN_PROGRAMS - 1, "programIndex");
-  const programList = (instance.vst3ProgramLists ?? []).find((list) => list.id === safeProgramListId);
-  const listedProgram = programList?.programs?.some((program) => program.index === safeProgramIndex);
-  if (!programList?.programDataSupported || !listedProgram) {
-    throw protocolError("program_data_not_supported", "The requested VST3 program does not expose bounded program data.");
-  }
-
-  const programData = normalizeVst3ProgramData(
-    await instance.worker.getVst3ProgramData(safeProgramListId, safeProgramIndex)
-  );
-  if (!programData) {
-    throw protocolError("program_data_not_supported", "The VST3 worker did not return program data.");
-  }
-  if (programData.programListId !== safeProgramListId || programData.programIndex !== safeProgramIndex) {
-    throw protocolError("bad_program_data", "The VST3 worker returned mismatched program data metadata.");
-  }
-  return {
-    ...programData,
-    instanceId
   };
 }
 

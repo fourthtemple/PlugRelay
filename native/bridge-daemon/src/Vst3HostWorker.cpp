@@ -354,6 +354,27 @@ public:
     return output.str();
   }
 
+  std::string setProgramData(
+      Steinberg::Vst::ProgramListID programListId,
+      Steinberg::int32 programIndex,
+      const std::string& dataText) {
+    if (!programListData_) {
+      throw std::runtime_error("program_data_not_supported");
+    }
+    if (!programDataSupported(programListId) || !knownProgram(programListId, programIndex)) {
+      throw std::runtime_error("program_data_not_supported");
+    }
+
+    auto data = dataText == "-"
+        ? std::vector<std::uint8_t> {}
+        : base64Decode(dataText, kMaxWorkerProgramDataBytes);
+    Steinberg::MemoryStream stream(data.data(), static_cast<Steinberg::TSize>(data.size()));
+    checkResult(
+        programListData_->setProgramData(programListId, programIndex, &stream),
+        "IProgramListData::setProgramData");
+    return "{\"ok\":true}";
+  }
+
   std::string setParameter(Steinberg::Vst::ParamID id, double value, std::uint32_t sampleOffset) {
     if (!controller_) {
       throw std::runtime_error("VST3 plugin does not expose an edit controller.");
@@ -1004,6 +1025,33 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
             continue;
           }
           std::cout << host.programDataToJson(programListId, programIndex) << std::endl;
+          continue;
+        }
+
+        if (command == "setProgramData") {
+          std::string programListIdText;
+          std::string programIndexText;
+          std::string dataText;
+          std::int32_t programListId = 0;
+          std::int32_t programIndex = 0;
+          stream >> programListIdText;
+          stream >> programIndexText;
+          stream >> dataText;
+          if (!parseInt32Arg(
+                  programListIdText.c_str(),
+                  std::numeric_limits<std::int32_t>::min(),
+                  std::numeric_limits<std::int32_t>::max(),
+                  programListId) ||
+              !parseInt32Arg(
+                  programIndexText.c_str(),
+                  0,
+                  kMaxWorkerProgramsPerParameter - 1,
+                  programIndex) ||
+              dataText.empty()) {
+            std::cout << "{\"error\":\"invalid_program_data_arguments\"}" << std::endl;
+            continue;
+          }
+          std::cout << host.setProgramData(programListId, programIndex, dataText) << std::endl;
           continue;
         }
 

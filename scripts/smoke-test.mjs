@@ -591,8 +591,25 @@ if (nativeVst3ProgramDataList) {
       nativeVst3ProgramData.programIndex === nativeVst3ProgramDataList.programs[0].index &&
       Number.isInteger(nativeVst3ProgramData.size) &&
       nativeVst3ProgramData.size <= 384 * 1024 &&
-      typeof nativeVst3ProgramData.data === "string",
+      typeof nativeVst3ProgramData.data === "string" &&
+      typeof nativeVst3ProgramData.programData === "string",
     "getVst3ProgramData returns bounded installed VST3 program data when supported"
+  );
+  const nativeVst3ProgramDataRestore = await request(
+    socket,
+    "setVst3ProgramData",
+    {
+      instanceId: nativeVst3Instance.instanceId,
+      programData: nativeVst3ProgramData.programData
+    },
+    true,
+    pair.sessionToken
+  );
+  assert(
+    nativeVst3ProgramDataRestore.restored === true &&
+      nativeVst3ProgramDataRestore.programListId === nativeVst3ProgramDataList.id &&
+      nativeVst3ProgramDataRestore.programIndex === nativeVst3ProgramDataList.programs[0].index,
+    "setVst3ProgramData restores bounded installed VST3 program data when supported"
   );
 }
 const nativeVst3Parameter = nativeVst3Parameters.parameters.find((parameter) => parameter.automatable);

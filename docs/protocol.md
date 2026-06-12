@@ -270,11 +270,25 @@ The browser supplies only the owning `instanceId`, an exposed `programListId`, a
   "programListId": 7,
   "programIndex": 0,
   "size": 128,
-  "data": "AAECAwQ="
+  "data": "AAECAwQ=",
+  "programData": "eyJ2ZXJzaW9uIjoxLCJwbHVnaW..."
 }
 ```
 
-`data` is base64 and host applications must store it as opaque plugin-originated data. Importing arbitrary VST3 preset files, sample folders, or user-selected filesystem data remains out of scope for this command and requires a separate file broker.
+`data` is the raw SDK program-data stream as base64. `programData` is the SoundBridge restore envelope that records the producing `pluginId`, VST3 format, listed program-list id/index, and raw data. Hosts should store `programData` for restore and treat both strings as opaque plugin-originated data.
+
+### `setVst3ProgramData`
+
+Restores a SoundBridge VST3 program-data envelope returned by `getVst3ProgramData`:
+
+```json
+{
+  "instanceId": "inst-1",
+  "programData": "eyJ2ZXJzaW9uIjoxLCJwbHVnaW..."
+}
+```
+
+The reference daemon decodes the envelope, rejects data for a different plugin id or non-VST3 format, rechecks the target program list/index against this instance's bounded metadata, caps both the envelope and decoded SDK bytes, and then calls the VST3 worker's `IProgramListData::setProgramData`. The command does not accept arbitrary preset files, paths, sample folders, or browser-authored filesystem references. Importing user-selected VST3 preset files remains out of scope and requires a separate file broker.
 
 ### `getLayout`
 

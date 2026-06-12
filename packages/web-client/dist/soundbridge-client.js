@@ -84,6 +84,10 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("getVst3ProgramData", { instanceId, programListId, programIndex });
   }
 
+  setVst3ProgramData(instanceId, programData) {
+    return this.request("setVst3ProgramData", { instanceId, programData });
+  }
+
   setParameterEvents(instanceId, events) {
     return this.request("setParameterEvents", { instanceId, events });
   }

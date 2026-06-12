@@ -102,6 +102,7 @@ async function run() {
     "setParameter",
     "setPreset",
     "getVst3ProgramData",
+    "setVst3ProgramData",
     "setParameterEvents",
     "setParameterCurve",
     "setAutomationLane",
@@ -206,6 +207,10 @@ async function run() {
   check(
     pairedHello.capabilities?.security?.maxPluginProgramDataBytes > 0,
     "paired hello advertises bounded VST3 program data"
+  );
+  check(
+    pairedHello.capabilities?.security?.maxPluginProgramDataEnvelopeBytes > 0,
+    "paired hello advertises bounded VST3 program-data envelopes"
   );
   check(
     pairedHello.capabilities?.security?.maxNoteExpressionTextBytes > 0,
@@ -315,6 +320,17 @@ async function run() {
     (error) => ({ code: error.code })
   );
   check(unsupportedProgramData.code === "program_data_not_supported", "getVst3ProgramData rejects non-VST3 instances");
+  const unsupportedProgramDataRestore = await request(
+    main,
+    "setVst3ProgramData",
+    { instanceId: created.instanceId, programData: "YWI=" },
+    true,
+    paired.sessionToken
+  ).then(
+    () => ({ ok: true }),
+    (error) => ({ code: error.code })
+  );
+  check(unsupportedProgramDataRestore.code === "program_data_not_supported", "setVst3ProgramData rejects non-VST3 instances");
   const selectedProgram = await request(
     main,
     "setParameter",

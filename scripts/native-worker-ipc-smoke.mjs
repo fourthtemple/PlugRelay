@@ -3,6 +3,7 @@ import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
+import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
@@ -19,6 +20,10 @@ let passed = 0;
 const failures = [];
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-worker-ipc-"));
+
+function protocolError(code, message, details) {
+  return Object.assign(new Error(message), { code, details });
+}
 
 try {
   const unitNormalizers = createDaemonNormalizers({ maxPluginParameterTextBytes: 8 });
@@ -79,6 +84,76 @@ try {
     oversizedProgramData = error.code;
   }
   check(oversizedProgramData === "program_data_too_large", "daemon normalizers reject oversized VST3 program data");
+  const fakeInstance = {
+    instanceId: "inst-test",
+    pluginId: "vst3:test",
+    format: "vst3",
+    vst3ProgramLists: [{
+      id: 7,
+      programDataSupported: true,
+      programs: [{ index: 0, name: "Init", normalizedValue: 0 }]
+    }],
+    parameters: [],
+    nativeParameterIds: new Set(),
+    worker: {
+      async getVst3ProgramData(programListId, programIndex) {
+        return { format: "vst3", programListId, programIndex, data: "YWI=" };
+      },
+      async setVst3ProgramData(programListId, programIndex, data) {
+        fakeInstance.restoredProgramData = { programListId, programIndex, data };
+      },
+      async getParameters() {
+        return [{ id: "program", name: "Program", normalizedValue: 0, defaultNormalizedValue: 0, automatable: true }];
+      }
+    }
+  };
+  const programDataSupport = createDaemonVst3ProgramData({
+    getInstance() {
+      return fakeInstance;
+    },
+    limits: {
+      maxPluginProgramDataEnvelopeBytes: 1024 * 1024,
+      maxPluginPrograms: 256
+    },
+    normalizers: unitNormalizers,
+    protocolError,
+    requireIntInRange(value, min, max, label) {
+      const number = Number(value);
+      if (!Number.isInteger(number) || number < min || number > max) {
+        throw protocolError("invalid_argument", `${label} out of range`);
+      }
+      return number;
+    }
+  });
+  const exportedProgramData = await programDataSupport.getVst3ProgramData("inst-test", 7, 0, {});
+  check(
+    exportedProgramData.programData &&
+      exportedProgramData.size === 2 &&
+      exportedProgramData.programListId === 7,
+    "daemon VST3 program-data helper exports a bounded restore envelope"
+  );
+  const restoredProgramData = await programDataSupport.setVst3ProgramData("inst-test", exportedProgramData.programData, {});
+  check(
+    restoredProgramData.restored === true &&
+      fakeInstance.restoredProgramData?.data === "YWI=" &&
+      fakeInstance.parameters?.[0]?.id === "program",
+    "daemon VST3 program-data helper restores an owned bounded envelope"
+  );
+  const wrongPluginEnvelope = Buffer.from(JSON.stringify({
+    version: 1,
+    pluginId: "vst3:other",
+    format: "vst3",
+    programListId: 7,
+    programIndex: 0,
+    data: "YWI="
+  }), "utf8").toString("base64");
+  let wrongPluginCode;
+  try {
+    await programDataSupport.setVst3ProgramData("inst-test", wrongPluginEnvelope, {});
+  } catch (error) {
+    wrongPluginCode = error.code;
+  }
+  check(wrongPluginCode === "program_data_plugin_mismatch", "daemon VST3 program-data helper rejects other-plugin envelopes");
   const [unitExpression] = unitNormalizers.normalizeVst3NoteExpressions([
     {
       typeId: 0,
