@@ -15,6 +15,7 @@ add_executable(soundbridge-daemon
   src/Lv2HostWorkerSupport.cpp
   src/Lv2ParameterSupport.cpp
   src/Lv2StateSupport.cpp
+  src/Lv2WorkerSupport.cpp
   src/Lv2Scanner.cpp
   src/NativePlugin.cpp
   src/NativeFileGrantSupport.cpp

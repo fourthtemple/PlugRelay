@@ -24,6 +24,16 @@ std::vector<Lv2AudioBusGroup> groupedLv2AudioBuses(
 
 std::string lv2BusLayoutsToJson(const std::vector<Lv2AudioBusGroup>& groups, const char* direction);
 
+std::string lv2LayoutToJson(
+    std::uint32_t requestedInputChannels,
+    std::uint32_t requestedOutputChannels,
+    std::uint32_t inputChannels,
+    std::uint32_t outputChannels,
+    const std::vector<Lv2AudioBusGroup>& inputBusGroups,
+    const std::vector<Lv2AudioBusGroup>& outputBusGroups,
+    double sampleRate,
+    std::uint32_t maxBlockSize);
+
 std::string lv2RenderedAudioToJson(
     const std::vector<std::vector<float>>& channels,
     const std::vector<Lv2AudioBusGroup>& outputBusGroups,

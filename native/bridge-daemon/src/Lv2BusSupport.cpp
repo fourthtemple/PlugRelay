@@ -134,6 +134,30 @@ std::string lv2BusLayoutsToJson(const std::vector<Lv2AudioBusGroup>& groups, con
   return output.str();
 }
 
+std::string lv2LayoutToJson(
+    std::uint32_t requestedInputChannels,
+    std::uint32_t requestedOutputChannels,
+    std::uint32_t inputChannels,
+    std::uint32_t outputChannels,
+    const std::vector<Lv2AudioBusGroup>& inputBusGroups,
+    const std::vector<Lv2AudioBusGroup>& outputBusGroups,
+    double sampleRate,
+    std::uint32_t maxBlockSize) {
+  std::ostringstream output;
+  output << "{\"requestedInputChannels\":" << requestedInputChannels
+         << ",\"requestedOutputChannels\":" << requestedOutputChannels
+         << ",\"inputChannels\":" << inputChannels
+         << ",\"outputChannels\":" << outputChannels
+         << ",\"inputBuses\":" << std::min<std::size_t>(inputBusGroups.size(), kMaxWorkerAudioPorts)
+         << ",\"outputBuses\":" << std::min<std::size_t>(outputBusGroups.size(), kMaxWorkerAudioPorts)
+         << ",\"inputBusLayouts\":" << lv2BusLayoutsToJson(inputBusGroups, "input")
+         << ",\"outputBusLayouts\":" << lv2BusLayoutsToJson(outputBusGroups, "output")
+         << ",\"sampleRate\":" << sampleRate
+         << ",\"maxBlockSize\":" << maxBlockSize
+         << "}";
+  return output.str();
+}
+
 std::string lv2RenderedAudioToJson(
     const std::vector<std::vector<float>>& channels,
     const std::vector<Lv2AudioBusGroup>& outputBusGroups,

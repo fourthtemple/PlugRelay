@@ -6,6 +6,7 @@
 #include "SoundBridge/Lv2BusSupport.h"
 #include "SoundBridge/Lv2HostWorkerSupport.h"
 #include "SoundBridge/Lv2StateSupport.h"
+#include "SoundBridge/Lv2WorkerSupport.h"
 #include "SoundBridge/NativePlugin.h"
 #include "SoundBridge/NativeFileGrantSupport.h"
 
@@ -76,7 +77,7 @@ public:
     inputChannels_ = static_cast<std::uint32_t>(std::min<std::size_t>(inputPortIndexes_.size(), kMaxWorkerAudioPorts));
     outputChannels_ = static_cast<std::uint32_t>(std::min<std::size_t>(outputPortIndexes_.size(), kMaxWorkerAudioPorts));
     loadDescriptor();
-    workerSchedule_ = LV2_Worker_Schedule{this, &HostedLv2Plugin::scheduleLv2Work};
+    workerSchedule_ = workerCycle_.scheduleFeature();
     instantiate();
   }
 
@@ -228,19 +229,15 @@ public:
   }
 
   std::string layoutToJson() const {
-    std::ostringstream output;
-    output << "{\"requestedInputChannels\":" << requestedInputChannels_
-           << ",\"requestedOutputChannels\":" << requestedOutputChannels_
-           << ",\"inputChannels\":" << inputChannels_
-           << ",\"outputChannels\":" << outputChannels_
-           << ",\"inputBuses\":" << inputBusCount()
-           << ",\"outputBuses\":" << outputBusCount()
-           << ",\"inputBusLayouts\":" << inputBusLayoutsToJson()
-           << ",\"outputBusLayouts\":" << outputBusLayoutsToJson()
-           << ",\"sampleRate\":" << sampleRate_
-           << ",\"maxBlockSize\":" << maxBlockSize_
-           << "}";
-    return output.str();
+    return lv2LayoutToJson(
+        requestedInputChannels_,
+        requestedOutputChannels_,
+        inputChannels_,
+        outputChannels_,
+        inputBusGroups_,
+        outputBusGroups_,
+        sampleRate_,
+        maxBlockSize_);
   }
 
   std::string outputAudioToJson(const std::vector<std::vector<float>>& channels) const {
@@ -248,22 +245,6 @@ public:
   }
 
 private:
-  std::uint32_t inputBusCount() const {
-    return static_cast<std::uint32_t>(std::min<std::size_t>(inputBusGroups_.size(), kMaxWorkerAudioPorts));
-  }
-
-  std::uint32_t outputBusCount() const {
-    return static_cast<std::uint32_t>(std::min<std::size_t>(outputBusGroups_.size(), kMaxWorkerAudioPorts));
-  }
-
-  std::string inputBusLayoutsToJson() const {
-    return lv2BusLayoutsToJson(inputBusGroups_, "input");
-  }
-
-  std::string outputBusLayoutsToJson() const {
-    return lv2BusLayoutsToJson(outputBusGroups_, "output");
-  }
-
   void copyInputBusChannels(
       std::size_t inputBufferIndex,
       const std::vector<IndexedAudioBus>& inputBuses,
@@ -572,7 +553,7 @@ private:
           }
           auto* workerInterface = static_cast<const LV2_Worker_Interface*>(descriptor_->extension_data(kLv2WorkerInterfaceUri));
           if (workerInterface != nullptr && workerInterface->work != nullptr) {
-            workerInterface_ = workerInterface;
+            workerCycle_.setInterface(workerInterface);
           }
         }
         return;
@@ -598,7 +579,7 @@ private:
     LV2_Feature optionsFeature {kLv2OptionsOptionsUri, options_.data()};
     LV2_Feature workerScheduleFeature {kLv2WorkerScheduleUri, &workerSchedule_};
     std::vector<const LV2_Feature*> features {&uridMapFeature, &uridUnmapFeature, &optionsFeature};
-    if (workerInterface_ != nullptr) {
+    if (workerCycle_.available()) {
       features.push_back(&workerScheduleFeature);
     }
     features.push_back(nullptr);
@@ -610,6 +591,7 @@ private:
     if (handle_ == nullptr) {
       throw std::runtime_error("LV2 descriptor refused instantiation.");
     }
+    workerCycle_.setHandle(handle_);
     inputBuffers_.assign(inputPortIndexes_.size(), std::vector<float>(1, 0.0F));
     outputBuffers_.assign(outputPortIndexes_.size(), std::vector<float>(1, 0.0F));
     midiBuffers_.assign(inputMidiPortIndexes_.size(), emptyLv2MidiSequenceBuffer(maxBlockSize_));
@@ -660,9 +642,9 @@ private:
     }
     prepareMidiBuffers(frameOffset, frames, totalFrames, transport);
     connectPorts(frameOffset);
-    resetWorkerCycle();
+    workerCycle_.reset();
     descriptor_->run(handle_, frames);
-    deliverWorkerResponses();
+    workerCycle_.deliverResponses();
   }
 
   void refreshInstantOutputPorts() {
@@ -671,101 +653,9 @@ private:
     }
     prepareEmptyMidiBuffers();
     connectPorts(0);
-    resetWorkerCycle();
+    workerCycle_.reset();
     descriptor_->run(handle_, 0);
-    deliverWorkerResponses();
-  }
-
-  static LV2_Worker_Status scheduleLv2Work(
-      LV2_Worker_Schedule_Handle handle,
-      std::uint32_t size,
-      const void* data) {
-    if (handle == nullptr) {
-      return kLv2WorkerErrUnknown;
-    }
-    return static_cast<HostedLv2Plugin*>(handle)->scheduleWorkerWork(size, data);
-  }
-
-  static LV2_Worker_Status respondLv2Work(
-      LV2_Worker_Respond_Handle handle,
-      std::uint32_t size,
-      const void* data) {
-    if (handle == nullptr) {
-      return kLv2WorkerErrUnknown;
-    }
-    return static_cast<HostedLv2Plugin*>(handle)->queueWorkerResponse(size, data);
-  }
-
-  LV2_Worker_Status scheduleWorkerWork(std::uint32_t size, const void* data) noexcept {
-    try {
-      if (workerInterface_ == nullptr || workerInterface_->work == nullptr || handle_ == nullptr) {
-        return kLv2WorkerErrUnknown;
-      }
-      if ((size > 0 && data == nullptr) ||
-          size > kMaxWorkerWorkMessageBytes ||
-          scheduledWorkerMessages_ >= kMaxWorkerWorkMessages ||
-          workerWorkBytes_ + size > kMaxWorkerWorkTotalBytes) {
-        return kLv2WorkerErrNoSpace;
-      }
-      ++scheduledWorkerMessages_;
-      workerWorkBytes_ += size;
-      return workerInterface_->work(handle_, &HostedLv2Plugin::respondLv2Work, this, size, data);
-    } catch (...) {
-      return kLv2WorkerErrUnknown;
-    }
-  }
-
-  LV2_Worker_Status queueWorkerResponse(std::uint32_t size, const void* data) noexcept {
-    try {
-      if ((size > 0 && data == nullptr) ||
-          size > kMaxWorkerWorkMessageBytes ||
-          pendingWorkerResponses_.size() >= kMaxWorkerWorkMessages ||
-          workerResponseBytes_ + size > kMaxWorkerWorkTotalBytes) {
-        return kLv2WorkerErrNoSpace;
-      }
-      std::vector<std::uint8_t> response;
-      if (size > 0) {
-        const auto* bytes = static_cast<const std::uint8_t*>(data);
-        response.assign(bytes, bytes + size);
-      }
-      workerResponseBytes_ += response.size();
-      pendingWorkerResponses_.push_back(std::move(response));
-      return kLv2WorkerSuccess;
-    } catch (...) {
-      return kLv2WorkerErrUnknown;
-    }
-  }
-
-  void resetWorkerCycle() {
-    pendingWorkerResponses_.clear();
-    scheduledWorkerMessages_ = 0;
-    workerWorkBytes_ = 0;
-    workerResponseBytes_ = 0;
-  }
-
-  void deliverWorkerResponses() {
-    if (workerInterface_ == nullptr) {
-      return;
-    }
-    if (!pendingWorkerResponses_.empty() && workerInterface_->work_response == nullptr) {
-      throw std::runtime_error("lv2_worker_response_unavailable");
-    }
-    for (const auto& response : pendingWorkerResponses_) {
-      const auto status = workerInterface_->work_response(
-          handle_,
-          static_cast<std::uint32_t>(response.size()),
-          response.empty() ? nullptr : response.data());
-      if (status != kLv2WorkerSuccess) {
-        throw std::runtime_error("lv2_worker_response_failed");
-      }
-    }
-    pendingWorkerResponses_.clear();
-    if (workerInterface_->end_run != nullptr) {
-      const auto status = workerInterface_->end_run(handle_);
-      if (status != kLv2WorkerSuccess) {
-        throw std::runtime_error("lv2_worker_end_run_failed");
-      }
-    }
+    workerCycle_.deliverResponses();
   }
 
   void applyParameterChange(const PendingParameterChange& change) {
@@ -835,7 +725,7 @@ private:
   Lv2DescriptorFunction descriptorFunction_ = nullptr;
   const LV2_Descriptor* descriptor_ = nullptr;
   const LV2_State_Interface* stateInterface_ = nullptr;
-  const LV2_Worker_Interface* workerInterface_ = nullptr;
+  Lv2WorkerCycle workerCycle_;
   LV2_Worker_Schedule workerSchedule_ {};
   LV2_Handle handle_ = nullptr;
   Lv2UridMapper uridMapper_;
@@ -865,10 +755,6 @@ private:
   std::vector<std::vector<std::uint64_t>> midiBuffers_;
   std::vector<PendingParameterChange> pendingParameterChanges_;
   std::vector<PendingMidiMessage> pendingMidiMessages_;
-  std::vector<std::vector<std::uint8_t>> pendingWorkerResponses_;
-  std::size_t scheduledWorkerMessages_ = 0;
-  std::size_t workerWorkBytes_ = 0;
-  std::size_t workerResponseBytes_ = 0;
   bool activated_ = false;
 };
 

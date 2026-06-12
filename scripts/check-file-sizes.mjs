@@ -5,9 +5,7 @@ const ROOT = process.cwd();
 const MAX_SOURCE_LINES = 1200;
 const NEAR_LIMIT_LINES = 1000;
 
-const NEAR_LIMIT_BUDGETS = new Map([
-  ["native/bridge-daemon/src/Lv2HostWorker.cpp", 1095]
-]);
+const NEAR_LIMIT_BUDGETS = new Map([]);
 
 const SOURCE_EXTENSIONS = new Set([
   ".c",
