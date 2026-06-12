@@ -1,4 +1,5 @@
 #include "SoundBridge/Vst3HostWorkerSupport.h"
+#include "SoundBridge/Vst3StreamSupport.h"
 
 #ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
 
@@ -7,28 +8,12 @@
 #include "public.sdk/source/common/memorystream.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
 
 namespace soundbridge::vst3_worker {
 namespace {
-
-std::string streamToBase64(
-    Steinberg::MemoryStream& stream,
-    std::size_t maxBytes,
-    const std::string& sizeError) {
-  const auto size = stream.getSize();
-  if (size <= 0) {
-    return "";
-  }
-  if (static_cast<std::size_t>(size) > maxBytes) {
-    throw std::runtime_error(sizeError);
-  }
-  const auto* data = reinterpret_cast<const std::uint8_t*>(stream.getData());
-  return base64Encode(data, static_cast<std::size_t>(size));
-}
 
 bool programDataSupported(
     Steinberg::Vst::IProgramListData* programListData,
@@ -94,7 +79,7 @@ std::string programDataToJson(
          << ",\"programListId\":" << programListId
          << ",\"programIndex\":" << programIndex
          << ",\"size\":" << size
-         << ",\"data\":\"" << streamToBase64(stream, kMaxWorkerProgramDataBytes, "program_data_too_large") << "\""
+         << ",\"data\":\"" << memoryStreamToBase64(stream, kMaxWorkerProgramDataBytes, "program_data_too_large") << "\""
          << "}}";
   return output.str();
 }

@@ -4,8 +4,10 @@
 #include "SoundBridge/ExampleInstrumentRenderer.h"
 #include "SoundBridge/NativePlugin.h"
 #include "SoundBridge/NativeFileGrantSupport.h"
+#include "SoundBridge/Vst3HostInfoSupport.h"
 #include "SoundBridge/Vst3HostWorkerProcessSupport.h"
 #include "SoundBridge/Vst3HostWorkerSupport.h"
+#include "SoundBridge/Vst3StateSupport.h"
 
 #ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
 #include "pluginterfaces/base/funknown.h"
@@ -18,7 +20,6 @@
 #include "pluginterfaces/vst/ivstnoteexpression.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/vst/ivstunits.h"
-#include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/module.h"
@@ -353,57 +354,23 @@ public:
   }
 
   std::string stateToJson() const {
-    std::ostringstream output;
-    output << "{\"state\":{"
-           << "\"component\":\"" << componentStateBase64() << "\""
-           << ",\"controller\":\"" << controllerStateBase64() << "\""
-           << "}}";
-    return output.str();
+    return vst3StateToJson(component_, controller_);
   }
 
   void writeStateFile(const NativeFileGrantCommand& command) const {
-    writeDualStateFile(command, componentStateBase64(), controllerStateBase64(), kMaxWorkerStateBytes);
+    writeVst3StateFile(command, component_, controller_);
   }
 
   std::string setState(const std::string& componentStateText, const std::string& controllerStateText) {
-    if (componentStateText != "-") {
-      auto componentState = base64Decode(componentStateText, kMaxWorkerStateBytes);
-      Steinberg::MemoryStream componentStream(componentState.data(), static_cast<Steinberg::TSize>(componentState.size()));
-      checkResult(component_->setState(&componentStream), "IComponent::setState");
-
-      if (controller_) {
-        componentStream.seek(0, Steinberg::IBStream::kIBSeekSet, nullptr);
-        controller_->setComponentState(&componentStream);
-      }
-    }
-
-    if (controller_ && controllerStateText != "-") {
-      auto controllerState = base64Decode(controllerStateText, kMaxWorkerStateBytes);
-      Steinberg::MemoryStream controllerStream(controllerState.data(), static_cast<Steinberg::TSize>(controllerState.size()));
-      checkResult(controller_->setState(&controllerStream), "IEditController::setState");
-    }
-
-    return "{\"ok\":true}";
+    return restoreVst3State(component_, controller_, componentStateText, controllerStateText);
   }
 
   std::string latencyToJson() const {
-    const auto samples = std::min<std::uint32_t>(processor_->getLatencySamples(), kMaxWorkerLatencySamples);
-    std::ostringstream output;
-    output << "{\"latencySamples\":" << samples << "}";
-    return output.str();
+    return vst3LatencyToJson(processor_);
   }
 
   std::string tailTimeToJson() const {
-    const auto rawSamples = processor_->getTailSamples();
-    const auto infiniteTail = rawSamples == Steinberg::Vst::kInfiniteTail;
-    const auto samples = infiniteTail
-        ? kMaxWorkerTailSamples
-        : std::min<std::uint32_t>(rawSamples, kMaxWorkerTailSamples);
-    std::ostringstream output;
-    output << "{\"tailSamples\":" << samples
-           << ",\"infiniteTail\":" << (infiniteTail ? "true" : "false")
-           << "}";
-    return output.str();
+    return vst3TailTimeToJson(processor_);
   }
 
   std::string layoutToJson() const {
@@ -521,41 +488,6 @@ private:
     controllerConnection_ = nullptr;
     componentConnected_ = false;
     controllerConnected_ = false;
-  }
-
-  std::string componentStateBase64() const {
-    Steinberg::MemoryStream stream;
-    if (component_->getState(&stream) != Steinberg::kResultOk) {
-      return "";
-    }
-    return streamToBase64(stream, kMaxWorkerStateBytes, "component_state_too_large");
-  }
-
-  std::string controllerStateBase64() const {
-    if (!controller_) {
-      return "";
-    }
-
-    Steinberg::MemoryStream stream;
-    if (controller_->getState(&stream) != Steinberg::kResultOk) {
-      return "";
-    }
-    return streamToBase64(stream, kMaxWorkerStateBytes, "controller_state_too_large");
-  }
-
-  std::string streamToBase64(
-      Steinberg::MemoryStream& stream,
-      std::size_t maxBytes,
-      const std::string& sizeError) const {
-    const auto size = stream.getSize();
-    if (size <= 0) {
-      return "";
-    }
-    if (static_cast<std::size_t>(size) > maxBytes) {
-      throw std::runtime_error(sizeError);
-    }
-    const auto* data = reinterpret_cast<const std::uint8_t*>(stream.getData());
-    return base64Encode(data, static_cast<std::size_t>(size));
   }
 
   void configure() {

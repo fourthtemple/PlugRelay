@@ -21,9 +21,12 @@ add_executable(soundbridge-daemon
   src/Vst3Scanner.cpp
   src/Vst3Host.cpp
   src/Vst3HostWorker.cpp
+  src/Vst3HostInfoSupport.cpp
   src/Vst3HostWorkerProcessSupport.cpp
   src/Vst3HostWorkerSupport.cpp
   src/Vst3ProgramDataSupport.cpp
+  src/Vst3StateSupport.cpp
+  src/Vst3StreamSupport.cpp
 )
 
 add_executable(soundbridge-example-instrument
