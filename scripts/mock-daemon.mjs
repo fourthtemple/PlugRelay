@@ -1,9 +1,10 @@
-import crypto from "node:crypto";
+import { createDaemonCommandDispatcher } from "./daemon-command-dispatcher.mjs";
 import { createDaemonControlEvents } from "./daemon-control-events.mjs";
 import { createDaemonEditors } from "./daemon-editors.mjs";
 import { createDaemonFileGrants } from "./daemon-file-grants.mjs";
 import { createDaemonFileGrantOperations } from "./daemon-file-grant-operations.mjs";
 import { createDaemonHelloResponse } from "./daemon-hello-response.mjs";
+import { createDaemonInstanceFactory } from "./daemon-instance-factory.mjs";
 import { createDaemonInstanceFileGrants } from "./daemon-instance-file-grants.mjs";
 import { createDaemonInstrumentRendering } from "./daemon-instrument-rendering.mjs";
 import { createDaemonLifecycle } from "./daemon-lifecycle.mjs";
@@ -360,6 +361,65 @@ const { createConnectionContext, pair } = createDaemonPairing({
   sessionsForOrigin,
   tokenEquals
 });
+const createInstance = createDaemonInstanceFactory({
+  clonePluginLayout,
+  clonePluginMetadata,
+  formatNativeHostName,
+  instanceMap: instances,
+  limits: {
+    maxAudioChannels: MAX_AUDIO_CHANNELS,
+    maxBlockSize: MAX_BLOCK_SIZE,
+    maxInstancesPerSession: MAX_INSTANCES_PER_SESSION,
+    maxPluginParameters: MAX_PLUGIN_PARAMETERS,
+    maxTotalInstances: MAX_TOTAL_INSTANCES
+  },
+  makeProtocolError: protocolError,
+  normalizePluginLayout,
+  requireIntInRange,
+  requireSampleRate,
+  resolvePlugin: getPlugin,
+  validateNativeHostBlockSizeProfile,
+  workerConstructors: {
+    ExampleInstrumentWorker,
+    NativeHostWorker
+  }
+});
+const dispatchCommand = createDaemonCommandDispatcher({
+  assertPaired,
+  clonePluginMetadata,
+  fileGrantSupport,
+  getInstance,
+  handlers: {
+    clearAutomationLane,
+    closeEditor,
+    createInstance,
+    destroyInstance,
+    getLatency,
+    getLayout,
+    getState,
+    getTailTime,
+    getVst3ProgramData,
+    openEditor,
+    processAudioBlock,
+    sendMidiEvents,
+    setAutomationLane,
+    setParameter,
+    setParameterCurve,
+    setParameterDisplayValue,
+    setParameterEvents,
+    setPreset,
+    setState,
+    setVst3ProgramData
+  },
+  helloResponse,
+  instanceFileGrantSupport,
+  maxPluginParameters: MAX_PLUGIN_PARAMETERS,
+  pair,
+  parameterSnapshotResponse,
+  plugins,
+  protocolError,
+  useFileGrant
+});
 
 const server = createDaemonWebSocketServer({
   host: HOST,
@@ -419,262 +479,6 @@ async function handleRequest(rawMessage, context, send) {
       error.details
     );
   }
-}
-
-async function dispatchCommand(envelope, context) {
-  const { command, payload } = envelope;
-  let session;
-
-  if (command === "hello" && envelope.sessionToken) {
-    session = assertPaired(envelope.sessionToken, command, context);
-  } else if (!["hello", "pair", "heartbeat"].includes(command)) {
-    session = assertPaired(envelope.sessionToken, command, context);
-  }
-
-  switch (command) {
-    case "hello":
-      return helloResponse(Boolean(session));
-
-    case "pair":
-      return pair(payload, context);
-
-    case "scanPlugins":
-      return {
-        plugins: filterPlugins(payload, plugins).map(clonePluginMetadata),
-        scannedAt: Date.now(),
-        nativeSearchPaths: []
-      };
-
-    case "listPlugins":
-      return {
-        plugins: filterPlugins(payload, plugins).map(clonePluginMetadata)
-      };
-
-    case "createInstance":
-      return createInstance(payload, session);
-
-    case "destroyInstance":
-      return destroyInstance(payload.instanceId, session);
-
-    case "getParameters":
-      return parameterSnapshotResponse(getInstance(payload.instanceId, session), MAX_PLUGIN_PARAMETERS);
-
-    case "setParameter":
-      return setParameter(payload.instanceId, payload.parameterId, payload.normalizedValue, session);
-
-    case "setParameterDisplayValue":
-      return setParameterDisplayValue(payload.instanceId, payload.parameterId, payload.displayValue, session);
-
-    case "setPreset":
-      return setPreset(payload.instanceId, payload.presetId, session);
-
-    case "getVst3ProgramData":
-      return getVst3ProgramData(payload.instanceId, payload.programListId, payload.programIndex, session);
-
-    case "setVst3ProgramData":
-      return setVst3ProgramData(payload.instanceId, payload.programData, session);
-
-    case "setParameterEvents":
-      return setParameterEvents(payload.instanceId, payload.events, session);
-
-    case "setParameterCurve":
-      return setParameterCurve(payload.instanceId, payload.parameterId, payload.points, payload.interpolation, session);
-
-    case "setAutomationLane":
-      return setAutomationLane(payload.instanceId, payload.parameterId, payload.points, session);
-
-    case "clearAutomationLane":
-      return clearAutomationLane(payload.instanceId, payload.parameterId, session);
-
-    case "getState":
-      return getState(payload.instanceId, session);
-
-    case "setState":
-      return setState(payload.instanceId, payload.state, session);
-
-    case "processAudioBlock":
-      return processAudioBlock(payload, session);
-
-    case "sendMidiEvents":
-      return sendMidiEvents(payload.instanceId, payload.events, session);
-
-    case "getLatency":
-      return getLatency(payload, session);
-
-    case "getTailTime":
-      return getTailTime(payload, session);
-
-    case "getLayout":
-      return getLayout(payload, session);
-
-    case "openEditor":
-      return openEditor(payload, session);
-
-    case "closeEditor":
-      return closeEditor(payload.editorId, session);
-
-    case "createFileGrant":
-      return fileGrantSupport.createFileGrant(payload, session);
-
-    case "listFileGrants":
-      return fileGrantSupport.listFileGrants(payload, session);
-
-    case "revokeFileGrant":
-      return fileGrantSupport.revokeFileGrant(payload.grantId, session);
-
-    case "attachFileGrant":
-      return instanceFileGrantSupport.attachFileGrant(payload, session, getInstance);
-
-    case "listInstanceFileGrants":
-      return instanceFileGrantSupport.listInstanceFileGrants(payload, session, getInstance);
-
-    case "detachFileGrant":
-      return instanceFileGrantSupport.detachFileGrant(payload, session, getInstance);
-
-    case "useFileGrant":
-      return useFileGrant(payload, session);
-
-    case "heartbeat":
-      return {
-        now: Date.now(),
-        echo: payload.now
-      };
-
-    default:
-      throw protocolError("unknown_command", `Unknown command: ${command}`);
-  }
-}
-
-function filterPlugins(payload, plugins) {
-  const formats = Array.isArray(payload.formats)
-    ? new Set(payload.formats.map((format) => String(format)))
-    : undefined;
-  if (!formats || formats.size === 0) {
-    return plugins;
-  }
-  return plugins.filter((plugin) => formats.has(plugin.format));
-}
-
-async function createInstance(payload, session) {
-  if (session.instances.size >= MAX_INSTANCES_PER_SESSION) {
-    throw protocolError("quota_exceeded", "This browser session has reached its plugin instance limit.", {
-      maxInstancesPerSession: MAX_INSTANCES_PER_SESSION
-    });
-  }
-  if (instances.size >= MAX_TOTAL_INSTANCES) {
-    throw protocolError("quota_exceeded", "The local SoundBridge daemon has reached its total plugin instance limit.", {
-      maxTotalInstances: MAX_TOTAL_INSTANCES
-    });
-  }
-
-  const plugin = getPlugin(payload.pluginId);
-  if (!plugin) {
-    throw protocolError("plugin_not_found", `Unknown plugin: ${payload.pluginId}`);
-  }
-  if (plugin.hostable === false) {
-    throw protocolError("plugin_not_hostable", `${plugin.name} was discovered by the native scanner but cannot be hosted yet.`, {
-      pluginId: plugin.pluginId,
-      format: plugin.format,
-      source: plugin.source,
-      reason: plugin.hostUnavailableReason
-    });
-  }
-
-  const sampleRate = requireSampleRate(payload.sampleRate ?? 48000);
-  const maxBlockSize = requireIntInRange(payload.maxBlockSize ?? 128, 1, MAX_BLOCK_SIZE, "maxBlockSize");
-  const inputChannels = requireIntInRange(payload.inputChannels ?? plugin.inputs ?? 2, 0, MAX_AUDIO_CHANNELS, "inputChannels");
-  const outputChannels = requireIntInRange(payload.outputChannels ?? plugin.outputs ?? 2, 1, MAX_AUDIO_CHANNELS, "outputChannels");
-  validateNativeHostBlockSizeProfile(plugin.nativeHost, maxBlockSize);
-
-  const instanceId = `inst-${crypto.randomUUID()}`;
-  const parameters = plugin.parameters.map((parameter) => ({ ...parameter }));
-  const requestedLayout = normalizePluginLayout(undefined, {
-    requestedInputChannels: inputChannels,
-    requestedOutputChannels: outputChannels,
-    inputChannels,
-    outputChannels,
-    inputBuses: inputChannels > 0 ? 1 : 0,
-    outputBuses: 1,
-    sampleRate,
-    maxBlockSize
-  });
-  const instance = {
-    instanceId,
-    ownerSessionToken: session.sessionToken,
-    ownerOrigin: session.origin,
-    pluginId: plugin.pluginId,
-    format: plugin.format,
-    kind: plugin.kind,
-    source: plugin.source ?? "unknown",
-    executablePath: plugin.executablePath,
-    engine: plugin.engine ?? "effect",
-    sampleRate,
-    maxBlockSize,
-    inputChannels,
-    outputChannels,
-    layout: requestedLayout,
-    parameters,
-    fileGrantOperations: Array.isArray(plugin.fileGrantOperations) ? [...plugin.fileGrantOperations] : [],
-    vst3ProgramLists: plugin.vst3ProgramLists ?? [],
-    vst3NoteExpressions: plugin.vst3NoteExpressions ?? [],
-    nativeParameterIds: new Set(),
-    fileGrantAttachments: new Map(),
-    pluginLatencySamples: 0,
-    pluginTailSamples: 0,
-    pluginInfiniteTail: false,
-    automationLanes: new Map(),
-    voices: new Map(),
-    renderEngine: undefined,
-    worker: undefined
-  };
-  if (plugin.nativeHost) {
-    instance.nativeHost = plugin.nativeHost;
-    instance.worker = new NativeHostWorker(plugin.nativeHost, instance);
-    instance.renderEngine = instance.worker.renderEngine;
-    try {
-      await instance.worker.ready;
-      applyNativeParameterSnapshot(instance, await instance.worker.getParameters(), MAX_PLUGIN_PARAMETERS);
-      if (plugin.nativeHost.format === "vst3") {
-        instance.vst3ProgramLists = await instance.worker.getVst3ProgramLists();
-        instance.vst3NoteExpressions = await instance.worker.getVst3NoteExpressions();
-      }
-      const nativeLayout = await instance.worker.getLayout();
-      instance.layout = nativeLayout;
-      instance.inputChannels = nativeLayout.inputChannels;
-      instance.outputChannels = nativeLayout.outputChannels;
-      instance.pluginLatencySamples = await instance.worker.getLatency();
-      const tail = await instance.worker.getTailTime();
-      instance.pluginTailSamples = tail.tailSamples;
-      instance.pluginInfiniteTail = tail.infiniteTail;
-    } catch (error) {
-      instance.worker.destroy();
-      throw protocolError("plugin_host_failed", `${formatNativeHostName(plugin.nativeHost.format)} host worker failed for ${plugin.name}.`, {
-        pluginId: plugin.pluginId,
-        reason: error.message
-      });
-    }
-  } else if (instance.executablePath && instance.kind === "instrument") {
-    instance.worker = new ExampleInstrumentWorker(instance.executablePath);
-    instance.renderEngine = instance.worker.renderEngine;
-  }
-  instances.set(instanceId, instance);
-  session.instances.add(instanceId);
-
-  return {
-    instanceId,
-    plugin: clonePluginMetadata({
-      ...plugin,
-      inputs: instance.inputChannels,
-      outputs: instance.outputChannels,
-      parameters: instance.parameters,
-      vst3ProgramLists: instance.vst3ProgramLists,
-      vst3NoteExpressions: instance.vst3NoteExpressions
-    }),
-    layout: clonePluginLayout(instance.layout),
-    latencySamples: instance.pluginLatencySamples,
-    tailSamples: instance.pluginTailSamples,
-    infiniteTail: instance.pluginInfiniteTail
-  };
 }
 
 function destroyInstance(instanceId, session) {

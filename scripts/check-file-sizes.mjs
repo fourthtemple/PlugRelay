@@ -11,7 +11,6 @@ const NEAR_LIMIT_BUDGETS = new Map([
   ["native/bridge-daemon/src/Lv2HostWorkerSupport.cpp", 1056],
   ["native/bridge-daemon/src/Vst3HostWorker.cpp", 1059],
   ["native/bridge-daemon/src/Vst3HostWorkerSupport.cpp", 1086],
-  ["scripts/mock-daemon.mjs", 1121],
   ["scripts/security-smoke.mjs", 1002]
 ]);
 
