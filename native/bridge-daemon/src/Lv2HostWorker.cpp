@@ -7,6 +7,7 @@
 #include "SoundBridge/Lv2HostWorkerSupport.h"
 #include "SoundBridge/Lv2StateSupport.h"
 #include "SoundBridge/NativePlugin.h"
+#include "SoundBridge/NativeFileGrantSupport.h"
 
 #ifndef _WIN32
 #include <dlfcn.h>
@@ -35,6 +36,7 @@ namespace {
 
 using namespace lv2_abi;
 using namespace lv2_worker;
+using namespace worker_file_grants;
 
 struct DlCloser {
   void operator()(void* handle) const {
@@ -1019,6 +1021,12 @@ int runLv2HostWorkerNative(int argc, char** argv) {
             continue;
           }
           std::cout << host.setState(stateText) << std::endl;
+          continue;
+        }
+
+        if (command == "fileGrant") {
+          host.setState(readSingleStateFile(parseFileGrantCommand(stream), kMaxWorkerStateBytes));
+          std::cout << fileGrantAppliedJson() << std::endl;
           continue;
         }
 

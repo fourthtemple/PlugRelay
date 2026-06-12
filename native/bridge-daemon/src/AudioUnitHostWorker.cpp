@@ -3,6 +3,7 @@
 #include "SoundBridge/AudioUnitHostWorkerSupport.h"
 #include "SoundBridge/Base64.h"
 #include "SoundBridge/NativePlugin.h"
+#include "SoundBridge/NativeFileGrantSupport.h"
 
 #ifdef SOUNDBRIDGE_MACOS
 #include <AudioToolbox/AudioToolbox.h>
@@ -29,6 +30,7 @@ namespace {
 #ifdef SOUNDBRIDGE_MACOS
 
 using namespace audio_unit_worker;
+using namespace worker_file_grants;
 
 class HostedAudioUnit {
 public:
@@ -901,6 +903,12 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
             continue;
           }
           std::cout << host.setState(stateText) << std::endl;
+          continue;
+        }
+
+        if (command == "fileGrant") {
+          host.setState(readSingleStateFile(parseFileGrantCommand(stream), kMaxWorkerStateBytes));
+          std::cout << fileGrantAppliedJson() << std::endl;
           continue;
         }
 

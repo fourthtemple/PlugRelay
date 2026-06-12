@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +24,7 @@ const FORMATS = new Set(
 );
 
 let requestSeq = 0;
+const FILE_GRANT_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-probe-grants-"));
 
 const port = await reservePort();
 const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
@@ -45,6 +49,7 @@ try {
   }
 } finally {
   daemon.kill("SIGKILL");
+  fs.rmSync(FILE_GRANT_ROOT, { force: true, recursive: true });
 }
 
 async function runProbe(socket) {
@@ -139,6 +144,7 @@ async function probePlugin(socket, session, plugin) {
     const state = await phase(result, "getState", () => request(socket, "getState", { instanceId }, true, session));
     if (typeof state.state === "string" && state.state.length > 0) {
       await phase(result, "setState", () => request(socket, "setState", { instanceId, state: state.state }, true, session));
+      await probeFileGrantStateRestore(socket, session, plugin, instanceId, state, result);
     }
 
     await phase(result, "getLatency", () =>
@@ -247,6 +253,38 @@ async function probeNativeEditorBroker(socket, session, plugin, instanceId, resu
   );
 }
 
+async function probeFileGrantStateRestore(socket, session, plugin, instanceId, state, result) {
+  const stateText = nativeStateFileText(plugin.format, state.state);
+  if (!stateText) {
+    result.fileGrantStateRestore = "skipped";
+    return;
+  }
+  const statePath = path.join(FILE_GRANT_ROOT, `${safeFilename(plugin.pluginId)}.state`);
+  fs.writeFileSync(statePath, stateText, "utf8");
+  let grantId = "";
+  try {
+    const grant = await phase(result, "createStateFileGrant", () =>
+      request(socket, "createFileGrant", { path: statePath, purpose: "state", access: "read", kind: "file" }, true, session)
+    );
+    grantId = grant.grantId;
+    await phase(result, "attachStateFileGrant", () =>
+      request(socket, "attachFileGrant", { instanceId, grantId, purpose: "state", access: "read", kind: "file" }, true, session)
+    );
+    const restored = await phase(result, "useFileGrantRestoreState", () =>
+      request(socket, "useFileGrant", { instanceId, grantId, operation: "restoreState" }, true, session)
+    );
+    assertProbe(restored.applied === true, "bad_file_grant_restore", "file grant state restore was not applied");
+    assertNoNativeLaunchData(restored, "file grant restore response");
+    result.fileGrantStateRestore = "applied";
+  } finally {
+    if (grantId) {
+      await request(socket, "detachFileGrant", { instanceId, grantId }, true, session).catch(() => undefined);
+      await request(socket, "revokeFileGrant", { grantId }, true, session).catch(() => undefined);
+    }
+    fs.rmSync(statePath, { force: true });
+  }
+}
+
 async function phase(result, name, operation) {
   const started = Date.now();
   try {
@@ -257,6 +295,38 @@ async function phase(result, name, operation) {
     result.phases.push({ name, ok: false, elapsedMs: Date.now() - started, error: errorSummary(error) });
     throw error;
   }
+}
+
+function nativeStateFileText(format, stateEnvelope) {
+  let parsed;
+  try {
+    parsed = JSON.parse(Buffer.from(String(stateEnvelope), "base64").toString("utf8"));
+  } catch {
+    return "";
+  }
+  const nativeState = parsed?.nativeState;
+  if (!nativeState || nativeState.format !== format) {
+    return "";
+  }
+  if (format === "vst3") {
+    const component = String(nativeState.component ?? "");
+    const controller = String(nativeState.controller ?? "");
+    if (!component && !controller) {
+      return "";
+    }
+    return `${component || "-"} ${controller || "-"}\n`;
+  }
+  if (format === "au" || format === "lv2") {
+    const state = String(nativeState.state ?? "");
+    return state ? `${state}\n` : "";
+  }
+  return "";
+}
+
+function safeFilename(value) {
+  return String(value ?? "plugin")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .slice(0, 120) || "plugin";
 }
 
 function createInstancePayload(plugin) {
@@ -286,7 +356,17 @@ function assertNativeEditorResponse(response, plugin, instanceId) {
 }
 
 function assertNoNativeLaunchData(value, context) {
-  const forbiddenKeys = new Set(["brokerSessionId", "bundlePath", "componentPath", "diagnostics", "executablePath", "nativeHost", "path"]);
+  const forbiddenKeys = new Set([
+    "absolutePath",
+    "brokerSessionId",
+    "bundlePath",
+    "componentPath",
+    "diagnostics",
+    "executablePath",
+    "nativeHost",
+    "path",
+    "rootId"
+  ]);
   const stack = [value];
   while (stack.length > 0) {
     const current = stack.pop();
@@ -412,7 +492,9 @@ function daemonEnvironment(port) {
     SOUNDBRIDGE_HOST: HOST,
     SOUNDBRIDGE_PORT: String(port),
     SOUNDBRIDGE_PAIRING_TOKEN: PAIRING_TOKEN,
-    SOUNDBRIDGE_ALLOWED_ORIGINS: ORIGIN
+    SOUNDBRIDGE_ALLOWED_ORIGINS: ORIGIN,
+    SOUNDBRIDGE_FILE_GRANT_ROOTS: FILE_GRANT_ROOT,
+    SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS: "1"
   };
   if (PROBE_NATIVE_EDITOR_BROKER) {
     const configuredPath = String(process.env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH ?? "").trim();

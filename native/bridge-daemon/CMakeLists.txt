@@ -16,6 +16,7 @@ add_executable(soundbridge-daemon
   src/Lv2StateSupport.cpp
   src/Lv2Scanner.cpp
   src/NativePlugin.cpp
+  src/NativeFileGrantSupport.cpp
   src/PluginCatalog.cpp
   src/Vst3Scanner.cpp
   src/Vst3Host.cpp

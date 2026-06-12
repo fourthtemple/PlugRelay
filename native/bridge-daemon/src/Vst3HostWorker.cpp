@@ -3,6 +3,7 @@
 #include "SoundBridge/Base64.h"
 #include "SoundBridge/ExampleInstrumentRenderer.h"
 #include "SoundBridge/NativePlugin.h"
+#include "SoundBridge/NativeFileGrantSupport.h"
 #include "SoundBridge/Vst3HostWorkerSupport.h"
 
 #ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
@@ -47,6 +48,7 @@ namespace {
 #ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
 
 using namespace vst3_worker;
+using namespace worker_file_grants;
 
 class HostedVst3Effect {
 public:
@@ -1011,6 +1013,13 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
             controllerStateText = "-";
           }
           std::cout << host.setState(componentStateText, controllerStateText) << std::endl;
+          continue;
+        }
+
+        if (command == "fileGrant") {
+          const auto stateFile = readDualStateFile(parseFileGrantCommand(stream), kMaxWorkerStateBytes);
+          host.setState(stateFile.primary, stateFile.secondary);
+          std::cout << fileGrantAppliedJson() << std::endl;
           continue;
         }
 

@@ -33,7 +33,8 @@ export function createDaemonFileGrantOperations({
     try {
       result = await instance.worker.useFileGrant({ grant, operation });
     } catch (error) {
-      if (String(error?.message ?? error).includes("unknown_command")) {
+      const message = String(error?.message ?? error);
+      if (message.includes("unknown_command") || message.includes("unsupported_file_grant_operation")) {
         throw makeProtocolError("unsupported_file_grant_operation", "This plugin worker does not support file grant operations.");
       }
       throw makeProtocolError("file_grant_operation_failed", "The plugin worker failed while consuming this file grant.");
