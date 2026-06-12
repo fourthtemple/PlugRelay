@@ -143,7 +143,8 @@ export function createNativeWorkerProcesses({
         const line = rawLine.trim();
         const pending = this.pending.shift();
         if (!pending) {
-          continue;
+          this.abortWorker(workerUnexpectedStdoutError());
+          return;
         }
 
         clearTimeout(pending.timeout);
@@ -406,7 +407,8 @@ export function createNativeWorkerProcesses({
 
         const pending = this.pending.shift();
         if (!pending) {
-          continue;
+          this.abortWorker(workerUnexpectedStdoutError());
+          return;
         }
 
         clearTimeout(pending.timeout);
@@ -592,6 +594,10 @@ function workerStdoutLineError(maxBytes) {
 
 function workerStdoutParseError(error) {
   return new Error(`worker_stdout_malformed: worker stdout was not valid JSON (${String(error?.message ?? error)})`);
+}
+
+function workerUnexpectedStdoutError() {
+  return new Error("worker_stdout_unexpected: worker emitted stdout without a pending command");
 }
 
 function workerStderrLineError(maxBytes) {

@@ -114,6 +114,21 @@ process.stdin.on("data", () => {
 setTimeout(() => {}, 30000);
 `
   );
+  const unsolicitedExampleWorkerPath = writeExecutable(
+    "unsolicited-example-worker.mjs",
+    `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ ok: true }) + "\\n");
+setTimeout(() => {}, 30000);
+`
+  );
+  const unsolicitedNativeWorkerPath = writeExecutable(
+    "unsolicited-native-worker.mjs",
+    `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
+process.stdout.write(JSON.stringify({ ok: true }) + "\\n");
+setTimeout(() => {}, 30000);
+`
+  );
   const hangingNativeWorkerPath = writeExecutable(
     "hanging-native-worker.mjs",
     `#!/usr/bin/env node
@@ -254,6 +269,32 @@ setTimeout(() => {}, 30000);
   check(invalidNativeReadyWorker.process?.killed === true, "invalid-ready native host worker process is killed");
   invalidNativeReadyWorker.destroy();
 
+  const unsolicitedExampleWorkers = createTestWorkers(nativeWorkerPath);
+  const unsolicitedExampleWorker = new unsolicitedExampleWorkers.ExampleInstrumentWorker(unsolicitedExampleWorkerPath);
+  await waitForKilled(unsolicitedExampleWorker);
+  check(unsolicitedExampleWorker.process?.killed === true, "unsolicited-stdout example instrument worker process is killed");
+  await expectRejected(
+    () => unsolicitedExampleWorker.render({ frames: 1, sampleRate: 48000, gain: 0.5, tone: 0.5, detune: 0.5 }),
+    "worker is not writable",
+    "example instrument workers reject commands after unsolicited stdout"
+  );
+  unsolicitedExampleWorker.destroy();
+
+  const unsolicitedNativeWorkers = createTestWorkers(unsolicitedNativeWorkerPath);
+  const unsolicitedNativeWorker = new unsolicitedNativeWorkers.NativeHostWorker(
+    { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
+    nativeWorkerInstance()
+  );
+  await unsolicitedNativeWorker.ready;
+  await waitForKilled(unsolicitedNativeWorker);
+  check(unsolicitedNativeWorker.process?.killed === true, "unsolicited-stdout native host worker process is killed");
+  await expectRejected(
+    () => unsolicitedNativeWorker.getParameters(),
+    "worker is not writable",
+    "native host workers reject commands after unsolicited stdout"
+  );
+  unsolicitedNativeWorker.destroy();
+
   const hangingWorkers = createTestWorkers(hangingNativeWorkerPath);
   const hangingWorker = new hangingWorkers.NativeHostWorker(
     { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
@@ -355,6 +396,15 @@ async function expectRejected(operation, expectedText, message) {
     fail(message);
   } catch (error) {
     check(String(error?.message ?? error).includes(expectedText), message);
+  }
+}
+
+async function waitForKilled(worker) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (worker.process?.killed === true) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
 
