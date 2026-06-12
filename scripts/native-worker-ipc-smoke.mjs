@@ -10,6 +10,7 @@ import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
 import { assertNoNativeLaunchData, nativeStateFileText } from "./installed-plugin-probe-file-grants.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { firstListedPreset, firstVst3ProgramDataTarget } from "./installed-plugin-probe-programs.mjs";
+import { createInstalledProbeReporter, installedProbeReportMode, summarizeProbeResults } from "./installed-plugin-probe-reporting.mjs";
 import { writeNativeWorkerIpcFixtures } from "./native-worker-ipc-fixtures.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
@@ -61,6 +62,56 @@ try {
   check(
     badProbeFormatCode?.includes("unsupported format"),
     "installed plugin probe rejects unsupported format filters"
+  );
+  check(
+    installedProbeReportMode({ SOUNDBRIDGE_PROBE_REPORT: "summary" }) === "summary",
+    "installed plugin probe accepts summary report mode"
+  );
+  const coverageResults = [
+    {
+      ok: true,
+      listedPreset: "applied",
+      vst3ProgramData: "restored",
+      parameterDisplayInput: "applied",
+      fileGrantStateRestore: "applied",
+      fileGrantPresetLoad: "applied",
+      fileGrantStateSave: "applied",
+      fileGrantSavedStateRestore: "applied",
+      automationLanePointCount: 2,
+      nativeEditor: { transport: "native-broker" }
+    },
+    {
+      ok: true,
+      listedPreset: "skipped",
+      vst3ProgramData: "skipped-format",
+      parameterDisplayInput: "skipped",
+      automationLaneSkipped: "lv2-block-size-profile"
+    }
+  ];
+  const coverageSummary = summarizeProbeResults(coverageResults, { nativeEditorBroker: true });
+  check(
+    coverageSummary.coverage.listedPresets.applied === 1 &&
+      coverageSummary.coverage.vst3ProgramData.restored === 1 &&
+      coverageSummary.coverage.automationLanes.applied === 1 &&
+      coverageSummary.coverage.nativeEditor.opened === 1,
+    "installed plugin probe summarizes feature coverage"
+  );
+  check(
+    summarizeProbeResults(coverageResults).coverage.nativeEditor["not-requested"] === 2,
+    "installed plugin probe marks native editor coverage as not requested by default"
+  );
+  const coverageLines = [];
+  createInstalledProbeReporter({
+    formats: new Set(["vst3", "au", "lv2"]),
+    maxBlockSize: 64,
+    mode: "summary",
+    nativeEditorBroker: true,
+    stream: { log: (line) => coverageLines.push(line) }
+  }).printSummary(coverageResults);
+  check(
+    coverageLines.some((line) => line === "Feature coverage:") &&
+      coverageLines.some((line) => line.includes("VST3 program data: 1 restored, 1 skipped-format")),
+    "installed plugin probe summary prints feature coverage"
   );
   const vst3ProbeState = nativeStateEnvelope({
     format: "vst3",

@@ -174,6 +174,8 @@ async function probePlugin(socket, session, plugin) {
         )
       );
       await probeParameterDisplayInput(socket, session, instanceId, writableParameter, result);
+    } else {
+      result.parameterDisplayInput = "skipped-no-writable-parameter";
     }
 
     const state = await phase(result, "getState", () => request(socket, "getState", { instanceId }, true, session));
@@ -245,6 +247,8 @@ async function probePlugin(socket, session, plugin) {
       automationLaneApplied = true;
     } else if (writableParameter && restrictedLv2BlockProfile) {
       result.automationLaneSkipped = "lv2-block-size-profile";
+    } else {
+      result.automationLaneSkipped = "no-writable-parameter";
     }
 
     const midiEvents = midiEventsForBlock(plugin.format, layoutBlockSize(result.layout));
