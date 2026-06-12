@@ -133,6 +133,36 @@ bool parameterIsAutomatable(const Steinberg::Vst::ParameterInfo& info);
 void checkResult(Steinberg::tresult result, const std::string& operation);
 Steinberg::Vst::SpeakerArrangement arrangementForChannels(std::uint32_t channels);
 std::uint32_t channelsForArrangement(Steinberg::Vst::SpeakerArrangement arrangement, std::uint32_t fallbackChannels);
+std::uint32_t defaultBusChannels(
+    Steinberg::Vst::IComponent* component,
+    Steinberg::Vst::BusDirection direction,
+    Steinberg::int32 index,
+    std::uint32_t fallback);
+std::vector<Steinberg::Vst::SpeakerArrangement> desiredBusArrangements(
+    Steinberg::Vst::IComponent* component,
+    Steinberg::Vst::BusDirection direction,
+    Steinberg::int32 busCount,
+    std::uint32_t mainChannels);
+std::uint32_t negotiatedBusChannels(
+    Steinberg::Vst::IAudioProcessor* processor,
+    Steinberg::Vst::BusDirection direction,
+    Steinberg::int32 index,
+    Steinberg::Vst::SpeakerArrangement fallbackArrangement,
+    std::uint32_t fallbackChannels,
+    bool requireOutput);
+std::vector<std::uint32_t> negotiatedBusChannelList(
+    Steinberg::Vst::IComponent* component,
+    Steinberg::Vst::IAudioProcessor* processor,
+    Steinberg::Vst::BusDirection direction,
+    Steinberg::int32 busCount,
+    const std::vector<Steinberg::Vst::SpeakerArrangement>& arrangements,
+    std::uint32_t requestedOutputChannels,
+    bool requireMainOutput);
+std::string busLayoutsToJson(
+    Steinberg::Vst::IComponent* component,
+    Steinberg::Vst::BusDirection direction,
+    Steinberg::int32 busCount,
+    const std::vector<std::uint32_t>& activeChannels);
 const VST3::Hosting::ClassInfo* findAudioClass(const VST3::Hosting::PluginFactory::ClassInfos& classes);
 std::string parameterInfoToJson(
     const Steinberg::Vst::ParameterInfo& info,
