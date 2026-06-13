@@ -2,7 +2,7 @@
 
 This roadmap tracks what still needs to be completed for SoundBridge to become a dependable open standard and reference implementation for hosting local VST3, Audio Unit, and LV2 plugins from browser or desktop hosts.
 
-The current priority is core hosting compatibility first, with VST3 as the primary near-term target. OS-level sandboxing remains the final hardening layer, after the host adapters are feature-complete enough to exercise real plugin behavior.
+The current priority is core hosting compatibility first, with VST3 as the primary near-term target. The core goal is an auditable bridge boundary: normally installed plugins should be able to run much as they do in desktop DAWs, while websites and local hosts only receive the bounded SoundBridge protocol instead of arbitrary access to the user's machine. OS-level sandboxing is a real but extended hardening profile, not the definition of project completion, because many commercial plugins expect existing license files, cache folders, sample libraries, helper services, and vendor authorization workflows in the normal user environment.
 
 ## Current Baseline
 
@@ -110,25 +110,33 @@ The reference implementation is macOS-first today.
 - Publish the native editor broker, file grant broker, and worker IPC contracts clearly enough for independent implementations.
 - Add versioning guidance for protocol evolution and backward compatibility.
 
-## Last-Stage Hardening
+## Extended Sandboxed Worker Profile
 
-OS-level plugin sandboxing is intentionally last because the sandbox profile has to match real host behavior.
+OS-level plugin sandboxing is a serious future endeavor, but it is an extended security profile beyond the core compatibility target. A sandbox can improve containment for malicious or untrusted plugins, enterprise deployments, public machines, and stricter app-distribution environments, but it may also break ordinary commercial plugin behavior that depends on license managers, caches, sample libraries, helper services, or vendor authorization state already present in the user's account.
 
-- macOS: evaluate App Sandbox and seatbelt profiles for worker processes.
-- Windows: evaluate AppContainer, job objects, restricted tokens, and filesystem/network policy options.
-- Linux: evaluate namespaces, seccomp, Landlock, Bubblewrap, or Flatpak-style isolation.
-- Deny ambient filesystem access by default and grant only explicit broker-approved paths.
-- Deny network access where the platform sandbox can enforce it.
-- Keep plugin crashes isolated to the worker process.
-- Preserve the same sandbox architecture for web apps and desktop apps, including JUCE-based local hosts.
+SoundBridge should describe these as explicit capability levels rather than a single universal endpoint:
+
+- `compatibility-worker`: plugin DSP runs in a separate worker process under the normal user environment, similar to current desktop DAWs; the browser still sees only the bounded SoundBridge protocol.
+- `brokered-files`: user-visible file workflows use explicit grants and path-free browser responses, while plugin-internal license/cache behavior may continue to use the normal user environment.
+- `native-editor-broker`: native UI is isolated from the daemon behind a separate broker with explicit policy for file dialogs, clipboard, drag/drop, focus, and attached grants.
+- `sandboxed-worker`: plugin workers run under an OS containment policy that narrows filesystem and process access where the platform can enforce it.
+- `network-restricted-worker`: sandboxed workers also restrict outbound network access where the platform supports it.
+
+Future sandboxing work should evaluate:
+
+- macOS App Sandbox and seatbelt profiles for worker processes.
+- Windows AppContainer, job objects, restricted tokens, and filesystem/network policy options.
+- Linux namespaces, seccomp, Landlock, Bubblewrap, or Flatpak-style isolation.
+- How to keep plugin crashes isolated to the worker process in every profile.
+- How web apps and JUCE-based local hosts can select the same worker-boundary profiles without changing the protocol semantics.
 
 ## Done Criteria
 
-SoundBridge is ready to call production-grade when:
+SoundBridge is ready to call production-grade for the core compatibility profile when:
 
 - a normal developer can install the bridge, pair a site, scan plugins, create VST3/AU/LV2 instances, and process audio without reading internal docs
 - common commercial and open-source VST3/AU/LV2 plugins work through the compatibility probe
 - native editor and file workflows are brokered, opt-in, and path-free from the browser perspective
 - all host adapters have smoke coverage for malformed input, oversized payloads, ownership violations, and worker failure
 - the build ships with platform packaging, update, signing, and first-run approval UX
-- OS-level worker sandboxing is implemented for the supported target platforms
+- sandboxed-worker and network-restricted-worker modes are documented as extended profiles that do not block the core compatibility release, but remain real future work for stricter deployments

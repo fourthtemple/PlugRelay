@@ -114,4 +114,4 @@ Native editor sessions keep the same ownership model as generic editor sessions:
 - editor sessions expire with the configured editor TTL
 - editor cleanup runs when the editor closes, the instance is destroyed, the WebSocket session disconnects, or the editor expires
 
-The broker must treat plugin UI code as untrusted native code. Platform implementations should broker file dialogs, clipboard, drag/drop, focus, window ownership, and any attached file-grant use explicitly, then add OS-level sandboxing after the core host behavior is complete.
+The broker must treat plugin UI code as untrusted native code. Platform implementations should broker file dialogs, clipboard, drag/drop, focus, window ownership, and any attached file-grant use explicitly. OS-level sandboxing belongs in a separately advertised hardened profile after core host behavior is complete, because some commercial plugin UIs depend on normal user-environment license, cache, helper, and authorization workflows.

@@ -59,7 +59,9 @@ flowchart LR
 
 The worker process boundary is important. A bad plugin should be able to kill its own worker without taking down the daemon, browser, or other plugin instances.
 
-The final hardening layer is an operating-system sandbox around third-party plugin workers. SoundBridge should keep building the core host behavior first, while preserving worker isolation and bounded payloads. On macOS, the sandboxing phase should evaluate the platform sandbox/App Sandbox model or a constrained seatbelt profile where distribution rules permit it, with plugin code receiving only the brokered audio, MIDI, parameter, and state access it needs.
+The core architectural target is a compatibility worker boundary, not a universal sandbox-first runtime. Many real plugins expect the same normal user environment they see in desktop DAWs, including license files, caches, sample libraries, helper services, and vendor authorization state. SoundBridge's boundary is that browser and desktop hosts talk to the bounded protocol, while plugin code stays in worker processes behind pairing, ownership checks, resource limits, and brokered file workflows.
+
+An operating-system sandbox around third-party plugin workers is still a real extended security profile. It should be added after core host behavior is understood well enough to avoid accidentally breaking normal plugins, and it should be advertised separately for deployments that prefer stricter containment over maximum plugin compatibility.
 
 ## Source Size Fitness
 

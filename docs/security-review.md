@@ -57,7 +57,7 @@ This file is an audit trail, not an active bug backlog. The original security fi
 | Worker diagnostic log sanitization | Fixed | Plugin-controlled worker stderr remains byte-budgeted and is escaped before daemon logging, and the advertised display cap prevents long diagnostic lines from forging log structure or affecting operator terminals. |
 | AU realtime host-profile gating | Fixed | AU entries are classified with bounded `audioUnitHostProfile` metadata. Realtime main-bus units plus bounded realtime Apple utility profiles for format conversion, multi-source merger, and multi-output splitter are hostable through the current worker, while AU offline effects and incompatible Apple system AUAudioMix/AUMultiSplitter entries stay visible as discovery-only plugins with bounded display reasons instead of spawning incompatible workers. |
 | Full plugin-hosting surface | Open roadmap | AU offline/splitter/format-converter profiles, remaining VST3 bus/program-data/note-expression edge cases, LV2 UI hosting and advanced extension support, plugin UI, and broader file access need feature-specific controls as they are implemented. |
-| Third-party worker sandboxing | Last-stage hardening | Worker processes isolate crashes today, but OS-level sandboxing for malicious third-party plugin code is intentionally tracked after the core host features. |
+| Third-party worker sandboxing | Extended hardening profile | Worker processes isolate crashes today, but OS-level sandboxing for malicious third-party plugin code is intentionally tracked as a separate security profile after the core compatibility boundary. |
 
 ## Open Roadmap Items
 
@@ -78,9 +78,9 @@ Full plugin hosting should be tracked as security-sensitive roadmap work, not ju
 
 ### OS-level Worker Sandboxing
 
-SoundBridge should add an operating-system sandbox around third-party plugin worker processes as the final hardening layer after the core host features are working. On macOS, the host should evaluate App Sandbox and seatbelt-profile options, with workers receiving only the brokered audio, MIDI, parameter, and state access they need.
+SoundBridge should treat operating-system sandboxing around third-party plugin workers as an extended hardening profile, not as the core definition of success. The compatibility profile may need to run plugins in the normal user environment because real commercial plugins often depend on license files, caches, sample libraries, helper services, vendor authorization state, and network behavior that already exist for desktop DAWs.
 
-This is separate from the fixed findings below. The current worker-process boundary contains plugin crashes and narrows daemon blast radius, but it does not fully contain a malicious plugin.
+This is separate from the fixed findings below. The current worker-process boundary contains plugin crashes and narrows daemon blast radius, but it does not fully contain a malicious plugin. A future sandboxed-worker profile should evaluate macOS, Windows, and Linux containment options and advertise stricter filesystem/network behavior explicitly, with the understanding that some plugins may only work in compatibility-worker mode.
 
 ## Resolved Findings
 
