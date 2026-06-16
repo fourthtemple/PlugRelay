@@ -162,11 +162,13 @@ export function exerciseInstalledProbeSupport({ check }) {
       midiEventCount: 14,
       midiControllerEventProfile: {
         eventCount: 6,
+        controllerFamilyCount: 3,
         flags: [
           "controller-events",
           "type:controlChange",
           "type:pitchBend",
           "type:channelPressure",
+          "multi-controller-family",
           "non-main-event-bus",
           "non-main-channel"
         ],
@@ -328,6 +330,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].vst3EventChannels) === JSON.stringify([0, 3]) &&
       coverageSummary.matrix[0].midiEventCount === 14 &&
       coverageSummary.matrix[0].midiControllerEventCount === 6 &&
+      coverageSummary.matrix[0].midiControllerFamilyCount === 3 &&
+      coverageSummary.matrix[0].midiControllerFlags.includes("multi-controller-family") &&
       coverageSummary.matrix[0].midiControllerFlags.includes("non-main-event-bus") &&
       coverageSummary.matrix[0].midiControllerFlags.includes("type:controlChange") &&
       JSON.stringify(coverageSummary.matrix[0].midiControllerEventTypes) ===

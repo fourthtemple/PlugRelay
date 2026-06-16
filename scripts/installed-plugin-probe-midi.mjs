@@ -43,10 +43,12 @@ export function summarizeProbeMidiControllerEvents(events) {
       event?.type === "pitchBend" ||
       event?.type === "channelPressure"
   );
+  const types = knownControllerEventTypes(controllerEvents);
   return {
     eventCount: controllerEvents.length,
-    flags: midiControllerFlags(controllerEvents),
-    types: knownControllerEventTypes(controllerEvents),
+    controllerFamilyCount: types.length,
+    flags: midiControllerFlags(controllerEvents, types),
+    types,
     controllers: uniqueSortedIntegers(controllerEvents.map((event) => event.controller), 0, 127),
     channels: uniqueSortedIntegers(controllerEvents.map((event) => event.channel ?? 0), 0, 15),
     eventBuses: uniqueSortedIntegers(controllerEvents.map((event) => event.busIndex ?? 0), 0, 31)
@@ -56,6 +58,7 @@ export function summarizeProbeMidiControllerEvents(events) {
 function emptyMidiControllerProfile() {
   return {
     eventCount: 0,
+    controllerFamilyCount: 0,
     flags: ["no-controller-events"],
     types: [],
     controllers: [],
@@ -69,13 +72,16 @@ function knownControllerEventTypes(events) {
   return ["controlChange", "pitchBend", "channelPressure"].filter((type) => present.has(type));
 }
 
-function midiControllerFlags(events) {
+function midiControllerFlags(events, types = knownControllerEventTypes(events)) {
   if (events.length === 0) {
     return ["no-controller-events"];
   }
   const flags = ["controller-events"];
-  for (const type of knownControllerEventTypes(events)) {
+  for (const type of types) {
     flags.push(`type:${type}`);
+  }
+  if (types.length > 1) {
+    flags.push("multi-controller-family");
   }
   if (events.some((event) => Number.isInteger(event.busIndex) && event.busIndex > 0)) {
     flags.push("non-main-event-bus");

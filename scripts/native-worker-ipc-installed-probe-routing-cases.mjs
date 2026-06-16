@@ -253,6 +253,8 @@ function exerciseProbeMidiCoverage({ check }) {
       vst3MidiEvents.some((event) => event.type === "channelPressure" && event.busIndex === 1) &&
       midiControllerEventCount(vst3MidiEvents) === 6 &&
       vst3MidiControllerProfile.eventCount === 6 &&
+      vst3MidiControllerProfile.controllerFamilyCount === 3 &&
+      vst3MidiControllerProfile.flags.includes("multi-controller-family") &&
       vst3MidiControllerProfile.flags.includes("non-main-event-bus") &&
       vst3MidiControllerProfile.flags.includes("non-main-channel") &&
       JSON.stringify(vst3MidiControllerProfile.types) === JSON.stringify(["controlChange", "pitchBend", "channelPressure"]) &&
