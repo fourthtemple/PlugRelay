@@ -19,6 +19,10 @@ import {
   writeVst3NativeWorkerIpcFixtures
 } from "./native-worker-ipc-vst3-fixtures.mjs";
 import { exerciseVst3ProgramDataSupport } from "./native-worker-ipc-vst3-cases.mjs";
+import {
+  exerciseVst3ProgramDataNativeWorker,
+  writeVst3ProgramDataNativeWorkerIpcFixtures
+} from "./native-worker-ipc-vst3-program-data-fixtures.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
@@ -93,6 +97,7 @@ try {
     noteExpressionNativeWorkerPath,
     weirdMetadataNativeWorkerPath
   } = writeVst3NativeWorkerIpcFixtures({ tempDir });
+  const { programDataNativeWorkerPath } = writeVst3ProgramDataNativeWorkerIpcFixtures({ tempDir });
 
   const workers = createTestWorkers(nativeWorkerPath);
 
@@ -131,6 +136,13 @@ try {
     createTestWorkers,
     tempDir,
     workerPath: weirdMetadataNativeWorkerPath
+  });
+
+  await exerciseVst3ProgramDataNativeWorker({
+    check,
+    createTestWorkers,
+    tempDir,
+    workerPath: programDataNativeWorkerPath
   });
 
   const fileGrantOperation = await exerciseDaemonFileGrantOperation({

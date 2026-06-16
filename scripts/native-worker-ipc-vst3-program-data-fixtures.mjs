@@ -1,0 +1,123 @@
+import fs from "node:fs";
+import path from "node:path";
+
+export async function exerciseVst3ProgramDataNativeWorker({
+  check,
+  createTestWorkers,
+  tempDir,
+  workerPath
+}) {
+  const programDataWorkers = createTestWorkers(workerPath, {
+    maxWorkerCommandBytes: 4096,
+    maxWorkerPendingCommandBytes: 4096,
+    maxWorkerStdoutLineBytes: 2048
+  });
+  const programDataWorker = new programDataWorkers.NativeHostWorker(
+    { format: "vst3", bundlePath: tempDir, renderEngine: "native-vst3" },
+    vst3ProgramDataInstance()
+  );
+
+  try {
+    await programDataWorker.ready;
+    const exported = await programDataWorker.getVst3ProgramData(2147483647, 255);
+    check(
+      exported?.programListId === 2147483647 &&
+        exported.programIndex === 255 &&
+        exported.size === 0 &&
+        exported.data === "",
+      "native VST3 workers preserve empty program-data exports"
+    );
+
+    const restoredEmpty = await programDataWorker.setVst3ProgramData(-2147483648, 0, "");
+    const restoredBytes = await programDataWorker.setVst3ProgramData(7, 2, "YWI=");
+    check(
+      restoredEmpty?.restored === "empty" && restoredBytes?.restored === "bytes",
+      "native VST3 workers encode signed and empty program-data restore commands"
+    );
+  } finally {
+    programDataWorker.destroy();
+  }
+}
+
+export function writeVst3ProgramDataNativeWorkerIpcFixtures({ tempDir }) {
+  return {
+    programDataNativeWorkerPath: writeVst3ProgramDataNativeWorker(tempDir)
+  };
+}
+
+function vst3ProgramDataInstance() {
+  return {
+    sampleRate: 48000,
+    maxBlockSize: 8,
+    inputChannels: 0,
+    outputChannels: 1,
+    kind: "instrument",
+    layout: {
+      requestedInputChannels: 0,
+      requestedOutputChannels: 1,
+      inputChannels: 0,
+      outputChannels: 1,
+      inputBuses: 0,
+      outputBuses: 1,
+      inputBusLayouts: [],
+      outputBusLayouts: [
+        {
+          index: 0,
+          direction: "output",
+          mediaType: "audio",
+          name: "Main Output",
+          type: "main",
+          channels: 1,
+          active: true
+        }
+      ],
+      sampleRate: 48000,
+      maxBlockSize: 8
+    }
+  };
+}
+
+function writeVst3ProgramDataNativeWorker(tempDir) {
+  return writeExecutable(
+    tempDir,
+    "vst3-program-data-native-worker.mjs",
+    `#!/usr/bin/env node
+const responses = new Map([
+  [
+    "getProgramData 2147483647 255",
+    { programData: { format: "vst3", programListId: 2147483647, programIndex: 255, data: "" } }
+  ],
+  ["setProgramData -2147483648 0 -", { ok: true, restored: "empty" }],
+  ["setProgramData 7 2 YWI=", { ok: true, restored: "bytes" }]
+]);
+
+process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
+process.stdin.setEncoding("utf8");
+let buffer = "";
+
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  while (true) {
+    const newline = buffer.indexOf("\\n");
+    if (newline < 0) {
+      return;
+    }
+    const line = buffer.slice(0, newline).trim();
+    buffer = buffer.slice(newline + 1);
+    if (line === "quit") {
+      process.exit(0);
+    }
+    process.stdout.write(JSON.stringify(responses.get(line) ?? { error: "bad_program_data_command" }) + "\\n");
+  }
+});
+setTimeout(() => {}, 30000);
+`
+  );
+}
+
+function writeExecutable(tempDir, filename, source) {
+  const file = path.join(tempDir, filename);
+  fs.writeFileSync(file, source, { mode: 0o755 });
+  fs.chmodSync(file, 0o755);
+  return file;
+}
