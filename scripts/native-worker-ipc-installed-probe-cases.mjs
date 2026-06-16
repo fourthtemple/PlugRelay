@@ -145,12 +145,14 @@ export function exerciseInstalledProbeSupport({ check }) {
           "multi-channel",
           "text-expression",
           "value-expression",
-          "invalid-note-expression"
+          "invalid-note-expression",
+          "duplicate-note-expression-type-id"
         ],
-        noteExpressionCount: 2,
+        noteExpressionCount: 3,
         valueExpressionCount: 1,
-        textExpressionCount: 1,
+        textExpressionCount: 2,
         invalidNoteExpressionCount: 1,
+        duplicateNoteExpressionTypeIdCount: 1,
         associatedParameterCount: 1,
         eventBuses: [0, 2],
         channels: [0, 3],
@@ -253,6 +255,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.vst3EventProfiles["flag:text-expression"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:value-expression"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:invalid-note-expression"] === 1 &&
+      coverageSummary.coverage.vst3EventProfiles["flag:duplicate-note-expression-type-id"] === 1 &&
       coverageSummary.coverage.vst3MidiControllerEvents.accepted === 1 &&
       coverageSummary.coverage.vst3MidiControllerEvents["skipped-format"] === 1 &&
       coverageSummary.coverage.automationLanes.applied === 1 &&
@@ -314,10 +317,11 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].busOutputChannels === 2 &&
       JSON.stringify(coverageSummary.matrix[0].busActiveInputIndexes) === JSON.stringify([0, 1]) &&
       JSON.stringify(coverageSummary.matrix[0].busActiveOutputIndexes) === JSON.stringify([0]) &&
-      coverageSummary.matrix[0].vst3NoteExpressionCount === 2 &&
+      coverageSummary.matrix[0].vst3NoteExpressionCount === 3 &&
       coverageSummary.matrix[0].vst3ValueNoteExpressionCount === 1 &&
-      coverageSummary.matrix[0].vst3TextNoteExpressionCount === 1 &&
+      coverageSummary.matrix[0].vst3TextNoteExpressionCount === 2 &&
       coverageSummary.matrix[0].vst3InvalidNoteExpressionCount === 1 &&
+      coverageSummary.matrix[0].vst3DuplicateNoteExpressionTypeIdCount === 1 &&
       coverageSummary.matrix[0].vst3AssociatedNoteExpressionCount === 1 &&
       JSON.stringify(coverageSummary.matrix[0].vst3NoteExpressionTypeIds) === JSON.stringify([0, 6]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventBuses) === JSON.stringify([0, 2]) &&

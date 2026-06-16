@@ -14,8 +14,13 @@ export function summarizeProbeVst3Events(plugin) {
   const eventBuses = uniqueSorted(expressions.map((expression) => expression.busIndex));
   const channels = uniqueSorted(expressions.map((expression) => expression.channel));
   const typeIds = uniqueSorted(expressions.map((expression) => expression.typeId));
+  const duplicateTypeIdCount = duplicateCount(expressions.map((expression) => expression.typeId));
   const textExpressionCount = expressions.filter(isTextExpression).length;
-  const flags = expressionFlags(expressions, eventBuses, channels, { invalidExpressionCount, metadataAtLimit });
+  const flags = expressionFlags(expressions, eventBuses, channels, {
+    duplicateTypeIdCount,
+    invalidExpressionCount,
+    metadataAtLimit
+  });
 
   return {
     category: expressionCategory(expressions, eventBuses, channels, invalidExpressionCount),
@@ -24,6 +29,7 @@ export function summarizeProbeVst3Events(plugin) {
     valueExpressionCount: expressions.length - textExpressionCount,
     textExpressionCount,
     invalidNoteExpressionCount: invalidExpressionCount,
+    duplicateNoteExpressionTypeIdCount: duplicateTypeIdCount,
     associatedParameterCount: expressions.filter((expression) => expression.hasAssociatedParameter).length,
     eventBuses,
     channels,
@@ -31,7 +37,7 @@ export function summarizeProbeVst3Events(plugin) {
   };
 }
 
-function expressionFlags(expressions, eventBuses, channels, { invalidExpressionCount, metadataAtLimit }) {
+function expressionFlags(expressions, eventBuses, channels, { duplicateTypeIdCount, invalidExpressionCount, metadataAtLimit }) {
   if (expressions.length === 0) {
     const flags = invalidExpressionCount > 0
       ? ["invalid-note-expression", "no-valid-note-expressions"]
@@ -45,6 +51,9 @@ function expressionFlags(expressions, eventBuses, channels, { invalidExpressionC
   const flags = ["note-expressions"];
   if (invalidExpressionCount > 0) {
     flags.push("invalid-note-expression");
+  }
+  if (duplicateTypeIdCount > 0) {
+    flags.push("duplicate-note-expression-type-id");
   }
   if (eventBuses.some((busIndex) => busIndex > 0)) {
     flags.push("non-main-event-bus");
@@ -130,6 +139,18 @@ function normalizeNoteExpression(expression) {
 function uniqueSorted(values) {
   return [...new Set(values)]
     .sort((left, right) => left - right);
+}
+
+function duplicateCount(values) {
+  const seen = new Set();
+  let duplicates = 0;
+  for (const value of values) {
+    if (seen.has(value)) {
+      duplicates += 1;
+    }
+    seen.add(value);
+  }
+  return duplicates;
 }
 
 function boundedInt(value, min, max) {
