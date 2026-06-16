@@ -17,15 +17,31 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       { id: 2, programDataSupported: true, programs: [{ index: 3 }] }
     ]
   });
+  const uniqueFallbackProgramTarget = firstVst3ProgramDataTarget({
+    vst3ProgramLists: [
+      { id: 3, programDataSupported: true, programs: [{ index: 1 }, { index: 1 }, { index: 2 }] }
+    ]
+  });
   check(
     programTarget?.programListId === 2 &&
       programTarget.programIndex === 3 &&
+      uniqueFallbackProgramTarget?.programListId === 3 &&
+      uniqueFallbackProgramTarget.programIndex === 2 &&
       firstVst3ProgramDataTarget({ vst3ProgramLists: [{ id: 4, programDataSupported: true, programs: [] }] }) === undefined &&
       firstVst3ProgramDataTarget({
         vst3ProgramLists: [{ id: "bad", programDataSupported: true, programs: [{ index: 0 }] }]
       }) === undefined &&
       firstVst3ProgramDataTarget({
         vst3ProgramLists: [{ id: 5, programDataSupported: true, programs: [{ index: -1 }, { index: 256 }] }]
+      }) === undefined &&
+      firstVst3ProgramDataTarget({
+        vst3ProgramLists: [{ id: 6, programDataSupported: true, programs: [{ index: 0 }, { index: 0 }] }]
+      }) === undefined &&
+      firstVst3ProgramDataTarget({
+        vst3ProgramLists: [
+          { id: 7, programDataSupported: true, programs: [{ index: 0 }] },
+          { id: 7, programDataSupported: true, programs: [{ index: 1 }] }
+        ]
       }) === undefined,
     "installed plugin probe selects bounded VST3 program-data targets"
   );
@@ -34,7 +50,7 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
     format: "vst3",
     vst3ProgramLists: [
       { id: 1, programDataSupported: false, programs: [{ index: 0 }] },
-      { id: 2, programDataSupported: true, programs: [{ index: 3 }, { index: 3 }, { index: "bad" }] }
+      { id: 2, programDataSupported: true, programs: [{ index: 3 }, { index: 3 }, { index: 4 }, { index: "bad" }] }
     ]
   });
   const weirdProgramDataProfile = summarizeVst3ProgramDataProfile({
@@ -44,6 +60,12 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       { id: 4, programDataSupported: true, programs: [] },
       { id: 4, programDataSupported: true, programs: [] },
       { id: 5, programDataSupported: true, programs: [{ index: 256 }] }
+    ]
+  });
+  const ambiguousProgramDataProfile = summarizeVst3ProgramDataProfile({
+    format: "vst3",
+    vst3ProgramLists: [
+      { id: 8, programDataSupported: true, programs: [{ index: 0 }, { index: 0 }] }
     ]
   });
   const missingProgramsProfile = summarizeVst3ProgramDataProfile({
@@ -59,7 +81,7 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       targetedProgramDataProfile.flags.includes("bounded-target") &&
       targetedProgramDataProfile.programListCount === 2 &&
       targetedProgramDataProfile.programDataListCount === 1 &&
-      targetedProgramDataProfile.candidateProgramCount === 2 &&
+      targetedProgramDataProfile.candidateProgramCount === 1 &&
       targetedProgramDataProfile.unsupportedProgramListCount === 1 &&
       targetedProgramDataProfile.invalidProgramIndexCount === 1 &&
       targetedProgramDataProfile.duplicateProgramIndexCount === 1 &&
@@ -73,6 +95,11 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       weirdProgramDataProfile.flags.includes("empty-program-list") &&
       weirdProgramDataProfile.flags.includes("invalid-program-index") &&
       weirdProgramDataProfile.flags.includes("duplicate-program-list-id") &&
+      ambiguousProgramDataProfile.category === "no-valid-programs" &&
+      ambiguousProgramDataProfile.candidateProgramCount === 0 &&
+      ambiguousProgramDataProfile.duplicateProgramIndexCount === 1 &&
+      ambiguousProgramDataProfile.flags.includes("duplicate-program-index") &&
+      ambiguousProgramDataProfile.flags.includes("no-valid-program-data-programs") &&
       missingProgramsProfile.category === "no-valid-programs" &&
       missingProgramsProfile.missingProgramArrayCount === 1 &&
       missingProgramsProfile.undisclosedProgramListCount === 1 &&

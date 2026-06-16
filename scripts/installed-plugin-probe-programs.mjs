@@ -118,12 +118,25 @@ export function firstListedPreset(plugin) {
 }
 
 export function firstVst3ProgramDataTarget(plugin) {
-  for (const programList of vst3ProgramLists(plugin)) {
+  const programLists = vst3ProgramLists(plugin).slice(0, MAX_PLUGIN_PROGRAM_LISTS);
+  const programListIdCounts = boundedProgramListIdCounts(programLists);
+  for (const programList of programLists) {
     const programListId = boundedProgramListId(programList?.id);
-    if (programList?.programDataSupported !== true || programListId === undefined || !Array.isArray(programList.programs)) {
+    if (
+      programList?.programDataSupported !== true ||
+      programListId === undefined ||
+      programListIdCounts.get(programListId) !== 1 ||
+      !Array.isArray(programList.programs)
+    ) {
       continue;
     }
-    const program = programList.programs.find((candidate) => boundedProgramIndex(candidate?.index) !== undefined);
+    const programIndexCounts = boundedProgramIndexCounts(programList.programs);
+    const program = programList.programs
+      .slice(0, MAX_PLUGIN_PROGRAMS)
+      .find((candidate) => {
+        const programIndex = boundedProgramIndex(candidate?.index);
+        return programIndex !== undefined && programIndexCounts.get(programIndex) === 1;
+      });
     if (program) {
       return {
         programListId,
@@ -162,6 +175,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     flags.push("no-program-lists");
   }
 
+  const programListIdCounts = boundedProgramListIdCounts(lists);
   const seenProgramListIds = new Set();
   for (const programList of lists) {
     const programListId = boundedProgramListId(programList?.id);
@@ -197,7 +211,8 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       continue;
     }
 
-    let validProgramCount = 0;
+    const programIndexCounts = boundedProgramIndexCounts(programList.programs);
+    let validProgramIndexCount = 0;
     const seenProgramIndexes = new Set();
     for (const program of programList.programs.slice(0, MAX_PLUGIN_PROGRAMS)) {
       const programIndex = boundedProgramIndex(program?.index);
@@ -208,14 +223,16 @@ export function summarizeVst3ProgramDataProfile(plugin) {
           duplicateProgramIndexCount += 1;
         }
         seenProgramIndexes.add(programIndex);
-        validProgramCount += 1;
+        validProgramIndexCount += 1;
       }
     }
-    if (validProgramCount === 0) {
+    if (validProgramIndexCount === 0) {
       flags.push("invalid-program-index");
       continue;
     }
-    candidateProgramCount += validProgramCount;
+    if (programListIdCounts.get(programListId) === 1) {
+      candidateProgramCount += [...programIndexCounts.values()].filter((count) => count === 1).length;
+    }
   }
 
   if (programDataListCount === 0 && lists.length > 0) {
@@ -269,6 +286,31 @@ function boundedProgramListId(value) {
 
 function boundedProgramIndex(value) {
   return boundedInt(value, 0, MAX_PLUGIN_PROGRAMS - 1);
+}
+
+function boundedProgramListIdCounts(programLists) {
+  const counts = new Map();
+  for (const programList of programLists) {
+    const programListId = boundedProgramListId(programList?.id);
+    if (programListId !== undefined) {
+      counts.set(programListId, (counts.get(programListId) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function boundedProgramIndexCounts(programs) {
+  const counts = new Map();
+  if (!Array.isArray(programs)) {
+    return counts;
+  }
+  for (const program of programs.slice(0, MAX_PLUGIN_PROGRAMS)) {
+    const programIndex = boundedProgramIndex(program?.index);
+    if (programIndex !== undefined) {
+      counts.set(programIndex, (counts.get(programIndex) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 function boundedInt(value, min, max) {
