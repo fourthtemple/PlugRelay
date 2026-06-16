@@ -22,6 +22,17 @@ export function midiEventsForBlock(format, frames = 64, maxBlockSize = 64) {
   return events;
 }
 
+export function midiControllerEventCount(events) {
+  if (!Array.isArray(events)) {
+    return 0;
+  }
+  return events.filter((event) =>
+    event?.type === "controlChange" ||
+      event?.type === "pitchBend" ||
+      event?.type === "channelPressure"
+  ).length;
+}
+
 function clampInt(value, min, max, fallback) {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || numeric < min || numeric > max) {

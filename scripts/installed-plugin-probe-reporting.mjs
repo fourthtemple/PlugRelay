@@ -117,6 +117,7 @@ function summarizeCompatibilityMatrix(results, options) {
       parameterMetadata: safeMatrixText(parameterMetadataStatus(result), 64),
       parameterDisplayInput: safeMatrixText(result.parameterDisplayInput ?? "missing", 64),
       automation: safeMatrixText(automationLaneStatus(result), 64),
+      vst3MidiControllerEvents: safeMatrixText(vst3MidiControllerEventStatus(result), 64),
       hostTransport: safeMatrixText(result.hostTransport ?? "missing", 64),
       fileGrantSampleLoad: safeMatrixText(result.fileGrantSampleLoad ?? "missing", 64),
       fileGrantCacheDirectoryOpen: safeMatrixText(result.fileGrantCacheDirectoryOpen ?? "missing", 64),
@@ -279,6 +280,7 @@ function summarizeFeatureCoverage(results, options) {
     fileGrantOperations: countFileGrantOperations(results),
     busLayouts: countBusLayouts(results),
     vst3EventProfiles: countVst3EventProfiles(results),
+    vst3MidiControllerEvents: countBy(results, vst3MidiControllerEventStatus),
     automationLanes: countAutomationLanes(results),
     hostTransport: countStatuses(results, "hostTransport"),
     renderSignals: countStatuses(results, "renderSignal"),
@@ -290,6 +292,15 @@ function countStatuses(results, field) {
   const counts = {};
   for (const result of results) {
     const status = result[field] === undefined ? "missing" : String(result[field]);
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function countBy(results, statusForResult) {
+  const counts = {};
+  for (const result of results) {
+    const status = String(statusForResult(result));
     counts[status] = (counts[status] ?? 0) + 1;
   }
   return counts;
@@ -336,6 +347,13 @@ function parameterMetadataStatus(result) {
     : Number.isInteger(result.parameterCount)
       ? result.parameterCount > 0 ? "listed" : "none"
       : "missing";
+}
+
+function vst3MidiControllerEventStatus(result) {
+  if (result.vst3MidiControllerEvents !== undefined) {
+    return result.vst3MidiControllerEvents;
+  }
+  return String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format";
 }
 
 function vst3ProgramListStatus(result) {
@@ -474,6 +492,7 @@ function printFeatureCoverage(coverage, stream) {
     ["file grant operations advertised", coverage.fileGrantOperations],
     ["bus layouts", coverage.busLayouts],
     ["VST3 event metadata", coverage.vst3EventProfiles],
+    ["VST3 MIDI-controller events", coverage.vst3MidiControllerEvents],
     ["automation lanes", coverage.automationLanes],
     ["host transport", coverage.hostTransport],
     ["render signal", coverage.renderSignals],

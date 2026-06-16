@@ -18,7 +18,7 @@ import {
 import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
-import { midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
+import { midiControllerEventCount, midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
 import { probeListedPreset, probeVst3ProgramData } from "./installed-plugin-probe-programs.mjs";
 import { assertProbeRenderMatchesLayout, summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
@@ -321,6 +321,10 @@ async function probePlugin(socket, session, plugin) {
       throw error;
     }
     result.midiEventCount = midiAccepted.eventCount;
+    result.midiControllerEventCount = midiControllerEventCount(midiEvents);
+    result.vst3MidiControllerEvents = String(plugin.format ?? "").toLowerCase() === "vst3"
+      ? result.midiControllerEventCount > 0 ? "accepted" : "missing"
+      : "skipped-format";
 
     const renderPayload = renderPayloadForLayout(instanceId, result.layout);
     renderPayload.transport = renderTransportContext();

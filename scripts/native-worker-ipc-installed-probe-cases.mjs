@@ -3,7 +3,7 @@ import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
-import { midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
+import { midiControllerEventCount, midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
 import { firstListedPreset, firstVst3ProgramDataTarget } from "./installed-plugin-probe-programs.mjs";
 import { assertProbeRenderMatchesLayout, summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
 import {
@@ -97,6 +97,8 @@ export function exerciseInstalledProbeSupport({ check }) {
         channels: [0, 3]
       },
       automationLanePointCount: 2,
+      midiControllerEventCount: 3,
+      vst3MidiControllerEvents: "accepted",
       hostTransport: "accepted",
       renderSignal: "signal",
       nativeEditor: { transport: "native-broker" },
@@ -119,6 +121,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       fileGrantOperations: ["loadPreset", "openCacheDirectory", "loadLicense"],
       busProfile: { category: "multi-output-instrument", flags: ["multi-output", "multi-output-instrument"] },
       automationLaneSkipped: "lv2-block-size-profile",
+      vst3MidiControllerEvents: "skipped-format",
       renderSignal: "silent"
     }
   ];
@@ -141,6 +144,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.busLayouts["flag:multi-output-instrument"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["non-main-event-bus"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:text-expression"] === 1 &&
+      coverageSummary.coverage.vst3MidiControllerEvents.accepted === 1 &&
+      coverageSummary.coverage.vst3MidiControllerEvents["skipped-format"] === 1 &&
       coverageSummary.coverage.automationLanes.applied === 1 &&
       coverageSummary.coverage.hostTransport.accepted === 1 &&
       coverageSummary.coverage.renderSignals.signal === 1 &&
@@ -155,6 +160,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].vst3ProgramLists === "listed" &&
       coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
       coverageSummary.matrix[0].automation === "applied" &&
+      coverageSummary.matrix[0].vst3MidiControllerEvents === "accepted" &&
       coverageSummary.matrix[0].hostTransport === "accepted" &&
       coverageSummary.matrix[0].fileGrantSampleLoad === "applied" &&
       coverageSummary.matrix[0].fileGrantOtherPresetLoad === "applied" &&
@@ -168,6 +174,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].featureStatus.editor === "opened" &&
       coverageSummary.matrix[1].name === "[local-path]" &&
       coverageSummary.matrix[1].vst3ProgramLists === "skipped-format" &&
+      coverageSummary.matrix[1].vst3MidiControllerEvents === "skipped-format" &&
       coverageSummary.matrix[1].fileGrantCacheDirectoryOpen === "applied" &&
       coverageSummary.matrix[1].fileGrantLicenseLoad === "applied" &&
       coverageSummary.matrix[1].fileGrantOtherPresetLoad === "skipped-unadvertised" &&
@@ -226,6 +233,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("file grant explicit other preset load:")) &&
       coverageLines.some((line) => line.includes("file grant operations advertised:")) &&
       coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
+      coverageLines.some((line) => line.includes("VST3 MIDI-controller events:")) &&
       coverageLines.some((line) => line.includes("host transport:")) &&
       coverageLines.some((line) => line.includes("render signal:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),
@@ -362,8 +370,9 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     vst3MidiEvents.some((event) => event.type === "noteExpression" && event.noteId === 77) &&
       vst3MidiEvents.some((event) => event.type === "noteExpressionText" && event.text === "probe" && event.noteId === 77) &&
+      midiControllerEventCount(vst3MidiEvents) === 3 &&
       midiEventsForBlock("au", 64, 64).every((event) => !event.type.startsWith("noteExpression")),
-    "installed plugin probe sends VST3 note-expression value and text coverage"
+    "installed plugin probe sends VST3 note-expression and MIDI-controller coverage"
   );
 
   const vst3ProbeState = nativeStateEnvelope({
