@@ -6,13 +6,13 @@ import { AUDIO_UNIT_HOST_PROFILES, isKnownAudioUnitHostProfile } from "./daemon-
 import { exerciseDaemonFileGrantOperation } from "./daemon-file-grant-operations-smoke.mjs";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { applyNativeParameterSnapshot, parameterSnapshotResponse } from "./daemon-parameter-snapshots.mjs";
-import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
 import { exerciseInstalledProbeSupport } from "./native-worker-ipc-installed-probe-cases.mjs";
 import {
   exerciseGrantAwareNativeWorker,
   exerciseVst3MultiBusNativeWorker,
   writeNativeWorkerIpcFixtures
 } from "./native-worker-ipc-fixtures.mjs";
+import { exerciseVst3ProgramDataSupport } from "./native-worker-ipc-vst3-cases.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
@@ -57,169 +57,7 @@ try {
     "daemon parameter snapshots refresh native ids and cap status"
   );
 
-  const unitNormalizers = createDaemonNormalizers({ maxPluginParameterTextBytes: 8 });
-  const unitParameter = unitNormalizers.normalizeWorkerParameter({
-    id: "unit-param",
-    name: "Unit Param",
-    normalizedValue: 0.5,
-    defaultNormalizedValue: 0.5,
-    automatable: true,
-    vst3Unit: {
-      id: 2,
-      parentUnitId: 0,
-      name: "1234567890",
-      programListId: 7
-    }
-  });
-  check(
-    unitParameter?.vst3Unit?.id === 2 &&
-      unitParameter.vst3Unit.parentUnitId === 0 &&
-      unitParameter.vst3Unit.programListId === 7 &&
-      unitParameter.vst3Unit.name === "12345678",
-    "daemon normalizers bound VST3 unit metadata"
-  );
-  const [unitProgramList] = unitNormalizers.normalizeVst3ProgramLists([
-    {
-      id: 7,
-      name: "1234567890",
-      unitId: 2,
-      programDataSupported: true,
-      programs: [{ index: 0, name: "1234567890", normalizedValue: 0.5 }]
-    }
-  ]);
-  check(
-    unitProgramList?.id === 7 &&
-      unitProgramList.unitId === 2 &&
-      unitProgramList.programDataSupported === true &&
-      unitProgramList.name === "12345678" &&
-      unitProgramList.programs?.[0]?.name === "12345678",
-    "daemon normalizers bound VST3 program-list metadata"
-  );
-  const programData = unitNormalizers.normalizeVst3ProgramData({
-    programListId: 7,
-    programIndex: 0,
-    data: "YWI="
-  });
-  check(
-    programData?.format === "vst3" &&
-      programData.programListId === 7 &&
-      programData.programIndex === 0 &&
-      programData.size === 2,
-    "daemon normalizers bound VST3 program data"
-  );
-  const tinyProgramDataNormalizers = createDaemonNormalizers({ maxPluginProgramDataBytes: 1 });
-  let oversizedProgramData;
-  try {
-    tinyProgramDataNormalizers.normalizeVst3ProgramData({ programListId: 7, programIndex: 0, data: "YWI=" });
-  } catch (error) {
-    oversizedProgramData = error.code;
-  }
-  check(oversizedProgramData === "program_data_too_large", "daemon normalizers reject oversized VST3 program data");
-  const fakeInstance = {
-    instanceId: "inst-test",
-    pluginId: "vst3:test",
-    format: "vst3",
-    vst3ProgramLists: [{
-      id: 7,
-      programDataSupported: true,
-      programs: [{ index: 0, name: "Init", normalizedValue: 0 }]
-    }],
-    parameters: [],
-    nativeParameterIds: new Set(),
-    worker: {
-      async getVst3ProgramData(programListId, programIndex) {
-        return { format: "vst3", programListId, programIndex, data: "YWI=" };
-      },
-      async setVst3ProgramData(programListId, programIndex, data) {
-        fakeInstance.restoredProgramData = { programListId, programIndex, data };
-      },
-      async getParameters() {
-        return [{ id: "program", name: "Program", normalizedValue: 0, defaultNormalizedValue: 0, automatable: true }];
-      }
-    }
-  };
-  const programDataSupport = createDaemonVst3ProgramData({
-    getInstance() {
-      return fakeInstance;
-    },
-    limits: {
-      maxPluginProgramDataEnvelopeBytes: 1024 * 1024,
-      maxPluginPrograms: 256
-    },
-    normalizers: unitNormalizers,
-    protocolError,
-    requireIntInRange(value, min, max, label) {
-      const number = Number(value);
-      if (!Number.isInteger(number) || number < min || number > max) {
-        throw protocolError("invalid_argument", `${label} out of range`);
-      }
-      return number;
-    }
-  });
-  const exportedProgramData = await programDataSupport.getVst3ProgramData("inst-test", 7, 0, {});
-  check(
-    exportedProgramData.programData &&
-      exportedProgramData.size === 2 &&
-      exportedProgramData.programListId === 7,
-    "daemon VST3 program-data helper exports a bounded restore envelope"
-  );
-  const restoredProgramData = await programDataSupport.setVst3ProgramData("inst-test", exportedProgramData.programData, {});
-  check(
-    restoredProgramData.restored === true &&
-      fakeInstance.restoredProgramData?.data === "YWI=" &&
-      fakeInstance.parameters?.[0]?.id === "program",
-    "daemon VST3 program-data helper restores an owned bounded envelope"
-  );
-  const wrongPluginEnvelope = Buffer.from(JSON.stringify({
-    version: 1,
-    pluginId: "vst3:other",
-    format: "vst3",
-    programListId: 7,
-    programIndex: 0,
-    data: "YWI="
-  }), "utf8").toString("base64");
-  let wrongPluginCode;
-  try {
-    await programDataSupport.setVst3ProgramData("inst-test", wrongPluginEnvelope, {});
-  } catch (error) {
-    wrongPluginCode = error.code;
-  }
-  check(wrongPluginCode === "program_data_plugin_mismatch", "daemon VST3 program-data helper rejects other-plugin envelopes");
-  const [unitExpression] = unitNormalizers.normalizeVst3NoteExpressions([
-    {
-      typeId: 0,
-      name: "1234567890",
-      shortName: "Velocity",
-      unit: "%",
-      unitId: 2,
-      defaultValue: 0.5,
-      minValue: 0,
-      maxValue: 1,
-      stepCount: 0,
-      associatedParameterId: "1234567890",
-      busIndex: 0,
-      channel: 1,
-      bipolar: true
-    }
-  ]);
-  check(
-    unitExpression?.name === "12345678" &&
-      unitExpression.associatedParameterId === "1234567890" &&
-      unitExpression.channel === 1 &&
-      unitExpression.bipolar === true,
-    "daemon normalizers bound VST3 note-expression metadata"
-  );
-  check(
-    unitNormalizers.encodeMidiEvents(
-      [
-        { type: "noteOn", note: 60, velocity: 0.8, channel: 0, time: 0, noteId: 42 },
-        { type: "noteExpression", typeId: 0, value: 0.5, noteId: 42, channel: 0, time: 1 },
-        { type: "noteExpressionText", typeId: 6, text: "ah", noteId: 42, channel: 0, time: 2 }
-      ],
-      "vst3"
-    ) === "on:60:0.8:0:0:42;expr:0:0.5:42:0:1;exprText:6:YWg=:42:0:2",
-    "daemon normalizers encode VST3 note-expression worker events"
-  );
+  await exerciseVst3ProgramDataSupport({ check, protocolError });
 
   const fixtureGrantPath = path.join(tempDir, "Fixture Grant.wav");
   const {
