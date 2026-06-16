@@ -11,6 +11,7 @@ const KNOWN_FILE_GRANT_OPERATIONS = new Set([
   "other"
 ]);
 const MAX_PLUGIN_STATE_BYTES = 384 * 1024;
+const MAX_PLUGIN_PROGRAM_DATA_BYTES = 384 * 1024;
 
 export function installedProbeReportMode(env = process.env) {
   const raw = String(env.SOUNDBRIDGE_PROBE_REPORT ?? "full").trim().toLowerCase();
@@ -105,6 +106,7 @@ function summarizeCompatibilityMatrix(results, options) {
         ? undefined
         : safeMatrixText(failureError?.code ?? failureError?.message ?? "unknown_error", 96),
       renderSignal: safeMatrixText(result.renderSignal ?? "missing", 32),
+      renderedChannels: safeMatrixInteger(result.renderedChannels, 0, 32),
       outputBusSignal: safeMatrixText(outputBusSignalStatus(result), 64),
       outputBusSignalFlags: safeMatrixArray(result.outputBusSignalProfile?.flags, 64),
       outputBusSignalCount: safeMatrixInteger(result.outputBusSignalProfile?.signalOutputBusCount, 0, 32),
@@ -140,7 +142,10 @@ function summarizeCompatibilityMatrix(results, options) {
       reportedLatencySamples: safeMatrixInteger(result.reportedLatencySamples, 0, 1_048_576),
       tailSamples: safeMatrixInteger(result.tailSamples, 0, 1_048_576),
       infiniteTail: typeof result.infiniteTail === "boolean" ? result.infiniteTail : undefined,
+      listedPreset: safeMatrixText(result.listedPreset ?? "missing", 64),
+      listedPresetParameterCount: safeMatrixInteger(result.listedPresetParameterCount, 0, 1024),
       vst3ProgramData: safeMatrixText(result.vst3ProgramData ?? "missing", 64),
+      vst3ProgramDataBytes: safeMatrixInteger(result.vst3ProgramDataSize, 0, MAX_PLUGIN_PROGRAM_DATA_BYTES),
       vst3ProgramDataTarget: safeMatrixText(vst3ProgramDataProfileStatus(result), 64),
       vst3ProgramDataFlags: safeMatrixArray(result.vst3ProgramDataProfile?.flags, 64),
       vst3ProgramDataProgramLists: safeMatrixInteger(result.vst3ProgramDataProfile?.programListCount, 0, 256),
@@ -171,6 +176,9 @@ function summarizeCompatibilityMatrix(results, options) {
       stateComponentBytes: safeMatrixInteger(result.stateProfile?.componentBytes, 0, MAX_PLUGIN_STATE_BYTES),
       stateControllerBytes: safeMatrixInteger(result.stateProfile?.controllerBytes, 0, MAX_PLUGIN_STATE_BYTES),
       automation: safeMatrixText(automationLaneStatus(result), 64),
+      automationLanePointCount: safeMatrixInteger(result.automationLanePointCount, 0, 4096),
+      midiEventCount: safeMatrixInteger(result.midiEventCount, 0, 4096),
+      midiControllerEventCount: safeMatrixInteger(result.midiControllerEventCount, 0, 4096),
       vst3MidiControllerEvents: safeMatrixText(vst3MidiControllerEventStatus(result), 64),
       hostTransport: safeMatrixText(result.hostTransport ?? "missing", 64),
       fileGrantSampleLoad: safeMatrixText(result.fileGrantSampleLoad ?? "missing", 64),

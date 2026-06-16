@@ -83,7 +83,9 @@ export function exerciseInstalledProbeSupport({ check }) {
       name: "Neutral Effect",
       vendor: "Example Vendor",
       listedPreset: "applied",
+      listedPresetParameterCount: 4,
       vst3ProgramData: "restored",
+      vst3ProgramDataSize: 2048,
       vst3ProgramDataProfile: {
         category: "targeted",
         flags: ["bounded-target"],
@@ -149,6 +151,7 @@ export function exerciseInstalledProbeSupport({ check }) {
         typeIds: [0, 6]
       },
       automationLanePointCount: 2,
+      midiEventCount: 7,
       midiControllerEventCount: 3,
       vst3MidiControllerEvents: "accepted",
       hostTransport: "accepted",
@@ -157,6 +160,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       reportedLatencySamples: 96,
       tailSamples: 128,
       infiniteTail: false,
+      renderedChannels: 2,
       renderSignal: "signal",
       outputBusSignalProfile: {
         category: "main-aux-signal",
@@ -243,6 +247,11 @@ export function exerciseInstalledProbeSupport({ check }) {
     coverageSummary.matrix.length === 2 &&
       coverageSummary.matrix[0].pluginId === "vst3:neutral-effect" &&
       coverageSummary.matrix[0].renderSignal === "signal" &&
+      coverageSummary.matrix[0].renderedChannels === 2 &&
+      coverageSummary.matrix[0].listedPreset === "applied" &&
+      coverageSummary.matrix[0].listedPresetParameterCount === 4 &&
+      coverageSummary.matrix[0].vst3ProgramData === "restored" &&
+      coverageSummary.matrix[0].vst3ProgramDataBytes === 2048 &&
       coverageSummary.matrix[0].vst3ProgramDataTarget === "targeted" &&
       JSON.stringify(coverageSummary.matrix[0].vst3ProgramDataFlags) === JSON.stringify(["bounded-target"]) &&
       coverageSummary.matrix[0].vst3ProgramDataProgramLists === 2 &&
@@ -270,6 +279,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].stateComponentBytes === 9 &&
       coverageSummary.matrix[0].stateControllerBytes === 10 &&
       coverageSummary.matrix[0].automation === "applied" &&
+      coverageSummary.matrix[0].automationLanePointCount === 2 &&
       coverageSummary.matrix[0].busInputCount === 2 &&
       coverageSummary.matrix[0].busOutputCount === 1 &&
       coverageSummary.matrix[0].busActiveInputCount === 2 &&
@@ -285,6 +295,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].vst3NoteExpressionTypeIds) === JSON.stringify([0, 6]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventBuses) === JSON.stringify([0, 2]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventChannels) === JSON.stringify([0, 3]) &&
+      coverageSummary.matrix[0].midiEventCount === 7 &&
+      coverageSummary.matrix[0].midiControllerEventCount === 3 &&
       coverageSummary.matrix[0].vst3MidiControllerEvents === "accepted" &&
       coverageSummary.matrix[0].hostTransport === "accepted" &&
       coverageSummary.matrix[0].latencyTail === "latency-tail" &&
