@@ -149,6 +149,12 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   const flags = [];
   let programDataListCount = 0;
   let candidateProgramCount = 0;
+  let unsupportedProgramListCount = 0;
+  let undisclosedProgramListCount = 0;
+  let missingProgramArrayCount = 0;
+  let emptyProgramListCount = 0;
+  let invalidProgramListCount = 0;
+  let invalidProgramIndexCount = 0;
 
   if (lists.length === 0) {
     flags.push("no-program-lists");
@@ -157,29 +163,41 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   for (const programList of lists) {
     const programListId = boundedProgramListId(programList?.id);
     if (programListId === undefined) {
+      invalidProgramListCount += 1;
       flags.push("invalid-program-list-id");
       continue;
     }
 
     if (programList?.programDataSupported !== true) {
+      if (programList?.programDataSupported === false) {
+        unsupportedProgramListCount += 1;
+      } else {
+        undisclosedProgramListCount += 1;
+      }
       flags.push(programList?.programDataSupported === false ? "program-data-unsupported" : "program-data-undisclosed");
       continue;
     }
 
     programDataListCount += 1;
     if (!Array.isArray(programList.programs)) {
+      missingProgramArrayCount += 1;
       flags.push("missing-programs");
       continue;
     }
     if (programList.programs.length === 0) {
+      emptyProgramListCount += 1;
       flags.push("empty-program-list");
       continue;
     }
 
-    const validProgramCount = programList.programs
-      .slice(0, MAX_PLUGIN_PROGRAMS)
-      .filter((program) => boundedProgramIndex(program?.index) !== undefined)
-      .length;
+    let validProgramCount = 0;
+    for (const program of programList.programs.slice(0, MAX_PLUGIN_PROGRAMS)) {
+      if (boundedProgramIndex(program?.index) === undefined) {
+        invalidProgramIndexCount += 1;
+      } else {
+        validProgramCount += 1;
+      }
+    }
     if (validProgramCount === 0) {
       flags.push("invalid-program-index");
       continue;
@@ -200,7 +218,13 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     flags: [...new Set(flags)],
     programListCount: lists.length,
     programDataListCount,
-    candidateProgramCount
+    candidateProgramCount,
+    unsupportedProgramListCount,
+    undisclosedProgramListCount,
+    missingProgramArrayCount,
+    emptyProgramListCount,
+    invalidProgramListCount,
+    invalidProgramIndexCount
   };
 }
 

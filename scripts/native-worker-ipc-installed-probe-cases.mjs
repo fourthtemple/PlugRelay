@@ -93,7 +93,9 @@ export function exerciseInstalledProbeSupport({ check }) {
         flags: ["bounded-target"],
         programListCount: 2,
         programDataListCount: 1,
-        candidateProgramCount: 3
+        candidateProgramCount: 3,
+        unsupportedProgramListCount: 1,
+        invalidProgramIndexCount: 2
       },
       vst3ProgramListCount: 2,
       parameterCount: 1024,
@@ -250,6 +252,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].vst3ProgramDataProgramLists === 2 &&
       coverageSummary.matrix[0].vst3ProgramDataCapableLists === 1 &&
       coverageSummary.matrix[0].vst3ProgramDataCandidatePrograms === 3 &&
+      coverageSummary.matrix[0].vst3ProgramDataUnsupportedLists === 1 &&
+      coverageSummary.matrix[0].vst3ProgramDataInvalidProgramIndexes === 2 &&
       coverageSummary.matrix[0].vst3ProgramLists === "listed" &&
       coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
       coverageSummary.matrix[0].parameterProfile === "writable" &&
@@ -668,7 +672,12 @@ export function exerciseInstalledProbeSupport({ check }) {
       targetedProgramDataProfile.programListCount === 2 &&
       targetedProgramDataProfile.programDataListCount === 1 &&
       targetedProgramDataProfile.candidateProgramCount === 1 &&
+      targetedProgramDataProfile.unsupportedProgramListCount === 1 &&
+      targetedProgramDataProfile.invalidProgramIndexCount === 1 &&
       weirdProgramDataProfile.category === "no-valid-programs" &&
+      weirdProgramDataProfile.invalidProgramListCount === 1 &&
+      weirdProgramDataProfile.emptyProgramListCount === 1 &&
+      weirdProgramDataProfile.invalidProgramIndexCount === 1 &&
       weirdProgramDataProfile.flags.includes("invalid-program-list-id") &&
       weirdProgramDataProfile.flags.includes("empty-program-list") &&
       weirdProgramDataProfile.flags.includes("invalid-program-index"),
