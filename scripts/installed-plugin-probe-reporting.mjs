@@ -86,6 +86,7 @@ function summarizeFeatureCoverage(results, options) {
   return {
     listedPresets: countStatuses(results, "listedPreset"),
     vst3ProgramData: countStatuses(results, "vst3ProgramData"),
+    vst3ProgramLists: countVst3ProgramLists(results),
     parameterDisplayInput: countStatuses(results, "parameterDisplayInput"),
     fileGrantStateRestore: countStatuses(results, "fileGrantStateRestore"),
     fileGrantPresetLoad: countStatuses(results, "fileGrantPresetLoad"),
@@ -115,6 +116,19 @@ function countAutomationLanes(results) {
       ? "applied"
       : result.automationLaneSkipped
         ? `skipped-${result.automationLaneSkipped}`
+        : "missing";
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function countVst3ProgramLists(results) {
+  const counts = {};
+  for (const result of results) {
+    const status = String(result.format ?? "").toLowerCase() !== "vst3"
+      ? "skipped-format"
+      : Number.isInteger(result.vst3ProgramListCount)
+        ? result.vst3ProgramListCount > 0 ? "listed" : "none"
         : "missing";
     counts[status] = (counts[status] ?? 0) + 1;
   }
@@ -202,6 +216,7 @@ function printFeatureCoverage(coverage, stream) {
   for (const [label, counts] of [
     ["listed presets", coverage.listedPresets],
     ["VST3 program data", coverage.vst3ProgramData],
+    ["VST3 program lists", coverage.vst3ProgramLists],
     ["display-text input", coverage.parameterDisplayInput],
     ["file grant state restore", coverage.fileGrantStateRestore],
     ["file grant preset load", coverage.fileGrantPresetLoad],

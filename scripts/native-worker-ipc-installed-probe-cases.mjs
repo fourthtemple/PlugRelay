@@ -38,6 +38,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       format: "vst3",
       listedPreset: "applied",
       vst3ProgramData: "restored",
+      vst3ProgramListCount: 2,
       parameterDisplayInput: "applied",
       fileGrantStateRestore: "applied",
       fileGrantPresetLoad: "applied",
@@ -70,6 +71,7 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     coverageSummary.coverage.listedPresets.applied === 1 &&
       coverageSummary.coverage.vst3ProgramData.restored === 1 &&
+      coverageSummary.coverage.vst3ProgramLists.listed === 1 &&
       coverageSummary.coverage.fileGrantOperations.loadSample === 1 &&
       coverageSummary.coverage.fileGrantOperations.openCacheDirectory === 1 &&
       coverageSummary.coverage.fileGrantOperations.loadLicense === 1 &&
@@ -85,6 +87,10 @@ export function exerciseInstalledProbeSupport({ check }) {
     summarizeProbeResults(coverageResults).coverage.nativeEditor["not-requested"] === 2,
     "installed plugin probe marks native editor coverage as not requested by default"
   );
+  check(
+    summarizeProbeResults([{ ok: true, format: "vst3", vst3ProgramListCount: 0 }]).coverage.vst3ProgramLists.none === 1,
+    "installed plugin probe summarizes VST3 plugins with no program lists"
+  );
 
   const coverageLines = [];
   createInstalledProbeReporter({
@@ -97,6 +103,7 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     coverageLines.some((line) => line === "Feature coverage:") &&
       coverageLines.some((line) => line.includes("VST3 program data: 1 restored, 1 skipped-format")) &&
+      coverageLines.some((line) => line.includes("VST3 program lists:")) &&
       coverageLines.some((line) => line.includes("file grant operations advertised:")) &&
       coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),

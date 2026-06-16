@@ -48,7 +48,7 @@ export async function probeVst3ProgramData({
   }
 
   const target = firstVst3ProgramDataTarget(createdPlugin) ?? firstVst3ProgramDataTarget(plugin);
-  result.vst3ProgramListCount = vst3ProgramLists(createdPlugin).length || undefined;
+  result.vst3ProgramListCount = vst3ProgramLists(createdPlugin).length;
   if (!target) {
     result.vst3ProgramData = "skipped";
     return;
