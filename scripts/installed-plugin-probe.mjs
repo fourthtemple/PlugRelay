@@ -11,6 +11,7 @@ import {
   probeFileGrantStateRestore,
   probeFileGrantStateSave
 } from "./installed-plugin-probe-file-grants.mjs";
+import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { probeListedPreset, probeVst3ProgramData } from "./installed-plugin-probe-programs.mjs";
@@ -132,6 +133,7 @@ async function probePlugin(socket, session, plugin) {
     result.renderEngine = created.renderEngine;
     result.layout = boundedLayoutSummary(created.layout);
     result.busProfile = summarizeProbeBusLayout(plugin, result.layout);
+    result.vst3EventProfile = summarizeProbeVst3Events(created.plugin);
     result.parameterCount = Array.isArray(created.plugin?.parameters) ? created.plugin.parameters.length : 0;
     result.parameterMetadataAtLimit = created.plugin?.parameterMetadataAtLimit === true || undefined;
     await probeListedPreset({

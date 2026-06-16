@@ -83,6 +83,7 @@ function summarizeFeatureCoverage(results, options) {
     fileGrantStateSave: countStatuses(results, "fileGrantStateSave"),
     fileGrantSavedStateRestore: countStatuses(results, "fileGrantSavedStateRestore"),
     busLayouts: countBusLayouts(results),
+    vst3EventProfiles: countVst3EventProfiles(results),
     automationLanes: countAutomationLanes(results),
     nativeEditor: countNativeEditor(results, options)
   };
@@ -126,6 +127,26 @@ function countBusLayouts(results) {
   return counts;
 }
 
+function countVst3EventProfiles(results) {
+  const counts = {};
+  for (const result of results) {
+    const category = result.vst3EventProfile?.category
+      ? String(result.vst3EventProfile.category)
+      : String(result.format ?? "").toLowerCase() === "vst3"
+        ? "missing"
+        : "skipped-format";
+    counts[category] = (counts[category] ?? 0) + 1;
+    for (const flag of result.vst3EventProfile?.flags ?? []) {
+      if (flag === "no-note-expressions") {
+        continue;
+      }
+      const key = `flag:${flag}`;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
 function countNativeEditor(results, options) {
   if (!options.nativeEditorBroker) {
     return results.length > 0 ? { "not-requested": results.length } : {};
@@ -149,6 +170,7 @@ function printFeatureCoverage(coverage, stream) {
     ["file grant state save", coverage.fileGrantStateSave],
     ["file grant saved-state restore", coverage.fileGrantSavedStateRestore],
     ["bus layouts", coverage.busLayouts],
+    ["VST3 event metadata", coverage.vst3EventProfiles],
     ["automation lanes", coverage.automationLanes],
     ["native editor broker", coverage.nativeEditor]
   ]) {

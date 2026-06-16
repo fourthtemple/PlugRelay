@@ -70,6 +70,8 @@ In the GitHub issue, include:
 
 JSON reports include a path-free `busProfile` for each probed plugin. Use it to call out coverage such as `effect-main`, `instrument-main`, `sidechain`, `multi-output`, and `multi-output-instrument`, plus flags for non-main-bus routing such as `sidechain-input`, `multi-input`, `multi-output`, and unusual bus indexes.
 
+VST3 reports also include a path-free `vst3EventProfile` derived from bounded note-expression metadata. Use it to call out coverage such as `no-note-expressions`, `main-event-bus`, `non-main-event-bus`, `non-main-channel`, `text-expression`, and multi-event-bus or multi-channel fixtures without including plugin paths, preset contents, or license data.
+
 ## Privacy And Safety
 
 Before posting, remove anything private that may appear in local output. Do not include:

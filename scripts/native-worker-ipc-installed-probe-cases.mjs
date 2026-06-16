@@ -1,4 +1,5 @@
 import { assertNoNativeLaunchData, nativeStateFileText } from "./installed-plugin-probe-file-grants.mjs";
+import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { firstListedPreset, firstVst3ProgramDataTarget } from "./installed-plugin-probe-programs.mjs";
@@ -33,6 +34,7 @@ export function exerciseInstalledProbeSupport({ check }) {
   const coverageResults = [
     {
       ok: true,
+      format: "vst3",
       listedPreset: "applied",
       vst3ProgramData: "restored",
       parameterDisplayInput: "applied",
@@ -41,11 +43,19 @@ export function exerciseInstalledProbeSupport({ check }) {
       fileGrantStateSave: "applied",
       fileGrantSavedStateRestore: "applied",
       busProfile: { category: "sidechain", flags: ["sidechain-input", "multi-input"] },
+      vst3EventProfile: {
+        category: "non-main-event-bus",
+        flags: ["note-expressions", "non-main-event-bus", "multi-event-bus", "non-main-channel", "multi-channel", "text-expression"],
+        noteExpressionCount: 2,
+        eventBuses: [0, 2],
+        channels: [0, 3]
+      },
       automationLanePointCount: 2,
       nativeEditor: { transport: "native-broker" }
     },
     {
       ok: true,
+      format: "au",
       listedPreset: "skipped",
       vst3ProgramData: "skipped-format",
       parameterDisplayInput: "skipped",
@@ -59,6 +69,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.vst3ProgramData.restored === 1 &&
       coverageSummary.coverage.busLayouts.sidechain === 1 &&
       coverageSummary.coverage.busLayouts["flag:multi-output-instrument"] === 1 &&
+      coverageSummary.coverage.vst3EventProfiles["non-main-event-bus"] === 1 &&
+      coverageSummary.coverage.vst3EventProfiles["flag:text-expression"] === 1 &&
       coverageSummary.coverage.automationLanes.applied === 1 &&
       coverageSummary.coverage.nativeEditor.opened === 1,
     "installed plugin probe summarizes feature coverage"
@@ -79,6 +91,7 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     coverageLines.some((line) => line === "Feature coverage:") &&
       coverageLines.some((line) => line.includes("VST3 program data: 1 restored, 1 skipped-format")) &&
+      coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),
     "installed plugin probe summary prints feature coverage"
   );
@@ -116,6 +129,22 @@ export function exerciseInstalledProbeSupport({ check }) {
       multiOutputInstrumentProfile.category === "multi-output-instrument" &&
       multiOutputInstrumentProfile.flags.includes("multi-output-instrument"),
     "installed plugin probe classifies bus-layout coverage"
+  );
+
+  const vst3EventProfile = summarizeProbeVst3Events({
+    format: "vst3",
+    vst3NoteExpressions: [
+      { typeId: 0, busIndex: 0, channel: 0 },
+      { typeId: 6, busIndex: 2, channel: 3, associatedParameterId: "param-1" }
+    ]
+  });
+  check(
+    vst3EventProfile.category === "non-main-event-bus" &&
+      vst3EventProfile.noteExpressionCount === 2 &&
+      JSON.stringify(vst3EventProfile.eventBuses) === JSON.stringify([0, 2]) &&
+      vst3EventProfile.flags.includes("text-expression") &&
+      vst3EventProfile.flags.includes("associated-parameter"),
+    "installed plugin probe classifies VST3 event metadata coverage"
   );
 
   const vst3ProbeState = nativeStateEnvelope({
