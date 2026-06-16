@@ -120,6 +120,12 @@ function summarizeCompatibilityMatrix(results, options) {
         64
       ),
       vst3EventFlags: safeMatrixArray(result.vst3EventProfile?.flags, 64),
+      latencyTail: safeMatrixText(latencyTailStatus(result), 64),
+      pluginLatencySamples: safeMatrixInteger(result.pluginLatencySamples, 0, 1_048_576),
+      transportLatencySamples: safeMatrixInteger(result.transportLatencySamples, 0, 1_048_576),
+      reportedLatencySamples: safeMatrixInteger(result.reportedLatencySamples, 0, 1_048_576),
+      tailSamples: safeMatrixInteger(result.tailSamples, 0, 1_048_576),
+      infiniteTail: typeof result.infiniteTail === "boolean" ? result.infiniteTail : undefined,
       vst3ProgramData: safeMatrixText(result.vst3ProgramData ?? "missing", 64),
       vst3ProgramDataTarget: safeMatrixText(vst3ProgramDataProfileStatus(result), 64),
       vst3ProgramDataFlags: safeMatrixArray(result.vst3ProgramDataProfile?.flags, 64),
@@ -297,6 +303,7 @@ function summarizeFeatureCoverage(results, options) {
     vst3MidiControllerEvents: countBy(results, vst3MidiControllerEventStatus),
     automationLanes: countAutomationLanes(results),
     hostTransport: countStatuses(results, "hostTransport"),
+    latencyTail: countBy(results, latencyTailStatus),
     renderSignals: countStatuses(results, "renderSignal"),
     nativeEditor: countNativeEditor(results, options)
   };
@@ -383,6 +390,35 @@ function vst3ProgramListStatus(result) {
     : Number.isInteger(result.vst3ProgramListCount)
       ? result.vst3ProgramListCount > 0 ? "listed" : "none"
       : "missing";
+}
+
+function latencyTailStatus(result) {
+  if (hasFailedPhase(result, ["getLatency", "getTailTime"])) {
+    return "failed";
+  }
+  const hasLatency = Number.isInteger(result.pluginLatencySamples) &&
+    Number.isInteger(result.transportLatencySamples) &&
+    Number.isInteger(result.reportedLatencySamples);
+  const hasTail = Number.isInteger(result.tailSamples) && typeof result.infiniteTail === "boolean";
+  if (hasLatency && hasTail) {
+    if (result.infiniteTail) {
+      return "infinite-tail";
+    }
+    if (result.pluginLatencySamples > 0 && result.tailSamples > 0) {
+      return "latency-tail";
+    }
+    if (result.pluginLatencySamples > 0) {
+      return "latency";
+    }
+    if (result.tailSamples > 0) {
+      return "tail";
+    }
+    return "zero";
+  }
+  if (hasLatency || hasTail || hasOkPhase(result, "getLatency") || hasOkPhase(result, "getTailTime")) {
+    return "partial";
+  }
+  return "missing";
 }
 
 function countBusLayouts(results) {
@@ -529,6 +565,7 @@ function printFeatureCoverage(coverage, stream) {
     ["VST3 MIDI-controller events", coverage.vst3MidiControllerEvents],
     ["automation lanes", coverage.automationLanes],
     ["host transport", coverage.hostTransport],
+    ["latency/tail", coverage.latencyTail],
     ["render signal", coverage.renderSignals],
     ["native editor broker", coverage.nativeEditor]
   ]) {

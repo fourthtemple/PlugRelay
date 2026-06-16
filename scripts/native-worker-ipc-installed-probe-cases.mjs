@@ -122,6 +122,11 @@ export function exerciseInstalledProbeSupport({ check }) {
       midiControllerEventCount: 3,
       vst3MidiControllerEvents: "accepted",
       hostTransport: "accepted",
+      pluginLatencySamples: 32,
+      transportLatencySamples: 64,
+      reportedLatencySamples: 96,
+      tailSamples: 128,
+      infiniteTail: false,
       renderSignal: "signal",
       nativeEditor: { transport: "native-broker" },
       phases: passedFeaturePhases
@@ -144,6 +149,11 @@ export function exerciseInstalledProbeSupport({ check }) {
       busProfile: { category: "multi-output-instrument", flags: ["multi-output", "multi-output-instrument"] },
       automationLaneSkipped: "lv2-block-size-profile",
       vst3MidiControllerEvents: "skipped-format",
+      pluginLatencySamples: 0,
+      transportLatencySamples: 64,
+      reportedLatencySamples: 64,
+      tailSamples: 0,
+      infiniteTail: true,
       renderSignal: "silent"
     }
   ];
@@ -172,6 +182,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.vst3MidiControllerEvents["skipped-format"] === 1 &&
       coverageSummary.coverage.automationLanes.applied === 1 &&
       coverageSummary.coverage.hostTransport.accepted === 1 &&
+      coverageSummary.coverage.latencyTail["latency-tail"] === 1 &&
+      coverageSummary.coverage.latencyTail["infinite-tail"] === 1 &&
       coverageSummary.coverage.renderSignals.signal === 1 &&
       coverageSummary.coverage.renderSignals.silent === 1 &&
       coverageSummary.coverage.nativeEditor.opened === 1,
@@ -199,6 +211,12 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].busActiveOutputIndexes) === JSON.stringify([0]) &&
       coverageSummary.matrix[0].vst3MidiControllerEvents === "accepted" &&
       coverageSummary.matrix[0].hostTransport === "accepted" &&
+      coverageSummary.matrix[0].latencyTail === "latency-tail" &&
+      coverageSummary.matrix[0].pluginLatencySamples === 32 &&
+      coverageSummary.matrix[0].transportLatencySamples === 64 &&
+      coverageSummary.matrix[0].reportedLatencySamples === 96 &&
+      coverageSummary.matrix[0].tailSamples === 128 &&
+      coverageSummary.matrix[0].infiniteTail === false &&
       coverageSummary.matrix[0].fileGrantSampleLoad === "applied" &&
       coverageSummary.matrix[0].fileGrantOtherPresetLoad === "applied" &&
       coverageSummary.matrix[0].nativeEditor === "opened" &&
@@ -216,6 +234,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[1].fileGrantCacheDirectoryOpen === "applied" &&
       coverageSummary.matrix[1].fileGrantLicenseLoad === "applied" &&
       coverageSummary.matrix[1].fileGrantOtherPresetLoad === "skipped-unadvertised" &&
+      coverageSummary.matrix[1].latencyTail === "infinite-tail" &&
+      coverageSummary.matrix[1].infiniteTail === true &&
       coverageSummary.matrix[1].nativeEditor === "missing" &&
       coverageSummary.matrix[1].featureStatus.fileGrants === "passed" &&
       coverageSummary.matrix[1].fileGrantOperations.includes("loadLicense"),
@@ -274,6 +294,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
       coverageLines.some((line) => line.includes("VST3 MIDI-controller events:")) &&
       coverageLines.some((line) => line.includes("host transport:")) &&
+      coverageLines.some((line) => line.includes("latency/tail:")) &&
       coverageLines.some((line) => line.includes("render signal:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),
     "installed plugin probe summary prints feature coverage"

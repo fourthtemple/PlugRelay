@@ -37,6 +37,8 @@ const REQUEST_TIMEOUT_MS = intFromEnv("SOUNDBRIDGE_PROBE_TIMEOUT_MS", 15000, 100
 const MAX_BLOCK_SIZE = intFromEnv("SOUNDBRIDGE_PROBE_MAX_BLOCK_SIZE", 64, 1, 8192);
 const SAMPLE_RATE = intFromEnv("SOUNDBRIDGE_PROBE_SAMPLE_RATE", 48000, 8000, 384000);
 const LIMIT = intFromEnv("SOUNDBRIDGE_PROBE_LIMIT", 0, 0, 10000);
+const MAX_PLUGIN_LATENCY_SAMPLES = 1_048_576;
+const MAX_PLUGIN_TAIL_SAMPLES = 1_048_576;
 const NAME_FILTER = process.env.SOUNDBRIDGE_PROBE_FILTER ?? "";
 const REPORT_MODE = installedProbeReportMode();
 const PROBE_NATIVE_EDITOR_BROKER = flagFromEnv("SOUNDBRIDGE_PROBE_NATIVE_EDITOR_BROKER");
@@ -278,10 +280,18 @@ async function probePlugin(socket, session, plugin) {
       socket
     });
 
-    await phase(result, "getLatency", () =>
-      request(socket, "getLatency", { instanceId, transportLatencySamples: 0 }, true, session)
+    const transportLatencySamples = layoutBlockSize(result.layout);
+    const latency = await phase(result, "getLatency", () =>
+      request(socket, "getLatency", { instanceId, transportLatencySamples }, true, session)
     );
-    await phase(result, "getTailTime", () => request(socket, "getTailTime", { instanceId }, true, session));
+    assertProbeLatency(latency, transportLatencySamples);
+    result.pluginLatencySamples = latency.pluginLatencySamples;
+    result.transportLatencySamples = latency.transportLatencySamples;
+    result.reportedLatencySamples = latency.reportedLatencySamples;
+    const tail = await phase(result, "getTailTime", () => request(socket, "getTailTime", { instanceId }, true, session));
+    assertProbeTail(tail);
+    result.tailSamples = tail.tailSamples;
+    result.infiniteTail = tail.infiniteTail;
 
     let automationLaneApplied = false;
     if (writableParameter && !restrictedLv2BlockProfile) {
@@ -578,6 +588,37 @@ function assertRenderTransport(rendered, expected) {
   assertProbe(Math.abs(Number(actual.tempo) - expected.tempo) < 0.000001, "bad_render_transport", "render response lost host tempo");
   assertProbe(actual.timeSignatureNumerator === 4, "bad_render_transport", "render response lost host time signature numerator");
   assertProbe(actual.timeSignatureDenominator === 4, "bad_render_transport", "render response lost host time signature denominator");
+}
+
+function assertProbeLatency(latency, transportLatencySamples) {
+  assertProbe(
+    Number.isInteger(latency?.pluginLatencySamples) &&
+      latency.pluginLatencySamples >= 0 &&
+      latency.pluginLatencySamples <= MAX_PLUGIN_LATENCY_SAMPLES,
+    "bad_latency_report",
+    "latency report did not include bounded plugin latency"
+  );
+  assertProbe(
+    latency.transportLatencySamples === transportLatencySamples,
+    "bad_latency_report",
+    "latency report did not echo bounded transport latency"
+  );
+  assertProbe(
+    latency.reportedLatencySamples === Math.min(latency.pluginLatencySamples + transportLatencySamples, MAX_PLUGIN_LATENCY_SAMPLES),
+    "bad_latency_report",
+    "latency report did not include the bounded total latency"
+  );
+}
+
+function assertProbeTail(tail) {
+  assertProbe(
+    Number.isInteger(tail?.tailSamples) &&
+      tail.tailSamples >= 0 &&
+      tail.tailSamples <= MAX_PLUGIN_TAIL_SAMPLES,
+    "bad_tail_report",
+    "tail report did not include bounded tail samples"
+  );
+  assertProbe(typeof tail.infiniteTail === "boolean", "bad_tail_report", "tail report did not include an explicit infinite-tail flag");
 }
 
 function boundedLayoutSummary(layout) {
