@@ -139,8 +139,12 @@ export function exerciseInstalledProbeSupport({ check }) {
         category: "non-main-event-bus",
         flags: ["note-expressions", "non-main-event-bus", "multi-event-bus", "non-main-channel", "multi-channel", "text-expression"],
         noteExpressionCount: 2,
+        valueExpressionCount: 1,
+        textExpressionCount: 1,
+        associatedParameterCount: 1,
         eventBuses: [0, 2],
-        channels: [0, 3]
+        channels: [0, 3],
+        typeIds: [0, 6]
       },
       automationLanePointCount: 2,
       midiControllerEventCount: 3,
@@ -259,6 +263,13 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].busOutputChannels === 2 &&
       JSON.stringify(coverageSummary.matrix[0].busActiveInputIndexes) === JSON.stringify([0, 1]) &&
       JSON.stringify(coverageSummary.matrix[0].busActiveOutputIndexes) === JSON.stringify([0]) &&
+      coverageSummary.matrix[0].vst3NoteExpressionCount === 2 &&
+      coverageSummary.matrix[0].vst3ValueNoteExpressionCount === 1 &&
+      coverageSummary.matrix[0].vst3TextNoteExpressionCount === 1 &&
+      coverageSummary.matrix[0].vst3AssociatedNoteExpressionCount === 1 &&
+      JSON.stringify(coverageSummary.matrix[0].vst3NoteExpressionTypeIds) === JSON.stringify([0, 6]) &&
+      JSON.stringify(coverageSummary.matrix[0].vst3EventBuses) === JSON.stringify([0, 2]) &&
+      JSON.stringify(coverageSummary.matrix[0].vst3EventChannels) === JSON.stringify([0, 3]) &&
       coverageSummary.matrix[0].vst3MidiControllerEvents === "accepted" &&
       coverageSummary.matrix[0].hostTransport === "accepted" &&
       coverageSummary.matrix[0].latencyTail === "latency-tail" &&
@@ -444,6 +455,10 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     vst3EventProfile.category === "non-main-event-bus" &&
       vst3EventProfile.noteExpressionCount === 2 &&
+      vst3EventProfile.valueExpressionCount === 1 &&
+      vst3EventProfile.textExpressionCount === 1 &&
+      vst3EventProfile.associatedParameterCount === 1 &&
+      JSON.stringify(vst3EventProfile.typeIds) === JSON.stringify([0, 6]) &&
       JSON.stringify(vst3EventProfile.eventBuses) === JSON.stringify([0, 2]) &&
       vst3EventProfile.flags.includes("text-expression") &&
       vst3EventProfile.flags.includes("associated-parameter"),

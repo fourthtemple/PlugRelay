@@ -9,14 +9,20 @@ export function summarizeProbeVst3Events(plugin) {
   const expressions = boundedNoteExpressions(plugin?.vst3NoteExpressions);
   const eventBuses = uniqueSorted(expressions.map((expression) => expression.busIndex));
   const channels = uniqueSorted(expressions.map((expression) => expression.channel));
+  const typeIds = uniqueSorted(expressions.map((expression) => expression.typeId));
+  const textExpressionCount = expressions.filter(isTextExpression).length;
   const flags = expressionFlags(expressions, eventBuses, channels);
 
   return {
     category: expressionCategory(expressions, eventBuses, channels),
     flags,
     noteExpressionCount: expressions.length,
+    valueExpressionCount: expressions.length - textExpressionCount,
+    textExpressionCount,
+    associatedParameterCount: expressions.filter((expression) => expression.hasAssociatedParameter).length,
     eventBuses,
-    channels
+    channels,
+    typeIds
   };
 }
 
@@ -48,6 +54,10 @@ function expressionFlags(expressions, eventBuses, channels) {
     flags.push("metadata-at-limit");
   }
   return flags;
+}
+
+function isTextExpression(expression) {
+  return expression.typeId === TEXT_NOTE_EXPRESSION_TYPE_ID;
 }
 
 function expressionCategory(expressions, eventBuses, channels) {

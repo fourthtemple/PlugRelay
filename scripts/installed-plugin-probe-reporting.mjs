@@ -121,6 +121,13 @@ function summarizeCompatibilityMatrix(results, options) {
         64
       ),
       vst3EventFlags: safeMatrixArray(result.vst3EventProfile?.flags, 64),
+      vst3NoteExpressionCount: safeMatrixInteger(result.vst3EventProfile?.noteExpressionCount, 0, 256),
+      vst3ValueNoteExpressionCount: safeMatrixInteger(result.vst3EventProfile?.valueExpressionCount, 0, 256),
+      vst3TextNoteExpressionCount: safeMatrixInteger(result.vst3EventProfile?.textExpressionCount, 0, 256),
+      vst3AssociatedNoteExpressionCount: safeMatrixInteger(result.vst3EventProfile?.associatedParameterCount, 0, 256),
+      vst3NoteExpressionTypeIds: safeMatrixIntegerArray(result.vst3EventProfile?.typeIds, 0, 4_294_967_295),
+      vst3EventBuses: safeMatrixIntegerArray(result.vst3EventProfile?.eventBuses, 0, 31),
+      vst3EventChannels: safeMatrixIntegerArray(result.vst3EventProfile?.channels, 0, 15),
       latencyTail: safeMatrixText(latencyTailStatus(result), 64),
       pluginLatencySamples: safeMatrixInteger(result.pluginLatencySamples, 0, 1_048_576),
       transportLatencySamples: safeMatrixInteger(result.transportLatencySamples, 0, 1_048_576),
