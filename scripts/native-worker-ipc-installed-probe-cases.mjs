@@ -5,7 +5,7 @@ import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
 import { firstListedPreset, firstVst3ProgramDataTarget } from "./installed-plugin-probe-programs.mjs";
-import { summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
+import { assertProbeRenderMatchesLayout, summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
 import {
   createInstalledProbeReporter,
   installedProbeReportMode,
@@ -311,6 +311,52 @@ export function exerciseInstalledProbeSupport({ check }) {
       summarizeProbeRenderSignal({ channels: [[0, 0]], outputBuses: [{ index: 0, channels: [[0, 0]] }] }) === "silent" &&
       summarizeProbeRenderSignal({ channels: [], outputBuses: [] }) === "missing",
     "installed plugin probe classifies render signal coverage"
+  );
+  const multiOutputLayout = {
+    outputChannels: 2,
+    outputBusLayouts: [
+      { index: 0, channels: 2, active: true },
+      { index: 2, channels: 1, active: true }
+    ]
+  };
+  let goodMultiOutputCode = "ok";
+  try {
+    assertProbeRenderMatchesLayout({
+      channels: [[0, 0], [0.1, 0.1]],
+      outputBuses: [
+        { index: 0, channels: [[0, 0], [0.1, 0.1]] },
+        { index: 2, channels: [[0.2, 0.2]] }
+      ]
+    }, multiOutputLayout, 2);
+  } catch (error) {
+    goodMultiOutputCode = error.code;
+  }
+  let missingBusCode = "";
+  try {
+    assertProbeRenderMatchesLayout({
+      channels: [[0, 0], [0.1, 0.1]],
+      outputBuses: [{ index: 0, channels: [[0, 0], [0.1, 0.1]] }]
+    }, multiOutputLayout, 2);
+  } catch (error) {
+    missingBusCode = error.code;
+  }
+  let mismatchedMainCode = "";
+  try {
+    assertProbeRenderMatchesLayout({
+      channels: [[0, 0], [0.1, 0.1]],
+      outputBuses: [
+        { index: 0, channels: [[0, 0], [0, 0]] },
+        { index: 2, channels: [[0.2, 0.2]] }
+      ]
+    }, multiOutputLayout, 2);
+  } catch (error) {
+    mismatchedMainCode = error.code;
+  }
+  check(
+    goodMultiOutputCode === "ok" &&
+      missingBusCode === "bad_render_layout" &&
+      mismatchedMainCode === "bad_render_layout",
+    "installed plugin probe validates negotiated output-bus render layouts"
   );
   const vst3MidiEvents = midiEventsForBlock("vst3", 64, 64);
   check(

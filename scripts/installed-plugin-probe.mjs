@@ -20,7 +20,7 @@ import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
 import { probeListedPreset, probeVst3ProgramData } from "./installed-plugin-probe-programs.mjs";
-import { summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
+import { assertProbeRenderMatchesLayout, summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { createInstalledProbeReporter, installedProbeReportMode } from "./installed-plugin-probe-reporting.mjs";
 import {
@@ -326,7 +326,7 @@ async function probePlugin(socket, session, plugin) {
     renderPayload.transport = renderTransportContext();
     const rendered = await phase(result, "processAudioBlock", async () => {
       const response = await request(socket, "processAudioBlock", renderPayload, true, session);
-      assertRenderMatchesLayout(response, result.layout);
+      assertProbeRenderMatchesLayout(response, result.layout, renderPayload.frames);
       assertRenderTransport(response, renderPayload.transport);
       return response;
     });
@@ -564,26 +564,6 @@ function nearestPowerOfTwoAtMost(value) {
 
 function isPowerOfTwoBlock(value) {
   return Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
-}
-
-function assertRenderMatchesLayout(rendered, layout) {
-  const expectedOutputChannels = clampInt(layout?.outputChannels, 1, 32, 1);
-  if (!Array.isArray(rendered.channels) || rendered.channels.length !== expectedOutputChannels) {
-    const error = new Error(`rendered ${rendered.channels?.length ?? 0} channel(s), expected ${expectedOutputChannels}`);
-    error.code = "bad_render_layout";
-    throw error;
-  }
-  if (!Array.isArray(rendered.outputBuses)) {
-    const error = new Error("render response did not include outputBuses");
-    error.code = "bad_render_layout";
-    throw error;
-  }
-  const mainBus = rendered.outputBuses.find((bus) => bus?.index === 0);
-  if (!mainBus || !Array.isArray(mainBus.channels) || mainBus.channels.length !== expectedOutputChannels) {
-    const error = new Error("render response main output bus did not match the negotiated layout");
-    error.code = "bad_render_layout";
-    throw error;
-  }
 }
 
 function assertRenderTransport(rendered, expected) {
