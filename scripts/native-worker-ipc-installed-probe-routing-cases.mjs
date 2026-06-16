@@ -199,8 +199,12 @@ function exerciseProbeMidiCoverage({ check }) {
   const vst3MidiEvents = midiEventsForBlock("vst3", 64, 64);
   const vst3MidiControllerProfile = summarizeProbeMidiControllerEvents(vst3MidiEvents);
   check(
-    vst3MidiEvents.some((event) => event.type === "noteExpression" && event.noteId === 77) &&
+    vst3MidiEvents.length === 14 &&
+      vst3MidiEvents.some((event) => event.type === "noteExpression" && event.noteId === 77) &&
       vst3MidiEvents.some((event) => event.type === "noteExpressionText" && event.text === "probe" && event.noteId === 77) &&
+      vst3MidiEvents.some((event) => event.type === "noteExpression" && event.noteId === 78 && event.busIndex === 1) &&
+      vst3MidiEvents.some((event) => event.type === "noteExpressionText" && event.text === "bus" && event.busIndex === 1) &&
+      vst3MidiEvents.some((event) => event.type === "noteOff" && event.noteId === 78 && event.busIndex === 1) &&
       vst3MidiEvents.some((event) => event.type === "controlChange" && event.controller === 74 && event.busIndex === 1) &&
       vst3MidiEvents.some((event) => event.type === "pitchBend" && event.busIndex === 1) &&
       vst3MidiEvents.some((event) => event.type === "channelPressure" && event.busIndex === 1) &&

@@ -156,7 +156,7 @@ export function exerciseInstalledProbeSupport({ check }) {
         typeIds: [0, 6]
       },
       automationLanePointCount: 2,
-      midiEventCount: 10,
+      midiEventCount: 14,
       midiControllerEventProfile: {
         eventCount: 6,
         flags: [
@@ -320,7 +320,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].vst3NoteExpressionTypeIds) === JSON.stringify([0, 6]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventBuses) === JSON.stringify([0, 2]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventChannels) === JSON.stringify([0, 3]) &&
-      coverageSummary.matrix[0].midiEventCount === 10 &&
+      coverageSummary.matrix[0].midiEventCount === 14 &&
       coverageSummary.matrix[0].midiControllerEventCount === 6 &&
       coverageSummary.matrix[0].midiControllerFlags.includes("non-main-event-bus") &&
       coverageSummary.matrix[0].midiControllerFlags.includes("type:controlChange") &&
