@@ -212,6 +212,9 @@ await assertRejectsBroker("bad-ready", "bad ready handshakes are rejected", "nat
 await assertRejectsBroker("malformed-ready", "malformed ready handshakes are rejected", "stdout_malformed");
 await assertRejectsBroker("ready-timeout", "missing ready handshakes time out", "ready_timeout");
 await assertRejectsBroker("open-error", "broker open errors are rejected", "fixture_open_failed");
+await assertRejectsBroker("bad-open-ok", "broker open responses must set ok true", "open_invalid");
+await assertRejectsBroker("missing-session-id", "broker open responses must include a session id", "invalid_session_id");
+await assertRejectsBroker("oversized-session-id", "broker session ids must stay bounded", "invalid_session_id");
 await assertRejectsBroker("malformed-open", "malformed command responses are rejected", "stdout_malformed");
 await assertRejectsBroker("oversized-open", "oversized command responses are rejected", "line_too_large");
 await assertRejectsBroker("open-timeout", "missing command responses time out", "command_timeout");

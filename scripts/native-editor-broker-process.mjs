@@ -64,10 +64,11 @@ export class NativeEditorBroker {
         fileGrants: normalizeBrokerFileGrants(fileGrants),
         nativeHost: instance.nativeHost
       });
+      const normalized = normalizeOpenResponse(opened, this.policy);
       return {
         brokerSession: session,
-        brokerSessionId: safeText(opened.brokerSessionId, 80),
-        capabilities: normalizeBrokerCapabilities(opened.capabilities, this.policy)
+        brokerSessionId: normalized.brokerSessionId,
+        capabilities: normalized.capabilities
       };
     } catch (error) {
       session.destroy();
@@ -287,6 +288,21 @@ function normalizeBrokerCapabilities(capabilities, policy) {
   };
 }
 
+function normalizeOpenResponse(response, policy) {
+  if (!response || typeof response !== "object" || response.ok !== true) {
+    throw new Error("native_editor_broker_open_invalid");
+  }
+  const brokerSessionId = requiredSafeText(
+    response.brokerSessionId,
+    80,
+    "native_editor_broker_invalid_session_id"
+  );
+  return {
+    brokerSessionId,
+    capabilities: normalizeBrokerCapabilities(response.capabilities, policy)
+  };
+}
+
 function nativeEditorPolicyFromEnv(env) {
   return {
     fileDialogs: env.SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_FILE_DIALOGS === "1",
@@ -352,6 +368,19 @@ function safeText(value, maxBytes) {
     output += char;
   }
   return output;
+}
+
+function requiredSafeText(value, maxBytes, errorCode) {
+  if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value, "utf8") > maxBytes) {
+    throw new Error(errorCode);
+  }
+  for (const char of value) {
+    const codePoint = char.codePointAt(0);
+    if (codePoint < 0x20 || codePoint === 0x7f) {
+      throw new Error(errorCode);
+    }
+  }
+  return value;
 }
 
 function sanitizeDiagnostic(value, maxChars) {

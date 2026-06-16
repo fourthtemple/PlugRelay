@@ -80,6 +80,8 @@ Open response:
 }
 ```
 
+`ok` must be `true`. `brokerSessionId` must be a non-empty UTF-8 string capped at 80 bytes and must not contain control characters. Invalid open responses fail closed and the daemon tears down the broker session before registering a browser-visible native editor session.
+
 Close:
 
 ```json

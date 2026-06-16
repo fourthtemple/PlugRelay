@@ -42,6 +42,18 @@ process.stdin.on("data", (chunk) => {
         process.stdout.write(`${"x".repeat(4096)}\n`);
         continue;
       }
+      if (mode === "bad-open-ok") {
+        process.stdout.write(`${JSON.stringify({ ok: false, brokerSessionId: `fixture-${message.editorId}` })}\n`);
+        continue;
+      }
+      if (mode === "missing-session-id") {
+        process.stdout.write(`${JSON.stringify({ ok: true, capabilities: { nativeWindow: true } })}\n`);
+        continue;
+      }
+      if (mode === "oversized-session-id") {
+        process.stdout.write(`${JSON.stringify({ ok: true, brokerSessionId: "x".repeat(81) })}\n`);
+        continue;
+      }
       if (mode === "require-file-grants") {
         const grant = Array.isArray(message.fileGrants) ? message.fileGrants[0] : undefined;
         if (
