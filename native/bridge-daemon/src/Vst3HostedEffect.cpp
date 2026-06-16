@@ -253,7 +253,7 @@ std::string HostedVst3Effect::parametersToJson() const {
 }
 
 std::string HostedVst3Effect::noteExpressionsToJson() const {
-  return vst3_worker::noteExpressionsToJson(noteExpressionController_);
+  return vst3_worker::noteExpressionsToJson(component_, noteExpressionController_);
 }
 
 std::string HostedVst3Effect::programListsToJson() const {

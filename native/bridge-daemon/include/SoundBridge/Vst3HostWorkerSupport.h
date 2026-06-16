@@ -127,7 +127,9 @@ std::string setProgramData(
     Steinberg::Vst::ProgramListID programListId,
     Steinberg::int32 programIndex,
     const std::string& dataText);
-std::string noteExpressionsToJson(Steinberg::Vst::INoteExpressionController* noteExpressionController);
+std::string noteExpressionsToJson(
+    Steinberg::Vst::IComponent* component,
+    Steinberg::Vst::INoteExpressionController* noteExpressionController);
 std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels);
 std::string renderedAudioToJson(const RenderedAudio& rendered);
 bool parameterIsAutomatable(const Steinberg::Vst::ParameterInfo& info);

@@ -269,28 +269,36 @@ std::string programListsToJson(
   return output.str();
 }
 
-std::string noteExpressionsToJson(Steinberg::Vst::INoteExpressionController* noteExpressionController) {
+std::string noteExpressionsToJson(
+    Steinberg::Vst::IComponent* component,
+    Steinberg::Vst::INoteExpressionController* noteExpressionController) {
   std::ostringstream output;
   output << "{\"vst3NoteExpressions\":[";
   if (noteExpressionController != nullptr) {
     bool first = true;
     Steinberg::int32 total = 0;
-    for (Steinberg::int16 channel = 0; channel < 16 && total < kMaxWorkerNoteExpressionTypes; ++channel) {
-      const auto count = std::clamp<Steinberg::int32>(
-          noteExpressionController->getNoteExpressionCount(0, channel),
-          0,
-          kMaxWorkerNoteExpressionTypes - total);
-      for (Steinberg::int32 index = 0; index < count && total < kMaxWorkerNoteExpressionTypes; ++index) {
-        Steinberg::Vst::NoteExpressionTypeInfo info {};
-        if (noteExpressionController->getNoteExpressionInfo(0, channel, index, info) != Steinberg::kResultOk) {
-          continue;
+    const auto eventBusCount = std::clamp<Steinberg::int32>(
+        component != nullptr ? component->getBusCount(Steinberg::Vst::kEvent, Steinberg::Vst::kInput) : 1,
+        1,
+        static_cast<Steinberg::int32>(kMaxWorkerChannels));
+    for (Steinberg::int32 busIndex = 0; busIndex < eventBusCount && total < kMaxWorkerNoteExpressionTypes; ++busIndex) {
+      for (Steinberg::int16 channel = 0; channel < 16 && total < kMaxWorkerNoteExpressionTypes; ++channel) {
+        const auto count = std::clamp<Steinberg::int32>(
+            noteExpressionController->getNoteExpressionCount(busIndex, channel),
+            0,
+            kMaxWorkerNoteExpressionTypes - total);
+        for (Steinberg::int32 index = 0; index < count && total < kMaxWorkerNoteExpressionTypes; ++index) {
+          Steinberg::Vst::NoteExpressionTypeInfo info {};
+          if (noteExpressionController->getNoteExpressionInfo(busIndex, channel, index, info) != Steinberg::kResultOk) {
+            continue;
+          }
+          if (!first) {
+            output << ",";
+          }
+          output << noteExpressionInfoToJson(info, busIndex, channel);
+          first = false;
+          ++total;
         }
-        if (!first) {
-          output << ",";
-        }
-        output << noteExpressionInfoToJson(info, 0, channel);
-        first = false;
-        ++total;
       }
     }
   }
