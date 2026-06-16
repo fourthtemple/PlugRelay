@@ -88,7 +88,7 @@ Before posting, remove anything private that may appear in local output. Do not 
 - absolute local filesystem paths
 - pairing tokens or local daemon ports if you consider them sensitive
 
-The probe is designed to report bounded public plugin metadata, phase names, feature coverage, and failure codes. If a report still contains private information, redact it before submitting.
+The probe is designed to report bounded public plugin metadata, phase names, feature coverage, and failure codes. Probe error summaries redact common local path forms as `[local-path]`, including plugin bundle paths, file URLs, and Windows drive paths. If a report still contains private information, redact it before submitting.
 
 ## How Reports Are Used
 

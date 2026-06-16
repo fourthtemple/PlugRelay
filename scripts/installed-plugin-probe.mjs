@@ -16,6 +16,7 @@ import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
 import { probeListedPreset, probeVst3ProgramData } from "./installed-plugin-probe-programs.mjs";
+import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { createInstalledProbeReporter, installedProbeReportMode } from "./installed-plugin-probe-reporting.mjs";
 import {
   connectWebSocket,
@@ -578,9 +579,7 @@ function daemonEnvironment(port) {
 }
 
 function errorSummary(error) {
-  const message = error?.message ?? String(error);
-  const code = error?.code ?? message.split(":")[0];
-  return { code, message };
+  return installedProbeErrorSummary(error);
 }
 
 function flagFromEnv(name) {

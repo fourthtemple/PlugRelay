@@ -1,5 +1,6 @@
 import { assertNoNativeLaunchData, nativeStateFileText } from "./installed-plugin-probe-file-grants.mjs";
 import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
+import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
@@ -95,6 +96,27 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     summarizeProbeResults([{ ok: true, format: "vst3", vst3ProgramListCount: 0 }]).coverage.vst3ProgramLists.none === 1,
     "installed plugin probe summarizes VST3 plugins with no program lists"
+  );
+  const pathError = Object.assign(
+    new Error(
+      "failed to load /Library/Audio/Plug-Ins/VST3/Private Plugin.vst3 and file:///Users/test/Secrets/license.key from C:\\Users\\test\\Private Plugin.vst3"
+    ),
+    { code: "native_worker_failed" }
+  );
+  const pathErrorSummary = installedProbeErrorSummary(pathError);
+  check(
+    pathErrorSummary.code === "native_worker_failed" &&
+      pathErrorSummary.message.includes("[local-path]") &&
+      !pathErrorSummary.message.includes("/Library/Audio") &&
+      !pathErrorSummary.message.includes("file:///") &&
+      !pathErrorSummary.message.includes("C:\\Users"),
+    "installed plugin probe redacts local paths from error messages"
+  );
+  const pathCodeSummary = installedProbeErrorSummary(new Error("/Users/test/Private Plugin.vst3: failed"));
+  check(
+    pathCodeSummary.code === "unknown_error" &&
+      pathCodeSummary.message.startsWith("[local-path]: failed"),
+    "installed plugin probe redacts local paths from derived error codes"
   );
 
   const coverageLines = [];
