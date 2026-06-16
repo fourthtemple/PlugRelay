@@ -47,11 +47,18 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
     programIndex: 0,
     data: "YWI="
   });
+  const emptyProgramData = unitNormalizers.normalizeVst3ProgramData({
+    programListId: -2147483648,
+    programIndex: 0,
+    data: ""
+  });
   check(
     programData?.format === "vst3" &&
       programData.programListId === 7 &&
       programData.programIndex === 0 &&
-      programData.size === 2,
+      programData.size === 2 &&
+      emptyProgramData?.programListId === -2147483648 &&
+      emptyProgramData.size === 0,
     "daemon normalizers bound VST3 program data"
   );
 
@@ -83,6 +90,17 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
       fakeInstance.parameters?.[0]?.id === "program",
     "daemon VST3 program-data helper restores an owned bounded envelope"
   );
+  fakeInstance.workerProgramData = { format: "vst3", programListId: 7, programIndex: 0, data: "" };
+  const exportedEmptyProgramData = await programDataSupport.getVst3ProgramData("inst-test", 7, 0, {});
+  const restoredEmptyProgramData = await programDataSupport.setVst3ProgramData("inst-test", exportedEmptyProgramData.programData, {});
+  check(
+    exportedEmptyProgramData.size === 0 &&
+      exportedEmptyProgramData.data === "" &&
+      restoredEmptyProgramData.restored === true &&
+      fakeInstance.restoredProgramData?.data === "",
+    "daemon VST3 program-data helper preserves empty restore envelopes"
+  );
+  delete fakeInstance.workerProgramData;
 
   check(
     (await rejectedCode(() => programDataSupport.setVst3ProgramData("inst-test", programEnvelope({ pluginId: "vst3:other" }), {}))) ===
