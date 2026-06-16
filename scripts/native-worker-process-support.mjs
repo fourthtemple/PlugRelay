@@ -1,3 +1,5 @@
+import { redactLocalPaths } from "./local-path-redaction.mjs";
+
 export const DEFAULT_MAX_WORKER_STDOUT_LINE_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_MAX_WORKER_COMMAND_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_MAX_WORKER_PENDING_COMMAND_BYTES = 64 * 1024 * 1024;
@@ -320,7 +322,7 @@ function accountWorkerStderr(worker, rawText) {
 function sanitizeWorkerDiagnosticMessage(value, maxChars) {
   const limit = normalizeWorkerDiagnosticLogLimit(maxChars);
   let sanitized = "";
-  for (const char of String(value)) {
+  for (const char of redactLocalPaths(value)) {
     const codePoint = char.codePointAt(0);
     if ((codePoint >= 0 && codePoint < 0x20) || codePoint === 0x7f) {
       sanitized += `\\u${codePoint.toString(16).padStart(4, "0")}`;

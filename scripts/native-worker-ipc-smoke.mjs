@@ -237,6 +237,14 @@ try {
     warnings.every((warning) => !warning.includes(String.fromCharCode(27)) && !warning.includes("\r")),
     "worker stderr diagnostics do not log raw terminal controls"
   );
+  check(
+    warnings.some((warning) => warning.includes("[local-path]")) &&
+      warnings.every((warning) =>
+        !warning.includes("/Users/") &&
+        !warning.includes("file:///")
+      ),
+    "worker stderr diagnostics redact local paths"
+  );
   const cappedDiagnosticWorkers = createTestWorkers(nativeWorkerPath, { maxWorkerDiagnosticLogChars: 16 });
   const cappedDiagnosticWorker = new cappedDiagnosticWorkers.ExampleInstrumentWorker(diagnosticControlWorkerPath);
   const cappedWarnings = await captureWarnings(() =>

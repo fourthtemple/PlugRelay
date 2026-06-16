@@ -219,7 +219,7 @@ process.stdin.on("data", () => {
     return;
   }
   handled = true;
-  process.stderr.write("\\u001b[31mwarning\\rfake\\x7f\\n");
+  process.stderr.write("\\u001b[31mwarning\\rfake\\x7f /Users/t/P.vst3 file:///tmp/k.lic\\n");
   setTimeout(() => {
     process.stdout.write(JSON.stringify({ channels: [[0]] }) + "\\n");
   }, 10);
