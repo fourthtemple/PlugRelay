@@ -77,7 +77,7 @@ In the GitHub issue, include:
 - whether scanning, instantiation, rendering, parameters, presets, state, MIDI, bus layouts, editor, or file grants failed
 - the JSON probe report or the relevant sanitized failure section
 
-JSON reports include a path-free `busProfile` for each probed plugin. Use it to call out coverage such as `effect-main`, `instrument-main`, `sidechain`, `multi-output`, and `multi-output-instrument`, plus flags for non-main-bus routing such as `sidechain-input`, `multi-input`, `multi-output`, and unusual bus indexes.
+JSON reports include a path-free `busProfile` for each probed plugin. Use it to call out coverage such as `effect-main`, `instrument-main`, `sidechain`, `multi-output`, and `multi-output-instrument`, plus flags for non-main-bus routing such as `sidechain-input`, `multi-input`, `multi-output`, and unusual bus indexes. The profile includes bounded bus/channel counts and active bus indexes so reports can describe unusual layouts without exposing plugin launch paths.
 
 VST3 reports also include a path-free `vst3EventProfile` derived from bounded note-expression metadata. Use it to call out coverage such as `no-note-expressions`, `main-event-bus`, `non-main-event-bus`, `non-main-channel`, `text-expression`, and multi-event-bus or multi-channel fixtures without including plugin paths, preset contents, or license data.
 
@@ -95,7 +95,7 @@ Host-transport coverage is reported as `accepted` or `missing`. An `accepted` re
 
 Native-editor coverage is reported as `not-requested`, `opened`, `missing`, or `failed`. `not-requested` means the probe did not run with `SOUNDBRIDGE_PROBE_NATIVE_EDITOR_BROKER=1`; `opened` means the separate broker open/close path succeeded.
 
-Matrix reports include one compact entry per probed plugin with path-redacted identity text, pass/fail status, failure phase/code, render-signal status, bus/event categories, VST3 MIDI-controller event status, program metadata status, automation status, host-transport status, native-editor status, parameter metadata status, and advertised file-grant operations. Each entry also includes a `featureStatus` object for dashboard-friendly buckets: `instantiation`, `parameters`, `presetSnapshots`, `vst3ProgramData`, `state`, `fileGrants`, `midiEvents`, `automation`, `transport`, `rendering`, `busLayouts`, `latencyTail`, and `editor`. They are meant for compatibility dashboards and triage; attach the full JSON report when maintainers need phase timings or detailed per-plugin payloads.
+Matrix reports include one compact entry per probed plugin with path-redacted identity text, pass/fail status, failure phase/code, render-signal status, bus/event categories, bounded bus counts/indexes, VST3 MIDI-controller event status, program metadata status, automation status, host-transport status, native-editor status, parameter metadata status, and advertised file-grant operations. Each entry also includes a `featureStatus` object for dashboard-friendly buckets: `instantiation`, `parameters`, `presetSnapshots`, `vst3ProgramData`, `state`, `fileGrants`, `midiEvents`, `automation`, `transport`, `rendering`, `busLayouts`, `latencyTail`, and `editor`. They are meant for compatibility dashboards and triage; attach the full JSON report when maintainers need phase timings or detailed per-plugin payloads.
 
 ## Privacy And Safety
 

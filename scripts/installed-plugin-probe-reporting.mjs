@@ -106,6 +106,14 @@ function summarizeCompatibilityMatrix(results, options) {
       renderSignal: safeMatrixText(result.renderSignal ?? "missing", 32),
       busCategory: safeMatrixText(result.busProfile?.category ?? "missing", 64),
       busFlags: safeMatrixArray(result.busProfile?.flags, 64),
+      busInputCount: safeMatrixInteger(result.busProfile?.inputBuses, 0, 32),
+      busOutputCount: safeMatrixInteger(result.busProfile?.outputBuses, 0, 32),
+      busActiveInputCount: safeMatrixInteger(result.busProfile?.activeInputBuses, 0, 32),
+      busActiveOutputCount: safeMatrixInteger(result.busProfile?.activeOutputBuses, 0, 32),
+      busInputChannels: safeMatrixInteger(result.busProfile?.inputChannels, 0, 32),
+      busOutputChannels: safeMatrixInteger(result.busProfile?.outputChannels, 0, 32),
+      busActiveInputIndexes: safeMatrixIntegerArray(result.busProfile?.activeInputBusIndexes, 0, 31),
+      busActiveOutputIndexes: safeMatrixIntegerArray(result.busProfile?.activeOutputBusIndexes, 0, 31),
       vst3EventCategory: safeMatrixText(
         result.vst3EventProfile?.category ??
           (String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format"),
@@ -413,6 +421,18 @@ function safeMatrixArray(value, maxBytes) {
     return [];
   }
   return [...new Set(value.map((entry) => safeMatrixText(entry, maxBytes)).filter(Boolean))];
+}
+
+function safeMatrixInteger(value, min, max) {
+  return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+}
+
+function safeMatrixIntegerArray(value, min, max) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.filter((entry) => Number.isInteger(entry) && entry >= min && entry <= max))]
+    .sort((left, right) => left - right);
 }
 
 function safeMatrixText(value, maxBytes) {

@@ -88,7 +88,18 @@ export function exerciseInstalledProbeSupport({ check }) {
       fileGrantLicenseLoad: "skipped-unadvertised",
       fileGrantOtherPresetLoad: "applied",
       fileGrantOperations: ["loadPreset", "restoreState", "saveStateDirectory", "loadSample", "other"],
-      busProfile: { category: "sidechain", flags: ["sidechain-input", "multi-input"] },
+      busProfile: {
+        category: "sidechain",
+        flags: ["sidechain-input", "multi-input"],
+        inputChannels: 3,
+        outputChannels: 2,
+        inputBuses: 2,
+        outputBuses: 1,
+        activeInputBuses: 2,
+        activeOutputBuses: 1,
+        activeInputBusIndexes: [0, 1],
+        activeOutputBusIndexes: [0]
+      },
       vst3EventProfile: {
         category: "non-main-event-bus",
         flags: ["note-expressions", "non-main-event-bus", "multi-event-bus", "non-main-channel", "multi-channel", "text-expression"],
@@ -160,6 +171,14 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].vst3ProgramLists === "listed" &&
       coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
       coverageSummary.matrix[0].automation === "applied" &&
+      coverageSummary.matrix[0].busInputCount === 2 &&
+      coverageSummary.matrix[0].busOutputCount === 1 &&
+      coverageSummary.matrix[0].busActiveInputCount === 2 &&
+      coverageSummary.matrix[0].busActiveOutputCount === 1 &&
+      coverageSummary.matrix[0].busInputChannels === 3 &&
+      coverageSummary.matrix[0].busOutputChannels === 2 &&
+      JSON.stringify(coverageSummary.matrix[0].busActiveInputIndexes) === JSON.stringify([0, 1]) &&
+      JSON.stringify(coverageSummary.matrix[0].busActiveOutputIndexes) === JSON.stringify([0]) &&
       coverageSummary.matrix[0].vst3MidiControllerEvents === "accepted" &&
       coverageSummary.matrix[0].hostTransport === "accepted" &&
       coverageSummary.matrix[0].fileGrantSampleLoad === "applied" &&
@@ -278,6 +297,20 @@ export function exerciseInstalledProbeSupport({ check }) {
       outputBusLayouts: [{ index: 0, channels: 2, type: "main", active: true }]
     }
   );
+  const nonsequentialOutputProfile = summarizeProbeBusLayout(
+    { kind: "effect" },
+    {
+      inputChannels: 2,
+      outputChannels: 3,
+      inputBuses: 1,
+      outputBuses: 2,
+      inputBusLayouts: [{ index: 0, channels: 2, type: "main", active: true }],
+      outputBusLayouts: [
+        { index: 0, channels: 2, type: "main", active: true },
+        { index: 2, channels: 1, type: "aux", active: true }
+      ]
+    }
+  );
   const multiOutputInstrumentProfile = summarizeProbeBusLayout(
     { kind: "instrument" },
     {
@@ -294,8 +327,12 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     sidechainProfile.category === "sidechain" &&
       sidechainProfile.flags.includes("sidechain-input") &&
+      JSON.stringify(sidechainProfile.activeInputBusIndexes) === JSON.stringify([0, 1]) &&
+      nonsequentialOutputProfile.flags.includes("nonsequential-bus-indexes") &&
+      JSON.stringify(nonsequentialOutputProfile.activeOutputBusIndexes) === JSON.stringify([0, 2]) &&
       multiOutputInstrumentProfile.category === "multi-output-instrument" &&
-      multiOutputInstrumentProfile.flags.includes("multi-output-instrument"),
+      multiOutputInstrumentProfile.flags.includes("multi-output-instrument") &&
+      JSON.stringify(multiOutputInstrumentProfile.activeOutputBusIndexes) === JSON.stringify([0, 1]),
     "installed plugin probe classifies bus-layout coverage"
   );
 
