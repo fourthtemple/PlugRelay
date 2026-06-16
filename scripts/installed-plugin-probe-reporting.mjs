@@ -1,4 +1,10 @@
-import { redactLocalPaths } from "./local-path-redaction.mjs";
+import {
+  removeEmpty,
+  safeMatrixArray,
+  safeMatrixInteger,
+  safeMatrixIntegerArray,
+  safeMatrixText
+} from "./installed-plugin-probe-reporting-safety.mjs";
 
 const REPORT_MODES = new Set(["full", "summary", "json", "matrix"]);
 const KNOWN_FILE_GRANT_OPERATIONS = new Set([
@@ -596,51 +602,6 @@ function uniqueKnownFileGrantOperations(operations) {
   return [...new Set(operations.map((operation) => String(operation)).filter((operation) =>
     KNOWN_FILE_GRANT_OPERATIONS.has(operation)
   ))];
-}
-
-function safeMatrixArray(value, maxBytes) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return [...new Set(value.map((entry) => safeMatrixText(entry, maxBytes)).filter(Boolean))];
-}
-
-function safeMatrixInteger(value, min, max) {
-  return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
-}
-
-function safeMatrixIntegerArray(value, min, max) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return [...new Set(value.filter((entry) => Number.isInteger(entry) && entry >= min && entry <= max))]
-    .sort((left, right) => left - right);
-}
-
-function safeMatrixText(value, maxBytes) {
-  const text = redactLocalPaths(value).replace(/\u0000/g, "");
-  let output = "";
-  for (const char of text) {
-    const codePoint = char.codePointAt(0);
-    if ((codePoint >= 0 && codePoint < 0x20) || codePoint === 0x7f) {
-      continue;
-    }
-    if (Buffer.byteLength(output + char, "utf8") > maxBytes) {
-      break;
-    }
-    output += char;
-  }
-  return output;
-}
-
-function removeEmpty(value) {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) =>
-      entry !== undefined &&
-        entry !== "" &&
-        (!Array.isArray(entry) || entry.length > 0)
-    )
-  );
 }
 
 function countVst3EventProfiles(results) {
