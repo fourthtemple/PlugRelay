@@ -52,6 +52,9 @@ export function exerciseInstalledProbeSupport({ check }) {
     "useFileGrantRestoreState",
     "useFileGrantSaveStateDirectory",
     "useFileGrantRestoreSavedState",
+    "useFileGrantLoadSample",
+    "useFileGrantOpenCacheDirectory",
+    "useFileGrantLoadLicense",
     "getLatency",
     "getTailTime",
     "setAutomationLane",
@@ -79,6 +82,9 @@ export function exerciseInstalledProbeSupport({ check }) {
       fileGrantPresetLoad: "applied",
       fileGrantStateSave: "applied",
       fileGrantSavedStateRestore: "applied",
+      fileGrantSampleLoad: "applied",
+      fileGrantCacheDirectoryOpen: "skipped-unadvertised",
+      fileGrantLicenseLoad: "skipped-unadvertised",
       fileGrantOperations: ["loadPreset", "restoreState", "saveStateDirectory", "loadSample"],
       busProfile: { category: "sidechain", flags: ["sidechain-input", "multi-input"] },
       vst3EventProfile: {
@@ -104,6 +110,9 @@ export function exerciseInstalledProbeSupport({ check }) {
       vst3ProgramData: "skipped-format",
       parameterCount: 0,
       parameterDisplayInput: "skipped",
+      fileGrantSampleLoad: "skipped-unadvertised",
+      fileGrantCacheDirectoryOpen: "applied",
+      fileGrantLicenseLoad: "applied",
       fileGrantOperations: ["loadPreset", "openCacheDirectory", "loadLicense"],
       busProfile: { category: "multi-output-instrument", flags: ["multi-output", "multi-output-instrument"] },
       automationLaneSkipped: "lv2-block-size-profile",
@@ -120,6 +129,9 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.fileGrantOperations.loadSample === 1 &&
       coverageSummary.coverage.fileGrantOperations.openCacheDirectory === 1 &&
       coverageSummary.coverage.fileGrantOperations.loadLicense === 1 &&
+      coverageSummary.coverage.fileGrantSampleLoad.applied === 1 &&
+      coverageSummary.coverage.fileGrantCacheDirectoryOpen.applied === 1 &&
+      coverageSummary.coverage.fileGrantLicenseLoad.applied === 1 &&
       coverageSummary.coverage.busLayouts.sidechain === 1 &&
       coverageSummary.coverage.busLayouts["flag:multi-output-instrument"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["non-main-event-bus"] === 1 &&
@@ -139,6 +151,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
       coverageSummary.matrix[0].automation === "applied" &&
       coverageSummary.matrix[0].hostTransport === "accepted" &&
+      coverageSummary.matrix[0].fileGrantSampleLoad === "applied" &&
       coverageSummary.matrix[0].featureStatus.instantiation === "passed" &&
       coverageSummary.matrix[0].featureStatus.parameters === "passed" &&
       coverageSummary.matrix[0].featureStatus.fileGrants === "passed" &&
@@ -147,7 +160,9 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].featureStatus.editor === "passed" &&
       coverageSummary.matrix[1].name === "[local-path]" &&
       coverageSummary.matrix[1].vst3ProgramLists === "skipped-format" &&
-      coverageSummary.matrix[1].featureStatus.fileGrants === "advertised" &&
+      coverageSummary.matrix[1].fileGrantCacheDirectoryOpen === "applied" &&
+      coverageSummary.matrix[1].fileGrantLicenseLoad === "applied" &&
+      coverageSummary.matrix[1].featureStatus.fileGrants === "passed" &&
       coverageSummary.matrix[1].fileGrantOperations.includes("loadLicense"),
     "installed plugin probe builds path-free compatibility matrix entries"
   );
@@ -194,6 +209,9 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("VST3 program data: 1 restored, 1 skipped-format")) &&
       coverageLines.some((line) => line.includes("VST3 program lists:")) &&
       coverageLines.some((line) => line.includes("parameter metadata:")) &&
+      coverageLines.some((line) => line.includes("file grant sample load:")) &&
+      coverageLines.some((line) => line.includes("file grant cache directory open:")) &&
+      coverageLines.some((line) => line.includes("file grant license load:")) &&
       coverageLines.some((line) => line.includes("file grant operations advertised:")) &&
       coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
       coverageLines.some((line) => line.includes("host transport:")) &&

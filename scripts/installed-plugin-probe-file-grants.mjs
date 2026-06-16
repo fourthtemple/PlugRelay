@@ -155,6 +155,119 @@ export async function probeFileGrantStateSave({
   }
 }
 
+export async function probeFileGrantSampleLoad({
+  assertProbe,
+  fileGrantRoot,
+  instanceId,
+  phase,
+  plugin,
+  request,
+  result,
+  session,
+  socket
+}) {
+  if (!pluginAdvertisesFileGrantOperation(plugin, "loadSample")) {
+    result.fileGrantSampleLoad = "skipped-unadvertised";
+    return;
+  }
+  const samplePath = path.join(fileGrantRoot, `${safeFilename(plugin.pluginId)}.wav`);
+  fs.writeFileSync(samplePath, "SoundBridge sample fixture\n", "utf8");
+  let grantId = "";
+  try {
+    const grant = await phase(result, "createSampleFileGrant", () =>
+      request(socket, "createFileGrant", { path: samplePath, purpose: "sample", access: "read", kind: "file" }, true, session)
+    );
+    grantId = grant.grantId;
+    await phase(result, "attachSampleFileGrant", () =>
+      request(socket, "attachFileGrant", { instanceId, grantId, purpose: "sample", access: "read", kind: "file" }, true, session)
+    );
+    const loaded = await phase(result, "useFileGrantLoadSample", () =>
+      request(socket, "useFileGrant", { instanceId, grantId, operation: "loadSample" }, true, session)
+    );
+    assertProbe(loaded.applied === true, "bad_file_grant_sample_load", "file grant sample load was not applied");
+    assertNoNativeLaunchData(loaded, "file grant sample response", assertProbe);
+    result.fileGrantSampleLoad = "applied";
+  } finally {
+    await detachAndRevokeGrant({ grantId, instanceId, request, session, socket });
+    fs.rmSync(samplePath, { force: true });
+  }
+}
+
+export async function probeFileGrantCacheDirectoryOpen({
+  assertProbe,
+  fileGrantRoot,
+  instanceId,
+  phase,
+  plugin,
+  request,
+  result,
+  session,
+  socket
+}) {
+  if (!pluginAdvertisesFileGrantOperation(plugin, "openCacheDirectory")) {
+    result.fileGrantCacheDirectoryOpen = "skipped-unadvertised";
+    return;
+  }
+  const cacheDir = fs.mkdtempSync(path.join(fileGrantRoot, `${safeFilename(plugin.pluginId)}-cache-`));
+  let grantId = "";
+  try {
+    const grant = await phase(result, "createCacheDirectoryGrant", () =>
+      request(socket, "createFileGrant", { path: cacheDir, purpose: "cache", access: "readWrite", kind: "directory" }, true, session)
+    );
+    grantId = grant.grantId;
+    await phase(result, "attachCacheDirectoryGrant", () =>
+      request(socket, "attachFileGrant", { instanceId, grantId, purpose: "cache", access: "readWrite", kind: "directory" }, true, session)
+    );
+    const opened = await phase(result, "useFileGrantOpenCacheDirectory", () =>
+      request(socket, "useFileGrant", { instanceId, grantId, operation: "openCacheDirectory" }, true, session)
+    );
+    assertProbe(opened.applied === true, "bad_file_grant_cache_open", "file grant cache directory open was not applied");
+    assertNoNativeLaunchData(opened, "file grant cache response", assertProbe);
+    result.fileGrantCacheDirectoryOpen = "applied";
+  } finally {
+    await detachAndRevokeGrant({ grantId, instanceId, request, session, socket });
+    fs.rmSync(cacheDir, { force: true, recursive: true });
+  }
+}
+
+export async function probeFileGrantLicenseLoad({
+  assertProbe,
+  fileGrantRoot,
+  instanceId,
+  phase,
+  plugin,
+  request,
+  result,
+  session,
+  socket
+}) {
+  if (!pluginAdvertisesFileGrantOperation(plugin, "loadLicense")) {
+    result.fileGrantLicenseLoad = "skipped-unadvertised";
+    return;
+  }
+  const licensePath = path.join(fileGrantRoot, `${safeFilename(plugin.pluginId)}.license`);
+  fs.writeFileSync(licensePath, "SoundBridge license fixture\n", "utf8");
+  let grantId = "";
+  try {
+    const grant = await phase(result, "createLicenseFileGrant", () =>
+      request(socket, "createFileGrant", { path: licensePath, purpose: "license", access: "read", kind: "file" }, true, session)
+    );
+    grantId = grant.grantId;
+    await phase(result, "attachLicenseFileGrant", () =>
+      request(socket, "attachFileGrant", { instanceId, grantId, purpose: "license", access: "read", kind: "file" }, true, session)
+    );
+    const loaded = await phase(result, "useFileGrantLoadLicense", () =>
+      request(socket, "useFileGrant", { instanceId, grantId, operation: "loadLicense" }, true, session)
+    );
+    assertProbe(loaded.applied === true, "bad_file_grant_license_load", "file grant license load was not applied");
+    assertNoNativeLaunchData(loaded, "file grant license response", assertProbe);
+    result.fileGrantLicenseLoad = "applied";
+  } finally {
+    await detachAndRevokeGrant({ grantId, instanceId, request, session, socket });
+    fs.rmSync(licensePath, { force: true });
+  }
+}
+
 export function nativeStateFileText(format, stateEnvelope) {
   let parsed;
   try {
@@ -206,6 +319,18 @@ export function assertNoNativeLaunchData(value, context, assertProbe) {
       }
     }
   }
+}
+
+async function detachAndRevokeGrant({ grantId, instanceId, request, session, socket }) {
+  if (!grantId) {
+    return;
+  }
+  await request(socket, "detachFileGrant", { instanceId, grantId }, true, session).catch(() => undefined);
+  await request(socket, "revokeFileGrant", { grantId }, true, session).catch(() => undefined);
+}
+
+function pluginAdvertisesFileGrantOperation(plugin, operation) {
+  return Array.isArray(plugin?.fileGrantOperations) && plugin.fileGrantOperations.includes(operation);
 }
 
 function safeFilename(value) {

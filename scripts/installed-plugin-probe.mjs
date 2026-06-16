@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 import { isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
 import {
   assertNoNativeLaunchData,
+  probeFileGrantCacheDirectoryOpen,
+  probeFileGrantLicenseLoad,
   probeFileGrantPresetLoad,
+  probeFileGrantSampleLoad,
   probeFileGrantStateRestore,
   probeFileGrantStateSave
 } from "./installed-plugin-probe-file-grants.mjs";
@@ -229,6 +232,39 @@ async function probePlugin(socket, session, plugin) {
         socket
       });
     }
+    await probeFileGrantSampleLoad({
+      assertProbe,
+      fileGrantRoot: FILE_GRANT_ROOT,
+      instanceId,
+      phase,
+      plugin,
+      request,
+      result,
+      session,
+      socket
+    });
+    await probeFileGrantCacheDirectoryOpen({
+      assertProbe,
+      fileGrantRoot: FILE_GRANT_ROOT,
+      instanceId,
+      phase,
+      plugin,
+      request,
+      result,
+      session,
+      socket
+    });
+    await probeFileGrantLicenseLoad({
+      assertProbe,
+      fileGrantRoot: FILE_GRANT_ROOT,
+      instanceId,
+      phase,
+      plugin,
+      request,
+      result,
+      session,
+      socket
+    });
 
     await phase(result, "getLatency", () =>
       request(socket, "getLatency", { instanceId, transportLatencySamples: 0 }, true, session)

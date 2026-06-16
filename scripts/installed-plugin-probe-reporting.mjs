@@ -118,6 +118,9 @@ function summarizeCompatibilityMatrix(results) {
       parameterDisplayInput: safeMatrixText(result.parameterDisplayInput ?? "missing", 64),
       automation: safeMatrixText(automationLaneStatus(result), 64),
       hostTransport: safeMatrixText(result.hostTransport ?? "missing", 64),
+      fileGrantSampleLoad: safeMatrixText(result.fileGrantSampleLoad ?? "missing", 64),
+      fileGrantCacheDirectoryOpen: safeMatrixText(result.fileGrantCacheDirectoryOpen ?? "missing", 64),
+      fileGrantLicenseLoad: safeMatrixText(result.fileGrantLicenseLoad ?? "missing", 64),
       featureStatus: summarizeFeatureStatus(result),
       fileGrantOperations: safeMatrixArray(result.fileGrantOperations, 64)
     });
@@ -162,7 +165,16 @@ function fileGrantFeatureStatus(result) {
     "useFileGrantSaveStateDirectory",
     "createSavedStateFileGrant",
     "attachSavedStateFileGrant",
-    "useFileGrantRestoreSavedState"
+    "useFileGrantRestoreSavedState",
+    "createSampleFileGrant",
+    "attachSampleFileGrant",
+    "useFileGrantLoadSample",
+    "createCacheDirectoryGrant",
+    "attachCacheDirectoryGrant",
+    "useFileGrantOpenCacheDirectory",
+    "createLicenseFileGrant",
+    "attachLicenseFileGrant",
+    "useFileGrantLoadLicense"
   ])) {
     return "failed";
   }
@@ -171,7 +183,10 @@ function fileGrantFeatureStatus(result) {
     result.fileGrantStateRestore,
     result.fileGrantPresetLoad,
     result.fileGrantStateSave,
-    result.fileGrantSavedStateRestore
+    result.fileGrantSavedStateRestore,
+    result.fileGrantSampleLoad,
+    result.fileGrantCacheDirectoryOpen,
+    result.fileGrantLicenseLoad
   ].filter(Boolean).map(String);
   if (workflowStatuses.some((status) => status === "applied")) {
     return "passed";
@@ -247,6 +262,9 @@ function summarizeFeatureCoverage(results, options) {
     fileGrantPresetLoad: countStatuses(results, "fileGrantPresetLoad"),
     fileGrantStateSave: countStatuses(results, "fileGrantStateSave"),
     fileGrantSavedStateRestore: countStatuses(results, "fileGrantSavedStateRestore"),
+    fileGrantSampleLoad: countStatuses(results, "fileGrantSampleLoad"),
+    fileGrantCacheDirectoryOpen: countStatuses(results, "fileGrantCacheDirectoryOpen"),
+    fileGrantLicenseLoad: countStatuses(results, "fileGrantLicenseLoad"),
     fileGrantOperations: countFileGrantOperations(results),
     busLayouts: countBusLayouts(results),
     vst3EventProfiles: countVst3EventProfiles(results),
@@ -438,6 +456,9 @@ function printFeatureCoverage(coverage, stream) {
     ["file grant preset load", coverage.fileGrantPresetLoad],
     ["file grant state save", coverage.fileGrantStateSave],
     ["file grant saved-state restore", coverage.fileGrantSavedStateRestore],
+    ["file grant sample load", coverage.fileGrantSampleLoad],
+    ["file grant cache directory open", coverage.fileGrantCacheDirectoryOpen],
+    ["file grant license load", coverage.fileGrantLicenseLoad],
     ["file grant operations advertised", coverage.fileGrantOperations],
     ["bus layouts", coverage.busLayouts],
     ["VST3 event metadata", coverage.vst3EventProfiles],
