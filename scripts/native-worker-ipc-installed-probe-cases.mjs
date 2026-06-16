@@ -5,6 +5,7 @@ import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
 import { firstListedPreset, firstVst3ProgramDataTarget } from "./installed-plugin-probe-programs.mjs";
+import { summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
 import {
   createInstalledProbeReporter,
   installedProbeReportMode,
@@ -57,6 +58,7 @@ export function exerciseInstalledProbeSupport({ check }) {
         channels: [0, 3]
       },
       automationLanePointCount: 2,
+      renderSignal: "signal",
       nativeEditor: { transport: "native-broker" }
     },
     {
@@ -68,7 +70,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       parameterDisplayInput: "skipped",
       fileGrantOperations: ["loadPreset", "openCacheDirectory", "loadLicense"],
       busProfile: { category: "multi-output-instrument", flags: ["multi-output", "multi-output-instrument"] },
-      automationLaneSkipped: "lv2-block-size-profile"
+      automationLaneSkipped: "lv2-block-size-profile",
+      renderSignal: "silent"
     }
   ];
   const coverageSummary = summarizeProbeResults(coverageResults, { nativeEditorBroker: true });
@@ -86,6 +89,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.vst3EventProfiles["non-main-event-bus"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:text-expression"] === 1 &&
       coverageSummary.coverage.automationLanes.applied === 1 &&
+      coverageSummary.coverage.renderSignals.signal === 1 &&
+      coverageSummary.coverage.renderSignals.silent === 1 &&
       coverageSummary.coverage.nativeEditor.opened === 1,
     "installed plugin probe summarizes feature coverage"
   );
@@ -134,6 +139,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("parameter metadata:")) &&
       coverageLines.some((line) => line.includes("file grant operations advertised:")) &&
       coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
+      coverageLines.some((line) => line.includes("render signal:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),
     "installed plugin probe summary prints feature coverage"
   );
@@ -187,6 +193,12 @@ export function exerciseInstalledProbeSupport({ check }) {
       vst3EventProfile.flags.includes("text-expression") &&
       vst3EventProfile.flags.includes("associated-parameter"),
     "installed plugin probe classifies VST3 event metadata coverage"
+  );
+  check(
+    summarizeProbeRenderSignal({ channels: [[0, 0]], outputBuses: [{ index: 1, channels: [[0, 0.25]] }] }) === "signal" &&
+      summarizeProbeRenderSignal({ channels: [[0, 0]], outputBuses: [{ index: 0, channels: [[0, 0]] }] }) === "silent" &&
+      summarizeProbeRenderSignal({ channels: [], outputBuses: [] }) === "missing",
+    "installed plugin probe classifies render signal coverage"
   );
   const vst3MidiEvents = midiEventsForBlock("vst3", 64, 64);
   check(

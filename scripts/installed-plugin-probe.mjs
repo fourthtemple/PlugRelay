@@ -16,6 +16,7 @@ import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
 import { probeListedPreset, probeVst3ProgramData } from "./installed-plugin-probe-programs.mjs";
+import { summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { createInstalledProbeReporter, installedProbeReportMode } from "./installed-plugin-probe-reporting.mjs";
 import {
@@ -283,6 +284,7 @@ async function probePlugin(socket, session, plugin) {
       return response;
     });
     result.renderedChannels = Array.isArray(rendered.channels) ? rendered.channels.length : 0;
+    result.renderSignal = summarizeProbeRenderSignal(rendered);
 
     if (automationLaneApplied) {
       await phase(result, "clearAutomationLane", () =>

@@ -78,6 +78,8 @@ Parameter metadata coverage is reported as `listed`, `none`, `missing`, or `at-l
 
 The summary report counts advertised `fileGrantOperations` such as `loadPreset`, `restoreState`, `saveStateDirectory`, `loadSample`, `openCacheDirectory`, and `loadLicense`. Treat this as workflow readiness metadata: it says which bounded file operations the plugin/worker exposes, not that private preset, sample, cache, or license files should be attached to public reports.
 
+Render-signal coverage is reported as `signal`, `silent`, or `missing`. A `silent` result means `processAudioBlock` completed and the response shape matched the negotiated layout, but the probe did not observe non-zero samples in the main channels or explicit output buses. Include it in reports when a plugin appears to load correctly but produces no audible output.
+
 ## Privacy And Safety
 
 Before posting, remove anything private that may appear in local output. Do not include:

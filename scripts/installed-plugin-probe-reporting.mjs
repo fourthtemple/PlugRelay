@@ -97,6 +97,7 @@ function summarizeFeatureCoverage(results, options) {
     busLayouts: countBusLayouts(results),
     vst3EventProfiles: countVst3EventProfiles(results),
     automationLanes: countAutomationLanes(results),
+    renderSignals: countStatuses(results, "renderSignal"),
     nativeEditor: countNativeEditor(results, options)
   };
 }
@@ -241,6 +242,7 @@ function printFeatureCoverage(coverage, stream) {
     ["bus layouts", coverage.busLayouts],
     ["VST3 event metadata", coverage.vst3EventProfiles],
     ["automation lanes", coverage.automationLanes],
+    ["render signal", coverage.renderSignals],
     ["native editor broker", coverage.nativeEditor]
   ]) {
     stream.log(`- ${label}: ${formatCounts(counts)}`);
