@@ -1,6 +1,10 @@
 export function summarizeProbeBusLayout(plugin, layout) {
-  const inputBuses = boundedBusLayouts(layout?.inputBusLayouts);
-  const outputBuses = boundedBusLayouts(layout?.outputBusLayouts);
+  const sourceInputBuses = busLayouts(layout?.inputBusLayouts);
+  const sourceOutputBuses = busLayouts(layout?.outputBusLayouts);
+  const inputBuses = boundedBusLayouts(sourceInputBuses);
+  const outputBuses = boundedBusLayouts(sourceOutputBuses);
+  const inputBusMetadataAtLimit = sourceInputBuses.length >= 32;
+  const outputBusMetadataAtLimit = sourceOutputBuses.length >= 32;
   const inputBusCount = clampInt(layout?.inputBuses, 0, 32, inputBuses.length);
   const outputBusCount = clampInt(layout?.outputBuses, 1, 32, outputBuses.length || 1);
   const inputChannels = clampInt(layout?.inputChannels, 0, 32, 0);
@@ -44,6 +48,12 @@ export function summarizeProbeBusLayout(plugin, layout) {
   if (inputBuses.some((bus) => bus.type === "unknown") || outputBuses.some((bus) => bus.type === "unknown")) {
     flags.push("unknown-bus-type");
   }
+  if (inputBusMetadataAtLimit) {
+    flags.push("input-bus-metadata-at-limit");
+  }
+  if (outputBusMetadataAtLimit) {
+    flags.push("output-bus-metadata-at-limit");
+  }
   if (flags.length === 0) {
     flags.push("main-bus");
   }
@@ -62,14 +72,17 @@ export function summarizeProbeBusLayout(plugin, layout) {
     activeInputBusIndexes: boundedBusIndexes(activeInputs),
     activeOutputBusIndexes: boundedBusIndexes(activeOutputs),
     inactiveInputBusIndexes: boundedBusIndexes(inactiveInputs),
-    inactiveOutputBusIndexes: boundedBusIndexes(inactiveOutputs)
+    inactiveOutputBusIndexes: boundedBusIndexes(inactiveOutputs),
+    inputBusMetadataAtLimit,
+    outputBusMetadataAtLimit
   };
 }
 
+function busLayouts(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function boundedBusLayouts(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
   return value.slice(0, 32).map((bus, fallbackIndex) => ({
     index: clampInt(bus?.index, 0, 31, fallbackIndex),
     channels: clampInt(bus?.channels, 0, 32, 0),

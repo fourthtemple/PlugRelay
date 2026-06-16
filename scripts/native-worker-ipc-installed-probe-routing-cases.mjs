@@ -59,6 +59,27 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       ]
     }
   );
+  const cappedBusProfile = summarizeProbeBusLayout(
+    { kind: "effect" },
+    {
+      inputChannels: 2,
+      outputChannels: 2,
+      inputBuses: 32,
+      outputBuses: 32,
+      inputBusLayouts: Array.from({ length: 32 }, (_, index) => ({
+        index,
+        channels: index === 0 ? 2 : 1,
+        type: index === 0 ? "main" : "aux",
+        active: index < 2
+      })),
+      outputBusLayouts: Array.from({ length: 32 }, (_, index) => ({
+        index,
+        channels: index === 0 ? 2 : 1,
+        type: index === 0 ? "main" : "aux",
+        active: index === 0
+      }))
+    }
+  );
   check(
     sidechainProfile.category === "sidechain" &&
       sidechainProfile.flags.includes("sidechain-input") &&
@@ -72,7 +93,11 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       JSON.stringify(nonsequentialOutputProfile.activeOutputBusIndexes) === JSON.stringify([0, 2]) &&
       multiOutputInstrumentProfile.category === "multi-output-instrument" &&
       multiOutputInstrumentProfile.flags.includes("multi-output-instrument") &&
-      JSON.stringify(multiOutputInstrumentProfile.activeOutputBusIndexes) === JSON.stringify([0, 1]),
+      JSON.stringify(multiOutputInstrumentProfile.activeOutputBusIndexes) === JSON.stringify([0, 1]) &&
+      cappedBusProfile.inputBusMetadataAtLimit === true &&
+      cappedBusProfile.outputBusMetadataAtLimit === true &&
+      cappedBusProfile.flags.includes("input-bus-metadata-at-limit") &&
+      cappedBusProfile.flags.includes("output-bus-metadata-at-limit"),
     "installed plugin probe classifies bus-layout coverage"
   );
 

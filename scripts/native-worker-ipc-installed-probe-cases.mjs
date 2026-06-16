@@ -125,7 +125,14 @@ export function exerciseInstalledProbeSupport({ check }) {
       fileGrantOperations: ["loadPreset", "restoreState", "saveStateDirectory", "loadSample", "other"],
       busProfile: {
         category: "sidechain",
-        flags: ["sidechain-input", "multi-input", "inactive-input-bus", "inactive-output-bus"],
+        flags: [
+          "sidechain-input",
+          "multi-input",
+          "inactive-input-bus",
+          "inactive-output-bus",
+          "input-bus-metadata-at-limit",
+          "output-bus-metadata-at-limit"
+        ],
         inputChannels: 3,
         outputChannels: 2,
         inputBuses: 3,
@@ -137,7 +144,9 @@ export function exerciseInstalledProbeSupport({ check }) {
         activeInputBusIndexes: [0, 1],
         activeOutputBusIndexes: [0],
         inactiveInputBusIndexes: [3],
-        inactiveOutputBusIndexes: [1]
+        inactiveOutputBusIndexes: [1],
+        inputBusMetadataAtLimit: true,
+        outputBusMetadataAtLimit: true
       },
       vst3EventProfile: {
         category: "non-main-event-bus",
@@ -258,6 +267,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.busLayouts.sidechain === 1 &&
       coverageSummary.coverage.busLayouts["flag:inactive-input-bus"] === 1 &&
       coverageSummary.coverage.busLayouts["flag:inactive-output-bus"] === 1 &&
+      coverageSummary.coverage.busLayouts["flag:input-bus-metadata-at-limit"] === 1 &&
+      coverageSummary.coverage.busLayouts["flag:output-bus-metadata-at-limit"] === 1 &&
       coverageSummary.coverage.busLayouts["flag:multi-output-instrument"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["non-main-event-bus"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:text-expression"] === 1 &&
@@ -329,6 +340,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].busActiveOutputIndexes) === JSON.stringify([0]) &&
       JSON.stringify(coverageSummary.matrix[0].busInactiveInputIndexes) === JSON.stringify([3]) &&
       JSON.stringify(coverageSummary.matrix[0].busInactiveOutputIndexes) === JSON.stringify([1]) &&
+      coverageSummary.matrix[0].busInputMetadataAtLimit === true &&
+      coverageSummary.matrix[0].busOutputMetadataAtLimit === true &&
       coverageSummary.matrix[0].vst3NoteExpressionCount === 3 &&
       coverageSummary.matrix[0].vst3ValueNoteExpressionCount === 1 &&
       coverageSummary.matrix[0].vst3TextNoteExpressionCount === 2 &&
