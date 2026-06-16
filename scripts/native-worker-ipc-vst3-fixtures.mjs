@@ -103,7 +103,12 @@ export async function exerciseVst3MidiControllerMappingNativeWorker({
       { type: "pitchBend", value: -0.5, channel: 2, time: 4, busIndex: 1 },
       { type: "channelPressure", pressure: 0.75, channel: 2, time: 5, busIndex: 1 }
     ]);
-    check(true, "native VST3 workers encode mapped MIDI-controller parameter events");
+    await midiWorker.sendMidiEvents([
+      { type: "controlChange", controller: 1, value: 0.4, channel: 0, time: 0 },
+      { type: "pitchBend", value: 0.1, channel: 0, time: 1 },
+      { type: "channelPressure", pressure: 0.3, channel: 0, time: 2 }
+    ]);
+    check(true, "native VST3 workers encode explicit-bus and main-bus MIDI-controller parameter events");
   } finally {
     midiWorker.destroy();
   }
@@ -337,7 +342,10 @@ function writeVst3MidiControllerMappingNativeWorker(tempDir) {
     tempDir,
     "vst3-midi-controller-mapping-native-worker.mjs",
     `#!/usr/bin/env node
-const expectedCommand = "midi cc:74:0.25:2:3:bus=1;bend:-0.5:2:4:bus=1;pressure:0.75:2:5:bus=1";
+const expectedCommands = new Set([
+  "midi cc:74:0.25:2:3:bus=1;bend:-0.5:2:4:bus=1;pressure:0.75:2:5:bus=1",
+  "midi cc:1:0.4:0:0;bend:0.1:0:1;pressure:0.3:0:2"
+]);
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
 process.stdin.setEncoding("utf8");
 let buffer = "";
@@ -355,7 +363,7 @@ process.stdin.on("data", (chunk) => {
       process.exit(0);
     }
     process.stdout.write(JSON.stringify(
-      line === expectedCommand
+      expectedCommands.has(line)
         ? { ok: true, eventCount: 3 }
         : { error: "bad_mapped_midi_controller_events" }
     ) + "\\n");
