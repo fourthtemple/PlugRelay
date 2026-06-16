@@ -1,6 +1,7 @@
 import { assertNoNativeLaunchData } from "./installed-plugin-probe-file-grants.mjs";
 
 const MAX_PLUGIN_PARAMETERS = 1024;
+const MAX_PLUGIN_PROGRAMS = 256;
 const MAX_PLUGIN_PROGRAM_DATA_BYTES = 384 * 1024;
 
 export async function probeListedPreset({
@@ -110,14 +111,15 @@ export function firstListedPreset(plugin) {
 
 export function firstVst3ProgramDataTarget(plugin) {
   for (const programList of vst3ProgramLists(plugin)) {
-    if (programList?.programDataSupported !== true || !Array.isArray(programList.programs)) {
+    const programListId = boundedProgramListId(programList?.id);
+    if (programList?.programDataSupported !== true || programListId === undefined || !Array.isArray(programList.programs)) {
       continue;
     }
-    const program = programList.programs.find((candidate) => Number.isInteger(candidate?.index));
-    if (Number.isInteger(programList.id) && program) {
+    const program = programList.programs.find((candidate) => boundedProgramIndex(candidate?.index) !== undefined);
+    if (program) {
       return {
-        programListId: programList.id,
-        programIndex: program.index
+        programListId,
+        programIndex: boundedProgramIndex(program.index)
       };
     }
   }
@@ -126,6 +128,21 @@ export function firstVst3ProgramDataTarget(plugin) {
 
 function vst3ProgramLists(plugin) {
   return Array.isArray(plugin?.vst3ProgramLists) ? plugin.vst3ProgramLists : [];
+}
+
+function boundedProgramListId(value) {
+  return boundedInt(value, -2147483648, 2147483647);
+}
+
+function boundedProgramIndex(value) {
+  return boundedInt(value, 0, MAX_PLUGIN_PROGRAMS - 1);
+}
+
+function boundedInt(value, min, max) {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    return undefined;
+  }
+  return value;
 }
 
 function assertBoundedParameterSnapshot(response, assertProbe, context) {

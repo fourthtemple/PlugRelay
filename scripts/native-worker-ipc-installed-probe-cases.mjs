@@ -188,7 +188,13 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     programTarget?.programListId === 2 &&
       programTarget.programIndex === 3 &&
-      firstVst3ProgramDataTarget({ vst3ProgramLists: [{ id: 4, programDataSupported: true, programs: [] }] }) === undefined,
+      firstVst3ProgramDataTarget({ vst3ProgramLists: [{ id: 4, programDataSupported: true, programs: [] }] }) === undefined &&
+      firstVst3ProgramDataTarget({
+        vst3ProgramLists: [{ id: "bad", programDataSupported: true, programs: [{ index: 0 }] }]
+      }) === undefined &&
+      firstVst3ProgramDataTarget({
+        vst3ProgramLists: [{ id: 5, programDataSupported: true, programs: [{ index: -1 }, { index: 256 }] }]
+      }) === undefined,
     "installed plugin probe selects bounded VST3 program-data targets"
   );
 }
