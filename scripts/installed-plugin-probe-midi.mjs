@@ -18,6 +18,7 @@ export function midiEventsForBlock(format, frames = 64, maxBlockSize = 64) {
       { type: "noteExpression", typeId: 0, value: 0.5, noteId, channel: 0, time: offset(0.1875) },
       { type: "noteExpressionText", typeId: 6, text: "probe", noteId, channel: 0, time: offset(0.21875) }
     );
+    events.push({ type: "controlChange", controller: 74, value: 0.25, channel: 2, time: offset(0.625), busIndex: 1 });
   }
   return events;
 }
@@ -37,6 +38,7 @@ export function summarizeProbeMidiControllerEvents(events) {
   );
   return {
     eventCount: controllerEvents.length,
+    flags: midiControllerFlags(controllerEvents),
     types: knownControllerEventTypes(controllerEvents),
     controllers: uniqueSortedIntegers(controllerEvents.map((event) => event.controller), 0, 127),
     channels: uniqueSortedIntegers(controllerEvents.map((event) => event.channel ?? 0), 0, 15),
@@ -47,6 +49,7 @@ export function summarizeProbeMidiControllerEvents(events) {
 function emptyMidiControllerProfile() {
   return {
     eventCount: 0,
+    flags: ["no-controller-events"],
     types: [],
     controllers: [],
     channels: [],
@@ -57,6 +60,23 @@ function emptyMidiControllerProfile() {
 function knownControllerEventTypes(events) {
   const present = new Set(events.map((event) => event.type));
   return ["controlChange", "pitchBend", "channelPressure"].filter((type) => present.has(type));
+}
+
+function midiControllerFlags(events) {
+  if (events.length === 0) {
+    return ["no-controller-events"];
+  }
+  const flags = ["controller-events"];
+  for (const type of knownControllerEventTypes(events)) {
+    flags.push(`type:${type}`);
+  }
+  if (events.some((event) => Number.isInteger(event.busIndex) && event.busIndex > 0)) {
+    flags.push("non-main-event-bus");
+  }
+  if (events.some((event) => Number.isInteger(event.channel) && event.channel > 0)) {
+    flags.push("non-main-channel");
+  }
+  return flags;
 }
 
 function uniqueSortedIntegers(values, min, max) {

@@ -156,15 +156,23 @@ export function exerciseInstalledProbeSupport({ check }) {
         typeIds: [0, 6]
       },
       automationLanePointCount: 2,
-      midiEventCount: 7,
+      midiEventCount: 8,
       midiControllerEventProfile: {
-        eventCount: 3,
+        eventCount: 4,
+        flags: [
+          "controller-events",
+          "type:controlChange",
+          "type:pitchBend",
+          "type:channelPressure",
+          "non-main-event-bus",
+          "non-main-channel"
+        ],
         types: ["controlChange", "pitchBend", "channelPressure"],
-        controllers: [1],
-        channels: [0],
-        eventBuses: [0]
+        controllers: [1, 74],
+        channels: [0, 2],
+        eventBuses: [0, 1]
       },
-      midiControllerEventCount: 3,
+      midiControllerEventCount: 4,
       vst3MidiControllerEvents: "accepted",
       hostTransport: "accepted",
       pluginLatencySamples: 32,
@@ -312,13 +320,15 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].vst3NoteExpressionTypeIds) === JSON.stringify([0, 6]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventBuses) === JSON.stringify([0, 2]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventChannels) === JSON.stringify([0, 3]) &&
-      coverageSummary.matrix[0].midiEventCount === 7 &&
-      coverageSummary.matrix[0].midiControllerEventCount === 3 &&
+      coverageSummary.matrix[0].midiEventCount === 8 &&
+      coverageSummary.matrix[0].midiControllerEventCount === 4 &&
+      coverageSummary.matrix[0].midiControllerFlags.includes("non-main-event-bus") &&
+      coverageSummary.matrix[0].midiControllerFlags.includes("type:controlChange") &&
       JSON.stringify(coverageSummary.matrix[0].midiControllerEventTypes) ===
         JSON.stringify(["controlChange", "pitchBend", "channelPressure"]) &&
-      JSON.stringify(coverageSummary.matrix[0].midiControllerNumbers) === JSON.stringify([1]) &&
-      JSON.stringify(coverageSummary.matrix[0].midiControllerChannels) === JSON.stringify([0]) &&
-      JSON.stringify(coverageSummary.matrix[0].midiControllerEventBuses) === JSON.stringify([0]) &&
+      JSON.stringify(coverageSummary.matrix[0].midiControllerNumbers) === JSON.stringify([1, 74]) &&
+      JSON.stringify(coverageSummary.matrix[0].midiControllerChannels) === JSON.stringify([0, 2]) &&
+      JSON.stringify(coverageSummary.matrix[0].midiControllerEventBuses) === JSON.stringify([0, 1]) &&
       coverageSummary.matrix[0].vst3MidiControllerEvents === "accepted" &&
       coverageSummary.matrix[0].hostTransport === "accepted" &&
       coverageSummary.matrix[0].latencyTail === "latency-tail" &&
