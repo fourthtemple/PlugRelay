@@ -14,7 +14,11 @@ import {
   firstVst3ProgramDataTarget,
   summarizeVst3ProgramDataProfile
 } from "./installed-plugin-probe-programs.mjs";
-import { assertProbeRenderMatchesLayout, summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
+import {
+  assertProbeRenderMatchesLayout,
+  summarizeProbeOutputBusSignal,
+  summarizeProbeRenderSignal
+} from "./installed-plugin-probe-rendering.mjs";
 import {
   createInstalledProbeReporter,
   installedProbeReportMode,
@@ -156,6 +160,15 @@ export function exerciseInstalledProbeSupport({ check }) {
       tailSamples: 128,
       infiniteTail: false,
       renderSignal: "signal",
+      outputBusSignalProfile: {
+        category: "main-aux-signal",
+        flags: ["main-signal", "aux-signal", "multi-output-signal", "silent-output-bus"],
+        outputBusCount: 3,
+        signalOutputBusCount: 2,
+        silentOutputBusCount: 1,
+        signalOutputBusIndexes: [0, 2],
+        silentOutputBusIndexes: [1]
+      },
       nativeEditor: { transport: "native-broker" },
       phases: passedFeaturePhases
     },
@@ -223,6 +236,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.latencyTail["infinite-tail"] === 1 &&
       coverageSummary.coverage.renderSignals.signal === 1 &&
       coverageSummary.coverage.renderSignals.silent === 1 &&
+      coverageSummary.coverage.outputBusSignals["main-aux-signal"] === 1 &&
+      coverageSummary.coverage.outputBusSignals.missing === 1 &&
       coverageSummary.coverage.nativeEditor.opened === 1,
     "installed plugin probe summarizes feature coverage"
   );
@@ -278,6 +293,12 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].reportedLatencySamples === 96 &&
       coverageSummary.matrix[0].tailSamples === 128 &&
       coverageSummary.matrix[0].infiniteTail === false &&
+      coverageSummary.matrix[0].outputBusSignal === "main-aux-signal" &&
+      coverageSummary.matrix[0].outputBusSignalFlags.includes("multi-output-signal") &&
+      coverageSummary.matrix[0].outputBusSignalCount === 2 &&
+      coverageSummary.matrix[0].outputBusSilentCount === 1 &&
+      JSON.stringify(coverageSummary.matrix[0].outputBusSignalIndexes) === JSON.stringify([0, 2]) &&
+      JSON.stringify(coverageSummary.matrix[0].outputBusSilentIndexes) === JSON.stringify([1]) &&
       coverageSummary.matrix[0].fileGrantSampleLoad === "applied" &&
       coverageSummary.matrix[0].fileGrantOtherPresetLoad === "applied" &&
       coverageSummary.matrix[0].nativeEditor === "opened" &&
@@ -364,6 +385,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("host transport:")) &&
       coverageLines.some((line) => line.includes("latency/tail:")) &&
       coverageLines.some((line) => line.includes("render signal:")) &&
+      coverageLines.some((line) => line.includes("output-bus signal:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),
     "installed plugin probe summary prints feature coverage"
   );
@@ -469,6 +491,29 @@ export function exerciseInstalledProbeSupport({ check }) {
       summarizeProbeRenderSignal({ channels: [[0, 0]], outputBuses: [{ index: 0, channels: [[0, 0]] }] }) === "silent" &&
       summarizeProbeRenderSignal({ channels: [], outputBuses: [] }) === "missing",
     "installed plugin probe classifies render signal coverage"
+  );
+  const outputBusSignalProfile = summarizeProbeOutputBusSignal({
+    channels: [[0.1, 0.2], [0, 0]],
+    outputBuses: [
+      { index: 0, channels: [[0.1, 0.2], [0, 0]] },
+      { index: 1, channels: [[0, 0]] },
+      { index: 2, channels: [[0.25, 0.5]] }
+    ]
+  }, {
+    outputChannels: 2,
+    outputBusLayouts: [
+      { index: 0, channels: 2, active: true },
+      { index: 1, channels: 1, active: true },
+      { index: 2, channels: 1, active: true }
+    ]
+  });
+  check(
+    outputBusSignalProfile.category === "main-aux-signal" &&
+      outputBusSignalProfile.signalOutputBusCount === 2 &&
+      outputBusSignalProfile.silentOutputBusCount === 1 &&
+      JSON.stringify(outputBusSignalProfile.signalOutputBusIndexes) === JSON.stringify([0, 2]) &&
+      JSON.stringify(outputBusSignalProfile.silentOutputBusIndexes) === JSON.stringify([1]),
+    "installed plugin probe classifies output-bus render signal coverage"
   );
   const multiOutputLayout = {
     outputChannels: 2,

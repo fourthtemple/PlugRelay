@@ -105,6 +105,12 @@ function summarizeCompatibilityMatrix(results, options) {
         ? undefined
         : safeMatrixText(failureError?.code ?? failureError?.message ?? "unknown_error", 96),
       renderSignal: safeMatrixText(result.renderSignal ?? "missing", 32),
+      outputBusSignal: safeMatrixText(outputBusSignalStatus(result), 64),
+      outputBusSignalFlags: safeMatrixArray(result.outputBusSignalProfile?.flags, 64),
+      outputBusSignalCount: safeMatrixInteger(result.outputBusSignalProfile?.signalOutputBusCount, 0, 32),
+      outputBusSilentCount: safeMatrixInteger(result.outputBusSignalProfile?.silentOutputBusCount, 0, 32),
+      outputBusSignalIndexes: safeMatrixIntegerArray(result.outputBusSignalProfile?.signalOutputBusIndexes, 0, 31),
+      outputBusSilentIndexes: safeMatrixIntegerArray(result.outputBusSignalProfile?.silentOutputBusIndexes, 0, 31),
       busCategory: safeMatrixText(result.busProfile?.category ?? "missing", 64),
       busFlags: safeMatrixArray(result.busProfile?.flags, 64),
       busInputCount: safeMatrixInteger(result.busProfile?.inputBuses, 0, 32),
@@ -330,6 +336,7 @@ function summarizeFeatureCoverage(results, options) {
     hostTransport: countStatuses(results, "hostTransport"),
     latencyTail: countBy(results, latencyTailStatus),
     renderSignals: countStatuses(results, "renderSignal"),
+    outputBusSignals: countBy(results, outputBusSignalStatus),
     nativeEditor: countNativeEditor(results, options)
   };
 }
@@ -463,6 +470,13 @@ function latencyTailStatus(result) {
     return "partial";
   }
   return "missing";
+}
+
+function outputBusSignalStatus(result) {
+  if (hasFailedPhase(result, ["processAudioBlock"])) {
+    return "failed";
+  }
+  return result.outputBusSignalProfile?.category ?? (hasOkPhase(result, "processAudioBlock") ? "unprofiled" : "missing");
 }
 
 function countBusLayouts(results) {
@@ -613,6 +627,7 @@ function printFeatureCoverage(coverage, stream) {
     ["host transport", coverage.hostTransport],
     ["latency/tail", coverage.latencyTail],
     ["render signal", coverage.renderSignals],
+    ["output-bus signal", coverage.outputBusSignals],
     ["native editor broker", coverage.nativeEditor]
   ]) {
     stream.log(`- ${label}: ${formatCounts(counts)}`);

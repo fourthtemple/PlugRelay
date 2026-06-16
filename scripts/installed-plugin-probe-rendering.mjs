@@ -48,6 +48,47 @@ export function summarizeProbeRenderSignal(rendered) {
   return sawSample ? "silent" : "missing";
 }
 
+export function summarizeProbeOutputBusSignal(rendered, layout) {
+  if (!Array.isArray(rendered?.outputBuses)) {
+    return { category: "missing", flags: ["missing-output-buses"], outputBusCount: 0, signalOutputBusCount: 0 };
+  }
+  const outputBuses = indexedOutputBuses(rendered.outputBuses);
+  const activeBuses = activeOutputLayouts(layout);
+  const signalOutputBusIndexes = [];
+  const silentOutputBusIndexes = [];
+  for (const layoutBus of activeBuses) {
+    const bus = outputBuses.get(layoutBus.index);
+    if (!bus) {
+      continue;
+    }
+    if (hasSignal(bus.channels)) {
+      signalOutputBusIndexes.push(layoutBus.index);
+    } else {
+      silentOutputBusIndexes.push(layoutBus.index);
+    }
+  }
+  const auxSignal = signalOutputBusIndexes.some((index) => index > 0);
+  const mainSignal = signalOutputBusIndexes.includes(0);
+  const flags = [
+    ...(mainSignal ? ["main-signal"] : []),
+    ...(auxSignal ? ["aux-signal"] : []),
+    ...(signalOutputBusIndexes.length > 1 ? ["multi-output-signal"] : []),
+    ...(silentOutputBusIndexes.length > 0 ? ["silent-output-bus"] : [])
+  ];
+  if (flags.length === 0) {
+    flags.push("silent");
+  }
+  return {
+    category: outputBusSignalCategory({ auxSignal, mainSignal, signalOutputBusIndexes }),
+    flags,
+    outputBusCount: activeBuses.length,
+    signalOutputBusCount: signalOutputBusIndexes.length,
+    silentOutputBusCount: silentOutputBusIndexes.length,
+    signalOutputBusIndexes,
+    silentOutputBusIndexes
+  };
+}
+
 function indexedOutputBuses(outputBuses) {
   const byIndex = new Map();
   for (const [position, bus] of outputBuses.entries()) {
@@ -66,6 +107,19 @@ function indexedOutputBuses(outputBuses) {
   return byIndex;
 }
 
+function outputBusSignalCategory({ auxSignal, mainSignal, signalOutputBusIndexes }) {
+  if (mainSignal && auxSignal) {
+    return "main-aux-signal";
+  }
+  if (auxSignal) {
+    return "aux-signal";
+  }
+  if (mainSignal) {
+    return "main-signal";
+  }
+  return signalOutputBusIndexes.length > 0 ? "signal" : "silent";
+}
+
 function activeOutputLayouts(layout) {
   const layouts = Array.isArray(layout?.outputBusLayouts) ? layout.outputBusLayouts : [];
   if (layouts.length === 0) {
@@ -78,6 +132,15 @@ function activeOutputLayouts(layout) {
       active: bus?.active !== false
     }))
     .filter((bus) => bus.active && bus.channels > 0);
+}
+
+function hasSignal(channels) {
+  for (const sample of channelSamples(channels)) {
+    if (Math.abs(sample) > SIGNAL_EPSILON) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function assertChannelFrames(channels, frames, context) {

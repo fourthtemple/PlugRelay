@@ -26,7 +26,11 @@ import {
   summarizeParameterProfile
 } from "./installed-plugin-probe-parameters.mjs";
 import { probeListedPreset, probeVst3ProgramData } from "./installed-plugin-probe-programs.mjs";
-import { assertProbeRenderMatchesLayout, summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
+import {
+  assertProbeRenderMatchesLayout,
+  summarizeProbeOutputBusSignal,
+  summarizeProbeRenderSignal
+} from "./installed-plugin-probe-rendering.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { createInstalledProbeReporter, installedProbeReportMode } from "./installed-plugin-probe-reporting.mjs";
 import {
@@ -367,6 +371,7 @@ async function probePlugin(socket, session, plugin) {
     });
     result.renderedChannels = Array.isArray(rendered.channels) ? rendered.channels.length : 0;
     result.renderSignal = summarizeProbeRenderSignal(rendered);
+    result.outputBusSignalProfile = summarizeProbeOutputBusSignal(rendered, result.layout);
     result.hostTransport = "accepted";
 
     if (automationLaneApplied) {
