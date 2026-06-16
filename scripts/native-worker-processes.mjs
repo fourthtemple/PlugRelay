@@ -351,9 +351,14 @@ export function createNativeWorkerProcesses({
         if (!Array.isArray(parsed.channels)) {
           throw new Error("worker returned invalid channels");
         }
+        const channels = normalizeWorkerRenderChannels(
+          parsed.channels,
+          this.fallbackLayout?.outputChannels ?? limits.maxAudioChannels,
+          request.frames
+        );
         return {
-          channels: parsed.channels,
-          outputBuses: Array.isArray(parsed.outputBuses) ? parsed.outputBuses : undefined
+          channels,
+          outputBuses: normalizeWorkerOutputBuses(parsed.outputBuses, channels, this.fallbackLayout, request.frames)
         };
       });
     }
@@ -665,6 +670,39 @@ export function createNativeWorkerProcesses({
       .map((bus) => `${normalizeInt(bus?.index, 0, limits.maxPluginBuses - 1, 0)}=${encodeAudioChannels(bus?.channels, frames)}`)
       .join(";");
     return encoded || "-";
+  }
+
+  function normalizeWorkerOutputBuses(value, mainChannels, layout, frames) {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+    const byIndex = new Map();
+    for (const bus of value.slice(0, limits.maxPluginBuses)) {
+      if (!bus || typeof bus !== "object" || Array.isArray(bus)) {
+        continue;
+      }
+      const index = normalizeInt(bus.index, 0, limits.maxPluginBuses - 1, 0);
+      const layoutChannels = layout?.outputBusLayouts?.find((candidate) => candidate.index === index)?.channels ??
+        limits.maxAudioChannels;
+      byIndex.set(index, {
+        index,
+        channels: normalizeWorkerRenderChannels(bus.channels, layoutChannels, frames)
+      });
+    }
+    byIndex.set(0, { index: 0, channels: mainChannels });
+    return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
+  }
+
+  function normalizeWorkerRenderChannels(channels, maxChannels, frames) {
+    if (!Array.isArray(channels) || maxChannels <= 0) {
+      return [];
+    }
+    return channels.slice(0, Math.min(maxChannels, limits.maxAudioChannels)).map((channel) =>
+      Array.from({ length: frames }, (_, frame) => {
+        const value = Number(Array.isArray(channel) ? channel[frame] : 0);
+        return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+      })
+    );
   }
 
   return {

@@ -59,6 +59,22 @@ export async function exerciseVst3MultiBusNativeWorker({
         JSON.stringify(sidechainRendered.outputBuses?.[2]?.channels) === JSON.stringify([[-0.1, -0.3]]),
       "native VST3 workers route explicit sidechain buses independently of legacy channels"
     );
+    const weirdRendered = await busWorker.render({
+      frames: 2,
+      sampleRate: 48000,
+      channels: [[0.9, -0.9]],
+      transport: { samplePosition: 128 }
+    });
+    const weirdBuses = new Map((weirdRendered.outputBuses ?? []).map((bus) => [bus.index, bus.channels]));
+    check(
+      JSON.stringify(weirdRendered.channels) === JSON.stringify([[1, -1], [0, 0.25]]) &&
+        weirdRendered.outputBuses?.length === 4 &&
+        JSON.stringify(weirdBuses.get(0)) === JSON.stringify(weirdRendered.channels) &&
+        JSON.stringify(weirdBuses.get(1)) === JSON.stringify([[0, 0.5]]) &&
+        JSON.stringify(weirdBuses.get(2)) === JSON.stringify([[1, -1]]) &&
+        JSON.stringify(weirdBuses.get(31)) === JSON.stringify([[-0.2, -0.4]]),
+      "native VST3 workers normalize weird output-bus render responses"
+    );
   } finally {
     busWorker.destroy();
   }
@@ -592,6 +608,24 @@ process.stdin.on("data", (chunk) => {
           { index: 0, channels: sidechainMainOutput },
           { index: 1, channels: [[0.1, 0.3]] },
           { index: 2, channels: [[-0.1, -0.3]] }
+        ]
+      }) + "\\n");
+      continue;
+    }
+
+    const weirdRequestMatched = frames === 2 &&
+      Number(parts[2]) === 48000 &&
+      parts[4] === "-" &&
+      parts[5] === "sample=128";
+    if (weirdRequestMatched) {
+      process.stdout.write(JSON.stringify({
+        channels: [[2, -2, 0.5], ["bad", 0.25], [0.5, 0.5]],
+        outputBuses: [
+          { index: 2, channels: [[1.5, -1.5, 0.25]] },
+          null,
+          { index: 1, channels: [["bad", 0.5], [0.1, 0.2]] },
+          { index: 0, channels: [[0, 0]] },
+          { index: 99, channels: [[-0.2, -0.4]] }
         ]
       }) + "\\n");
       continue;
