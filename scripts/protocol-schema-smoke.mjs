@@ -1,6 +1,12 @@
 import fs from "node:fs";
 
 const SCHEMA_URL = new URL("../packages/protocol/schema/protocol.schema.json", import.meta.url);
+const SCHEMA_DEF_URLS = [
+  new URL("../packages/protocol/schema/defs/hello-response.schema.json", import.meta.url),
+  new URL("../packages/protocol/schema/defs/midi-event.schema.json", import.meta.url),
+  new URL("../packages/protocol/schema/defs/plugin-metadata.schema.json", import.meta.url),
+  new URL("../packages/protocol/schema/defs/request-envelope.schema.json", import.meta.url)
+];
 const VST3_BUS_INDEX_REF = "#/$defs/vst3EventBusIndex";
 const MIDI_EVENT_TYPES = new Set([
   "noteOn",
@@ -15,6 +21,8 @@ const MIDI_EVENT_TYPES = new Set([
 ]);
 
 const schema = JSON.parse(fs.readFileSync(SCHEMA_URL, "utf8"));
+
+assertAllRefsResolve([SCHEMA_URL, ...SCHEMA_DEF_URLS]);
 
 const requestEnvelope = resolveRef(schema.$defs?.requestEnvelope?.$ref, SCHEMA_URL);
 assert(
@@ -75,11 +83,35 @@ function assert(condition, message) {
   }
 }
 
+function assertAllRefsResolve(urls) {
+  for (const url of urls) {
+    const document = loadJson(url);
+    for (const ref of schemaRefs(document)) {
+      assert(
+        resolveRef(ref, url) !== undefined,
+        `protocol schema reference did not resolve: ${ref} from ${url.pathname}`
+      );
+    }
+  }
+}
+
+function* schemaRefs(value) {
+  if (!value || typeof value !== "object") {
+    return;
+  }
+  if (typeof value.$ref === "string") {
+    yield value.$ref;
+  }
+  for (const entry of Object.values(value)) {
+    yield* schemaRefs(entry);
+  }
+}
+
 function resolveRef(ref, baseUrl) {
   assert(typeof ref === "string", "protocol schema references must be strings");
   const [pathPart, fragment = ""] = ref.split("#");
   const targetUrl = pathPart ? new URL(pathPart, baseUrl) : baseUrl;
-  const target = JSON.parse(fs.readFileSync(targetUrl, "utf8"));
+  const target = loadJson(targetUrl);
   if (!fragment) {
     return target;
   }
@@ -87,4 +119,8 @@ function resolveRef(ref, baseUrl) {
     .replace(/^\//, "")
     .split("/")
     .reduce((value, rawPart) => value?.[rawPart.replace(/~1/g, "/").replace(/~0/g, "~")], target);
+}
+
+function loadJson(url) {
+  return JSON.parse(fs.readFileSync(url, "utf8"));
 }
