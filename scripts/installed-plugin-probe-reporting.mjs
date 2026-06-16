@@ -127,6 +127,14 @@ function summarizeCompatibilityMatrix(results, options) {
       busInactiveOutputCount: safeMatrixInteger(result.busProfile?.inactiveOutputBuses, 0, 32),
       busInactiveInputIndexes: safeMatrixIntegerArray(result.busProfile?.inactiveInputBusIndexes, 0, 31),
       busInactiveOutputIndexes: safeMatrixIntegerArray(result.busProfile?.inactiveOutputBusIndexes, 0, 31),
+      busNonsequentialInputCount: safeMatrixInteger(result.busProfile?.nonsequentialInputBuses, 0, 32),
+      busNonsequentialOutputCount: safeMatrixInteger(result.busProfile?.nonsequentialOutputBuses, 0, 32),
+      busDuplicateInputIndexCount: safeMatrixInteger(result.busProfile?.duplicateInputBusIndexes, 0, 32),
+      busDuplicateOutputIndexCount: safeMatrixInteger(result.busProfile?.duplicateOutputBusIndexes, 0, 32),
+      busActiveEmptyInputCount: safeMatrixInteger(result.busProfile?.activeEmptyInputBuses, 0, 32),
+      busActiveEmptyOutputCount: safeMatrixInteger(result.busProfile?.activeEmptyOutputBuses, 0, 32),
+      busUnknownInputTypeCount: safeMatrixInteger(result.busProfile?.unknownInputBusTypes, 0, 32),
+      busUnknownOutputTypeCount: safeMatrixInteger(result.busProfile?.unknownOutputBusTypes, 0, 32),
       busInputMetadataAtLimit: typeof result.busProfile?.inputBusMetadataAtLimit === "boolean"
         ? result.busProfile.inputBusMetadataAtLimit
         : undefined,

@@ -460,6 +460,33 @@ export function exerciseInstalledProbeSupport({ check }) {
       cappedEventMatrix.vst3NoteExpressionCount === 256,
     "installed plugin probe matrix reports capped VST3 note-expression metadata"
   );
+  const weirdBusMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    busProfile: {
+      category: "sidechain",
+      flags: ["nonsequential-bus-indexes", "duplicate-bus-indexes", "active-empty-bus", "unknown-bus-type"],
+      nonsequentialInputBuses: 2,
+      nonsequentialOutputBuses: 1,
+      duplicateInputBusIndexes: 1,
+      duplicateOutputBusIndexes: 1,
+      activeEmptyInputBuses: 1,
+      activeEmptyOutputBuses: 1,
+      unknownInputBusTypes: 1,
+      unknownOutputBusTypes: 1
+    }
+  }]).matrix[0];
+  check(
+    weirdBusMatrix.busNonsequentialInputCount === 2 &&
+      weirdBusMatrix.busNonsequentialOutputCount === 1 &&
+      weirdBusMatrix.busDuplicateInputIndexCount === 1 &&
+      weirdBusMatrix.busDuplicateOutputIndexCount === 1 &&
+      weirdBusMatrix.busActiveEmptyInputCount === 1 &&
+      weirdBusMatrix.busActiveEmptyOutputCount === 1 &&
+      weirdBusMatrix.busUnknownInputTypeCount === 1 &&
+      weirdBusMatrix.busUnknownOutputTypeCount === 1,
+    "installed plugin probe matrix reports unusual bus-layout metadata"
+  );
   const pathError = Object.assign(
     new Error(
       "failed to load /Library/Audio/Plug-Ins/VST3/Private Plugin.vst3 and file:///Users/test/Secrets/license.key from C:\\Users\\test\\Private Plugin.vst3"

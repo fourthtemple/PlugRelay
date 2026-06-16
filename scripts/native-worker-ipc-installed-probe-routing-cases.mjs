@@ -80,16 +80,31 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       }))
     }
   );
+  const weirdBusProfile = summarizeProbeBusLayout(
+    { kind: "effect" },
+    {
+      inputChannels: 0,
+      outputChannels: 1,
+      inputBuses: 1,
+      outputBuses: 1,
+      inputBusLayouts: [{ index: 0, channels: 0, type: "main", active: true }],
+      outputBusLayouts: [{ index: 0, channels: 1, type: "sdk-custom", active: true }]
+    }
+  );
   check(
     sidechainProfile.category === "sidechain" &&
       sidechainProfile.flags.includes("sidechain-input") &&
       sidechainProfile.flags.includes("inactive-input-bus") &&
       sidechainProfile.flags.includes("inactive-output-bus") &&
+      sidechainProfile.nonsequentialInputBuses === 1 &&
+      sidechainProfile.nonsequentialOutputBuses === 0 &&
       JSON.stringify(sidechainProfile.activeInputBusIndexes) === JSON.stringify([0, 1]) &&
       JSON.stringify(sidechainProfile.inactiveInputBusIndexes) === JSON.stringify([3]) &&
       JSON.stringify(sidechainProfile.inactiveOutputBusIndexes) === JSON.stringify([1]) &&
       nonsequentialOutputProfile.flags.includes("nonsequential-bus-indexes") &&
       nonsequentialOutputProfile.flags.includes("duplicate-bus-indexes") &&
+      nonsequentialOutputProfile.nonsequentialOutputBuses === 1 &&
+      nonsequentialOutputProfile.duplicateOutputBusIndexes === 1 &&
       JSON.stringify(nonsequentialOutputProfile.activeOutputBusIndexes) === JSON.stringify([0, 2]) &&
       multiOutputInstrumentProfile.category === "multi-output-instrument" &&
       multiOutputInstrumentProfile.flags.includes("multi-output-instrument") &&
@@ -97,7 +112,11 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       cappedBusProfile.inputBusMetadataAtLimit === true &&
       cappedBusProfile.outputBusMetadataAtLimit === true &&
       cappedBusProfile.flags.includes("input-bus-metadata-at-limit") &&
-      cappedBusProfile.flags.includes("output-bus-metadata-at-limit"),
+      cappedBusProfile.flags.includes("output-bus-metadata-at-limit") &&
+      weirdBusProfile.flags.includes("active-empty-bus") &&
+      weirdBusProfile.flags.includes("unknown-bus-type") &&
+      weirdBusProfile.activeEmptyInputBuses === 1 &&
+      weirdBusProfile.unknownOutputBusTypes === 1,
     "installed plugin probe classifies bus-layout coverage"
   );
 
