@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = process.cwd();
-const MAX_SOURCE_LINES = 1000;
+const MAX_SOURCE_LINES = 799;
 const NEAR_LIMIT_LINES = 750;
 
 const NEAR_LIMIT_BUDGETS = new Map([]);

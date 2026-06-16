@@ -4,6 +4,7 @@ import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs"
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { midiControllerEventCount, midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
+import { summarizeParameterProfile } from "./installed-plugin-probe-parameters.mjs";
 import {
   firstListedPreset,
   firstVst3ProgramDataTarget,
@@ -89,6 +90,18 @@ export function exerciseInstalledProbeSupport({ check }) {
       vst3ProgramListCount: 2,
       parameterCount: 1024,
       parameterMetadataAtLimit: true,
+      parameterProfile: {
+        category: "writable",
+        flags: ["metadata-at-limit", "writable", "automatable", "read-only", "display-values", "units", "program-change", "vst3-units"],
+        parameterCount: 1024,
+        automatableCount: 700,
+        writableCount: 600,
+        readOnlyCount: 100,
+        displayValueCount: 512,
+        unitCount: 20,
+        programChangeCount: 2,
+        vst3UnitCount: 4
+      },
       parameterDisplayInput: "applied",
       fileGrantStateRestore: "applied",
       fileGrantPresetLoad: "applied",
@@ -166,6 +179,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.vst3ProgramLists.listed === 1 &&
       coverageSummary.coverage.parameterMetadata["at-limit"] === 1 &&
       coverageSummary.coverage.parameterMetadata.none === 1 &&
+      coverageSummary.coverage.parameterProfiles.writable === 1 &&
+      coverageSummary.coverage.parameterProfiles.none === 1 &&
       coverageSummary.coverage.fileGrantOperations.loadSample === 1 &&
       coverageSummary.coverage.fileGrantOperations.openCacheDirectory === 1 &&
       coverageSummary.coverage.fileGrantOperations.loadLicense === 1 &&
@@ -200,6 +215,17 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].vst3ProgramDataCandidatePrograms === 3 &&
       coverageSummary.matrix[0].vst3ProgramLists === "listed" &&
       coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
+      coverageSummary.matrix[0].parameterProfile === "writable" &&
+      coverageSummary.matrix[0].parameterFlags.includes("metadata-at-limit") &&
+      coverageSummary.matrix[0].parameterFlags.includes("vst3-units") &&
+      coverageSummary.matrix[0].parameterCount === 1024 &&
+      coverageSummary.matrix[0].parameterWritableCount === 600 &&
+      coverageSummary.matrix[0].parameterAutomatableCount === 700 &&
+      coverageSummary.matrix[0].parameterReadOnlyCount === 100 &&
+      coverageSummary.matrix[0].parameterDisplayValueCount === 512 &&
+      coverageSummary.matrix[0].parameterUnitCount === 20 &&
+      coverageSummary.matrix[0].parameterProgramChangeCount === 2 &&
+      coverageSummary.matrix[0].parameterVst3UnitCount === 4 &&
       coverageSummary.matrix[0].automation === "applied" &&
       coverageSummary.matrix[0].busInputCount === 2 &&
       coverageSummary.matrix[0].busOutputCount === 1 &&
@@ -230,6 +256,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[1].name === "[local-path]" &&
       coverageSummary.matrix[1].vst3ProgramLists === "skipped-format" &&
       coverageSummary.matrix[1].vst3ProgramDataTarget === "skipped-format" &&
+      coverageSummary.matrix[1].parameterProfile === "none" &&
+      coverageSummary.matrix[1].parameterCount === 0 &&
       coverageSummary.matrix[1].vst3MidiControllerEvents === "skipped-format" &&
       coverageSummary.matrix[1].fileGrantCacheDirectoryOpen === "applied" &&
       coverageSummary.matrix[1].fileGrantLicenseLoad === "applied" &&
@@ -286,6 +314,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("VST3 program-data targets:")) &&
       coverageLines.some((line) => line.includes("VST3 program lists:")) &&
       coverageLines.some((line) => line.includes("parameter metadata:")) &&
+      coverageLines.some((line) => line.includes("parameter profiles:")) &&
       coverageLines.some((line) => line.includes("file grant sample load:")) &&
       coverageLines.some((line) => line.includes("file grant cache directory open:")) &&
       coverageLines.some((line) => line.includes("file grant license load:")) &&
@@ -530,6 +559,38 @@ export function exerciseInstalledProbeSupport({ check }) {
       weirdProgramDataProfile.flags.includes("empty-program-list") &&
       weirdProgramDataProfile.flags.includes("invalid-program-index"),
     "installed plugin probe classifies VST3 program-data target edge cases"
+  );
+  const parameterProfile = summarizeParameterProfile([
+    {
+      id: "cutoff",
+      automatable: true,
+      displayValue: "50%",
+      unit: "%",
+      vst3Unit: { id: 2 }
+    },
+    {
+      id: "program",
+      automatable: true,
+      readOnly: true,
+      programChange: true
+    }
+  ], { atLimit: true, format: "vst3" });
+  const readOnlyParameterProfile = summarizeParameterProfile([
+    { id: "readonly", automatable: false, readOnly: true }
+  ], { format: "vst3" });
+  check(
+    parameterProfile.category === "writable" &&
+      parameterProfile.flags.includes("metadata-at-limit") &&
+      parameterProfile.flags.includes("display-values") &&
+      parameterProfile.flags.includes("program-change") &&
+      parameterProfile.flags.includes("vst3-units") &&
+      parameterProfile.parameterCount === 2 &&
+      parameterProfile.writableCount === 1 &&
+      parameterProfile.readOnlyCount === 1 &&
+      parameterProfile.programChangeCount === 1 &&
+      readOnlyParameterProfile.category === "read-only" &&
+      readOnlyParameterProfile.flags.includes("no-writable-parameters"),
+    "installed plugin probe classifies bounded parameter metadata profiles"
   );
 }
 

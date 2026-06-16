@@ -19,6 +19,11 @@ import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import { midiControllerEventCount, midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
+import {
+  assertParameterDisplayMetadata,
+  probeParameterDisplayInput,
+  summarizeParameterProfile
+} from "./installed-plugin-probe-parameters.mjs";
 import { probeListedPreset, probeVst3ProgramData } from "./installed-plugin-probe-programs.mjs";
 import { assertProbeRenderMatchesLayout, summarizeProbeRenderSignal } from "./installed-plugin-probe-rendering.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
@@ -175,11 +180,16 @@ async function probePlugin(socket, session, plugin) {
     const parameters = await phase(result, "getParameters", () =>
       request(socket, "getParameters", { instanceId }, true, session)
     );
-    result.parameterCount = Array.isArray(parameters.parameters) ? parameters.parameters.length : result.parameterCount;
+    const parameterList = Array.isArray(parameters.parameters) ? parameters.parameters : [];
+    result.parameterCount = Array.isArray(parameters.parameters) ? parameterList.length : result.parameterCount;
     result.parameterMetadataAtLimit = parameters.parameterMetadataAtLimit === true || result.parameterMetadataAtLimit || undefined;
-    result.displayValueCount = assertParameterDisplayMetadata(plugin, parameters.parameters);
+    result.displayValueCount = assertParameterDisplayMetadata({ assertProbe, parameters: parameterList, plugin });
+    result.parameterProfile = summarizeParameterProfile(parameterList, {
+      atLimit: result.parameterMetadataAtLimit === true,
+      format: plugin.format
+    });
 
-    const writableParameter = parameters.parameters?.find((parameter) => parameter.automatable && !parameter.readOnly);
+    const writableParameter = parameterList.find((parameter) => parameter.automatable && !parameter.readOnly);
     const restrictedLv2BlockProfile = isRestrictedLv2BlockProfile(plugin);
     if (writableParameter) {
       await phase(result, "setParameter", () =>
@@ -191,7 +201,16 @@ async function probePlugin(socket, session, plugin) {
           session
         )
       );
-      await probeParameterDisplayInput(socket, session, instanceId, writableParameter, result);
+      await probeParameterDisplayInput({
+        assertProbe,
+        instanceId,
+        parameter: writableParameter,
+        phase,
+        request,
+        result,
+        session,
+        socket
+      });
     } else {
       result.parameterDisplayInput = "skipped-no-writable-parameter";
     }
@@ -412,42 +431,6 @@ function assertPluginEditorMetadata(plugin) {
     expectedKinds.every((kind) => kinds.includes(kind)) &&
     kinds.every((kind) => kind === "generic-parameters" || kind === "native-window");
   assertProbe(ok, "missing_editor_kinds", `${plugin.pluginId} did not advertise bounded native editor kinds`);
-}
-
-function assertParameterDisplayMetadata(plugin, parameters) {
-  if (!Array.isArray(parameters)) {
-    return 0;
-  }
-  let count = 0;
-  for (const [index, parameter] of parameters.entries()) {
-    if (parameter?.displayValue == null) {
-      continue;
-    }
-    ++count;
-    const ok = typeof parameter.displayValue === "string" &&
-      Buffer.byteLength(parameter.displayValue, "utf8") <= 160 &&
-      !parameter.displayValue.includes("\u0000");
-    assertProbe(ok, "bad_parameter_display_value", `${plugin.pluginId} parameter ${index} returned an unbounded displayValue`);
-  }
-  return count;
-}
-
-async function probeParameterDisplayInput(socket, session, instanceId, parameter, result) {
-  if (typeof parameter.displayValue !== "string" || parameter.displayValue.length === 0) {
-    result.parameterDisplayInput = "skipped";
-    return;
-  }
-  const response = await phase(result, "setParameterDisplayValue", () =>
-    request(
-      socket,
-      "setParameterDisplayValue",
-      { instanceId, parameterId: parameter.id, displayValue: parameter.displayValue },
-      true,
-      session
-    )
-  );
-  assertProbe(response.parameter?.id === parameter.id, "bad_parameter_display_input", "display text updated the wrong parameter");
-  result.parameterDisplayInput = "applied";
 }
 
 async function probeNativeEditorBroker(socket, session, plugin, instanceId, result) {

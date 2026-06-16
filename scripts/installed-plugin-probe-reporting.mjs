@@ -134,6 +134,16 @@ function summarizeCompatibilityMatrix(results, options) {
       vst3ProgramDataCandidatePrograms: safeMatrixInteger(result.vst3ProgramDataProfile?.candidateProgramCount, 0, 65536),
       vst3ProgramLists: safeMatrixText(vst3ProgramListStatus(result), 64),
       parameterMetadata: safeMatrixText(parameterMetadataStatus(result), 64),
+      parameterProfile: safeMatrixText(parameterProfileStatus(result), 64),
+      parameterFlags: safeMatrixArray(result.parameterProfile?.flags, 64),
+      parameterCount: safeMatrixInteger(result.parameterProfile?.parameterCount ?? result.parameterCount, 0, 1024),
+      parameterWritableCount: safeMatrixInteger(result.parameterProfile?.writableCount, 0, 1024),
+      parameterAutomatableCount: safeMatrixInteger(result.parameterProfile?.automatableCount, 0, 1024),
+      parameterReadOnlyCount: safeMatrixInteger(result.parameterProfile?.readOnlyCount, 0, 1024),
+      parameterDisplayValueCount: safeMatrixInteger(result.parameterProfile?.displayValueCount ?? result.displayValueCount, 0, 1024),
+      parameterUnitCount: safeMatrixInteger(result.parameterProfile?.unitCount, 0, 1024),
+      parameterProgramChangeCount: safeMatrixInteger(result.parameterProfile?.programChangeCount, 0, 1024),
+      parameterVst3UnitCount: safeMatrixInteger(result.parameterProfile?.vst3UnitCount, 0, 1024),
       parameterDisplayInput: safeMatrixText(result.parameterDisplayInput ?? "missing", 64),
       automation: safeMatrixText(automationLaneStatus(result), 64),
       vst3MidiControllerEvents: safeMatrixText(vst3MidiControllerEventStatus(result), 64),
@@ -288,6 +298,7 @@ function summarizeFeatureCoverage(results, options) {
     vst3ProgramDataTargets: countBy(results, vst3ProgramDataProfileStatus),
     vst3ProgramLists: countVst3ProgramLists(results),
     parameterMetadata: countParameterMetadata(results),
+    parameterProfiles: countBy(results, parameterProfileStatus),
     parameterDisplayInput: countStatuses(results, "parameterDisplayInput"),
     fileGrantStateRestore: countStatuses(results, "fileGrantStateRestore"),
     fileGrantPresetLoad: countStatuses(results, "fileGrantPresetLoad"),
@@ -368,6 +379,15 @@ function parameterMetadataStatus(result) {
     : Number.isInteger(result.parameterCount)
       ? result.parameterCount > 0 ? "listed" : "none"
       : "missing";
+}
+
+function parameterProfileStatus(result) {
+  if (result.parameterProfile?.category) {
+    return result.parameterProfile.category;
+  }
+  return Number.isInteger(result.parameterCount)
+    ? result.parameterCount > 0 ? "listed" : "none"
+    : "missing";
 }
 
 function vst3MidiControllerEventStatus(result) {
@@ -550,6 +570,7 @@ function printFeatureCoverage(coverage, stream) {
     ["VST3 program-data targets", coverage.vst3ProgramDataTargets],
     ["VST3 program lists", coverage.vst3ProgramLists],
     ["parameter metadata", coverage.parameterMetadata],
+    ["parameter profiles", coverage.parameterProfiles],
     ["display-text input", coverage.parameterDisplayInput],
     ["file grant state restore", coverage.fileGrantStateRestore],
     ["file grant preset load", coverage.fileGrantPresetLoad],
