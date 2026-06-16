@@ -64,6 +64,15 @@ export function createSecurityMidiCases({ check, request }) {
       socket,
       session,
       instanceId,
+      [{ type: "programChange", program: 999 }],
+      "invalid_argument",
+      "sendMidiEvents rejects out-of-range MIDI program-change fields"
+    );
+
+    await expectMidiError(
+      socket,
+      session,
+      instanceId,
       [{ type: "noteExpression", typeId: 0, noteId: -1, value: 0.5 }],
       "invalid_argument",
       "sendMidiEvents rejects out-of-range VST3 note-expression fields"
@@ -112,6 +121,15 @@ export function createSecurityMidiCases({ check, request }) {
       [{ type: "noteOn", note: 60, velocity: 0.8, busIndex: 1 }],
       "unsupported_midi_event",
       "sendMidiEvents rejects VST3 event-bus routing for non-VST3 workers"
+    );
+
+    await expectMidiError(
+      socket,
+      session,
+      instanceId,
+      [{ type: "programChange", program: 2, busIndex: 1 }],
+      "unsupported_midi_event",
+      "sendMidiEvents rejects bus-indexed VST3 program changes for non-VST3 workers"
     );
   }
 
