@@ -313,17 +313,11 @@ export async function probeFileGrantOtherPresetLoad({
 }
 
 export function nativeStateFileText(format, stateEnvelope) {
-  let parsed;
-  try {
-    parsed = JSON.parse(Buffer.from(String(stateEnvelope), "base64").toString("utf8"));
-  } catch {
+  const nativeState = parsedNativeStateEnvelope(stateEnvelope);
+  if (!nativeState || normalizedFormat(nativeState.format) !== normalizedFormat(format)) {
     return "";
   }
-  const nativeState = parsed?.nativeState;
-  if (!nativeState || nativeState.format !== format) {
-    return "";
-  }
-  if (format === "vst3") {
+  if (normalizedFormat(format) === "vst3") {
     const component = String(nativeState.component ?? "");
     const controller = String(nativeState.controller ?? "");
     if (!component && !controller) {
@@ -331,11 +325,36 @@ export function nativeStateFileText(format, stateEnvelope) {
     }
     return `${component || "-"} ${controller || "-"}\n`;
   }
-  if (format === "au" || format === "lv2") {
+  if (normalizedFormat(format) === "au" || normalizedFormat(format) === "lv2") {
     const state = String(nativeState.state ?? "");
     return state ? `${state}\n` : "";
   }
   return "";
+}
+
+export function summarizeNativeStateProfile(format, stateEnvelope) {
+  if (typeof stateEnvelope !== "string" || stateEnvelope.length === 0) {
+    return { category: "missing", flags: ["no-state-envelope"] };
+  }
+  const expectedFormat = normalizedFormat(format);
+  const parsed = parsedStateEnvelope(stateEnvelope);
+  if (!parsed.ok) {
+    return { category: "invalid", flags: ["invalid-envelope"] };
+  }
+  const nativeState = parsed.nativeState;
+  if (!nativeState) {
+    return { category: "generic-state", flags: ["no-native-state"] };
+  }
+  if (normalizedFormat(nativeState.format) !== expectedFormat) {
+    return { category: "format-mismatch", flags: ["format-mismatch"] };
+  }
+  if (expectedFormat === "vst3") {
+    return summarizeVst3StateProfile(nativeState);
+  }
+  if (expectedFormat === "au" || expectedFormat === "lv2") {
+    return summarizeSingleStateProfile(nativeState);
+  }
+  return { category: "unsupported-format", flags: ["unsupported-format"] };
 }
 
 export function assertNoNativeLaunchData(value, context, assertProbe) {
@@ -375,6 +394,85 @@ async function detachAndRevokeGrant({ grantId, instanceId, request, session, soc
 
 function pluginAdvertisesFileGrantOperation(plugin, operation) {
   return Array.isArray(plugin?.fileGrantOperations) && plugin.fileGrantOperations.includes(operation);
+}
+
+function parsedNativeStateEnvelope(stateEnvelope) {
+  const parsed = parsedStateEnvelope(stateEnvelope);
+  return parsed.ok ? parsed.nativeState : undefined;
+}
+
+function parsedStateEnvelope(stateEnvelope) {
+  let parsed;
+  try {
+    parsed = JSON.parse(Buffer.from(String(stateEnvelope), "base64").toString("utf8"));
+  } catch {
+    return { ok: false, nativeState: undefined };
+  }
+  return { ok: true, nativeState: parsed?.nativeState };
+}
+
+function summarizeVst3StateProfile(nativeState) {
+  const component = statePartProfile(nativeState.component);
+  const controller = statePartProfile(nativeState.controller);
+  if (!component.valid || !controller.valid) {
+    return {
+      category: "invalid",
+      flags: [
+        ...(!component.valid ? ["invalid-component-base64"] : []),
+        ...(!controller.valid ? ["invalid-controller-base64"] : [])
+      ]
+    };
+  }
+  if (!component.present && !controller.present) {
+    return { category: "empty", flags: ["empty-state"], stateBytes: 0, componentBytes: 0, controllerBytes: 0 };
+  }
+  const flags = [
+    ...(component.present ? ["component"] : []),
+    ...(controller.present ? ["controller"] : [])
+  ];
+  return {
+    category: component.present && controller.present
+      ? "component-controller"
+      : component.present ? "component-only" : "controller-only",
+    flags,
+    stateBytes: component.bytes + controller.bytes,
+    componentBytes: component.bytes,
+    controllerBytes: controller.bytes
+  };
+}
+
+function summarizeSingleStateProfile(nativeState) {
+  const state = statePartProfile(nativeState.state);
+  if (!state.valid) {
+    return { category: "invalid", flags: ["invalid-state-base64"] };
+  }
+  if (!state.present) {
+    return { category: "empty", flags: ["empty-state"], stateBytes: 0 };
+  }
+  return { category: "single-state", flags: ["state-blob"], stateBytes: state.bytes };
+}
+
+function statePartProfile(value) {
+  const text = String(value ?? "");
+  if (!text) {
+    return { present: false, valid: true, bytes: 0 };
+  }
+  return isBase64Text(text)
+    ? { present: true, valid: true, bytes: decodedBase64Length(text) }
+    : { present: true, valid: false, bytes: 0 };
+}
+
+function decodedBase64Length(text) {
+  const padding = text.endsWith("==") ? 2 : text.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((text.length / 4) * 3) - padding);
+}
+
+function isBase64Text(text) {
+  return typeof text === "string" && text.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/u.test(text);
+}
+
+function normalizedFormat(format) {
+  return String(format ?? "").toLowerCase();
 }
 
 function safeFilename(value) {

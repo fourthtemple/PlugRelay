@@ -1,4 +1,8 @@
-import { assertNoNativeLaunchData, nativeStateFileText } from "./installed-plugin-probe-file-grants.mjs";
+import {
+  assertNoNativeLaunchData,
+  nativeStateFileText,
+  summarizeNativeStateProfile
+} from "./installed-plugin-probe-file-grants.mjs";
 import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
@@ -103,6 +107,13 @@ export function exerciseInstalledProbeSupport({ check }) {
         vst3UnitCount: 4
       },
       parameterDisplayInput: "applied",
+      stateProfile: {
+        category: "component-controller",
+        flags: ["component", "controller"],
+        stateBytes: 19,
+        componentBytes: 9,
+        controllerBytes: 10
+      },
       fileGrantStateRestore: "applied",
       fileGrantPresetLoad: "applied",
       fileGrantStateSave: "applied",
@@ -154,6 +165,11 @@ export function exerciseInstalledProbeSupport({ check }) {
       vst3ProgramData: "skipped-format",
       parameterCount: 0,
       parameterDisplayInput: "skipped",
+      stateProfile: {
+        category: "single-state",
+        flags: ["state-blob"],
+        stateBytes: 8
+      },
       fileGrantSampleLoad: "skipped-unadvertised",
       fileGrantCacheDirectoryOpen: "applied",
       fileGrantLicenseLoad: "applied",
@@ -181,6 +197,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.parameterMetadata.none === 1 &&
       coverageSummary.coverage.parameterProfiles.writable === 1 &&
       coverageSummary.coverage.parameterProfiles.none === 1 &&
+      coverageSummary.coverage.stateProfiles["component-controller"] === 1 &&
+      coverageSummary.coverage.stateProfiles["single-state"] === 1 &&
       coverageSummary.coverage.fileGrantOperations.loadSample === 1 &&
       coverageSummary.coverage.fileGrantOperations.openCacheDirectory === 1 &&
       coverageSummary.coverage.fileGrantOperations.loadLicense === 1 &&
@@ -226,6 +244,12 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].parameterUnitCount === 20 &&
       coverageSummary.matrix[0].parameterProgramChangeCount === 2 &&
       coverageSummary.matrix[0].parameterVst3UnitCount === 4 &&
+      coverageSummary.matrix[0].stateProfile === "component-controller" &&
+      coverageSummary.matrix[0].stateFlags.includes("component") &&
+      coverageSummary.matrix[0].stateFlags.includes("controller") &&
+      coverageSummary.matrix[0].stateBytes === 19 &&
+      coverageSummary.matrix[0].stateComponentBytes === 9 &&
+      coverageSummary.matrix[0].stateControllerBytes === 10 &&
       coverageSummary.matrix[0].automation === "applied" &&
       coverageSummary.matrix[0].busInputCount === 2 &&
       coverageSummary.matrix[0].busOutputCount === 1 &&
@@ -258,6 +282,9 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[1].vst3ProgramDataTarget === "skipped-format" &&
       coverageSummary.matrix[1].parameterProfile === "none" &&
       coverageSummary.matrix[1].parameterCount === 0 &&
+      coverageSummary.matrix[1].stateProfile === "single-state" &&
+      coverageSummary.matrix[1].stateFlags.includes("state-blob") &&
+      coverageSummary.matrix[1].stateBytes === 8 &&
       coverageSummary.matrix[1].vst3MidiControllerEvents === "skipped-format" &&
       coverageSummary.matrix[1].fileGrantCacheDirectoryOpen === "applied" &&
       coverageSummary.matrix[1].fileGrantLicenseLoad === "applied" &&
@@ -315,6 +342,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("VST3 program lists:")) &&
       coverageLines.some((line) => line.includes("parameter metadata:")) &&
       coverageLines.some((line) => line.includes("parameter profiles:")) &&
+      coverageLines.some((line) => line.includes("state profiles:")) &&
       coverageLines.some((line) => line.includes("file grant sample load:")) &&
       coverageLines.some((line) => line.includes("file grant cache directory open:")) &&
       coverageLines.some((line) => line.includes("file grant license load:")) &&
@@ -491,11 +519,37 @@ export function exerciseInstalledProbeSupport({ check }) {
     nativeStateFileText("vst3", vst3ProbeState) === "Y29tcG9uZW50 Y29udHJvbGxlcg==\n",
     "installed plugin probe exports bounded VST3 state files"
   );
+  const vst3StateProfile = summarizeNativeStateProfile("vst3", vst3ProbeState);
+  const vst3ComponentOnlyProfile = summarizeNativeStateProfile("vst3", nativeStateEnvelope({
+    format: "vst3",
+    component: "Yw=="
+  }));
+  const vst3ControllerOnlyProfile = summarizeNativeStateProfile("vst3", nativeStateEnvelope({
+    format: "vst3",
+    controller: "Yw=="
+  }));
   const lv2ProbeState = nativeStateEnvelope({ format: "lv2", state: "bHYyLXN0YXRl" });
+  const lv2StateProfile = summarizeNativeStateProfile("lv2", lv2ProbeState);
+  const invalidPartProfile = summarizeNativeStateProfile("vst3", nativeStateEnvelope({ format: "vst3", component: "bad" }));
   check(
     nativeStateFileText("lv2", lv2ProbeState) === "bHYyLXN0YXRl\n" &&
       nativeStateFileText("au", lv2ProbeState) === "",
     "installed plugin probe exports only matching native state files"
+  );
+  check(
+    vst3StateProfile.category === "component-controller" &&
+      vst3StateProfile.stateBytes === 19 &&
+      vst3StateProfile.componentBytes === 9 &&
+      vst3StateProfile.controllerBytes === 10 &&
+      vst3ComponentOnlyProfile.category === "component-only" &&
+      vst3ControllerOnlyProfile.category === "controller-only" &&
+      lv2StateProfile.category === "single-state" &&
+      lv2StateProfile.stateBytes === 9 &&
+      invalidPartProfile.category === "invalid" &&
+      invalidPartProfile.flags.includes("invalid-component-base64") &&
+      summarizeNativeStateProfile("vst3", Buffer.from("{}", "utf8").toString("base64")).category === "generic-state" &&
+      summarizeNativeStateProfile("vst3", "not-state").category === "invalid",
+    "installed plugin probe classifies bounded native state profiles"
   );
 
   let nativeLaunchLeakCode;

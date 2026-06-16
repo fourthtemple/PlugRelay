@@ -13,7 +13,8 @@ import {
   probeFileGrantPresetLoad,
   probeFileGrantSampleLoad,
   probeFileGrantStateRestore,
-  probeFileGrantStateSave
+  probeFileGrantStateSave,
+  summarizeNativeStateProfile
 } from "./installed-plugin-probe-file-grants.mjs";
 import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
@@ -216,6 +217,7 @@ async function probePlugin(socket, session, plugin) {
     }
 
     const state = await phase(result, "getState", () => request(socket, "getState", { instanceId }, true, session));
+    result.stateProfile = summarizeNativeStateProfile(plugin.format, state.state);
     if (typeof state.state === "string" && state.state.length > 0) {
       await phase(result, "setState", () => request(socket, "setState", { instanceId, state: state.state }, true, session));
       await probeFileGrantStateRestore({

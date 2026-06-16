@@ -10,6 +10,7 @@ const KNOWN_FILE_GRANT_OPERATIONS = new Set([
   "saveStateDirectory",
   "other"
 ]);
+const MAX_PLUGIN_STATE_BYTES = 384 * 1024;
 
 export function installedProbeReportMode(env = process.env) {
   const raw = String(env.SOUNDBRIDGE_PROBE_REPORT ?? "full").trim().toLowerCase();
@@ -145,6 +146,11 @@ function summarizeCompatibilityMatrix(results, options) {
       parameterProgramChangeCount: safeMatrixInteger(result.parameterProfile?.programChangeCount, 0, 1024),
       parameterVst3UnitCount: safeMatrixInteger(result.parameterProfile?.vst3UnitCount, 0, 1024),
       parameterDisplayInput: safeMatrixText(result.parameterDisplayInput ?? "missing", 64),
+      stateProfile: safeMatrixText(stateProfileStatus(result), 64),
+      stateFlags: safeMatrixArray(result.stateProfile?.flags, 64),
+      stateBytes: safeMatrixInteger(result.stateProfile?.stateBytes, 0, MAX_PLUGIN_STATE_BYTES),
+      stateComponentBytes: safeMatrixInteger(result.stateProfile?.componentBytes, 0, MAX_PLUGIN_STATE_BYTES),
+      stateControllerBytes: safeMatrixInteger(result.stateProfile?.controllerBytes, 0, MAX_PLUGIN_STATE_BYTES),
       automation: safeMatrixText(automationLaneStatus(result), 64),
       vst3MidiControllerEvents: safeMatrixText(vst3MidiControllerEventStatus(result), 64),
       hostTransport: safeMatrixText(result.hostTransport ?? "missing", 64),
@@ -300,6 +306,7 @@ function summarizeFeatureCoverage(results, options) {
     parameterMetadata: countParameterMetadata(results),
     parameterProfiles: countBy(results, parameterProfileStatus),
     parameterDisplayInput: countStatuses(results, "parameterDisplayInput"),
+    stateProfiles: countBy(results, stateProfileStatus),
     fileGrantStateRestore: countStatuses(results, "fileGrantStateRestore"),
     fileGrantPresetLoad: countStatuses(results, "fileGrantPresetLoad"),
     fileGrantStateSave: countStatuses(results, "fileGrantStateSave"),
@@ -388,6 +395,16 @@ function parameterProfileStatus(result) {
   return Number.isInteger(result.parameterCount)
     ? result.parameterCount > 0 ? "listed" : "none"
     : "missing";
+}
+
+function stateProfileStatus(result) {
+  if (result.stateProfile?.category) {
+    return result.stateProfile.category;
+  }
+  if (hasFailedPhase(result, ["getState"])) {
+    return "failed";
+  }
+  return hasOkPhase(result, "getState") ? "unprofiled" : "missing";
 }
 
 function vst3MidiControllerEventStatus(result) {
@@ -572,6 +589,7 @@ function printFeatureCoverage(coverage, stream) {
     ["parameter metadata", coverage.parameterMetadata],
     ["parameter profiles", coverage.parameterProfiles],
     ["display-text input", coverage.parameterDisplayInput],
+    ["state profiles", coverage.stateProfiles],
     ["file grant state restore", coverage.fileGrantStateRestore],
     ["file grant preset load", coverage.fileGrantPresetLoad],
     ["file grant state save", coverage.fileGrantStateSave],
