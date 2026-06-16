@@ -122,14 +122,16 @@ export async function exerciseVst3MidiControllerMappingNativeWorker({
     await midiWorker.sendMidiEvents([
       { type: "controlChange", controller: 74, value: 0.25, channel: 2, time: 3, busIndex: 1 },
       { type: "pitchBend", value: -0.5, channel: 2, time: 4, busIndex: 1 },
-      { type: "channelPressure", pressure: 0.75, channel: 2, time: 5, busIndex: 1 }
+      { type: "channelPressure", pressure: 0.75, channel: 2, time: 5, busIndex: 1 },
+      { type: "programChange", program: 7, channel: 2, time: 6, busIndex: 1 }
     ]);
     await midiWorker.sendMidiEvents([
       { type: "controlChange", controller: 1, value: 0.4, channel: 0, time: 0 },
       { type: "pitchBend", value: 0.1, channel: 0, time: 1 },
-      { type: "channelPressure", pressure: 0.3, channel: 0, time: 2 }
+      { type: "channelPressure", pressure: 0.3, channel: 0, time: 2 },
+      { type: "programChange", program: 2, channel: 0, time: 3 }
     ]);
-    check(true, "native VST3 workers encode explicit-bus and main-bus MIDI-controller parameter events");
+    check(true, "native VST3 workers encode explicit-bus and main-bus MIDI-controller/program-change events");
   } finally {
     midiWorker.destroy();
   }
@@ -352,8 +354,8 @@ function writeVst3MidiControllerMappingNativeWorker(tempDir) {
     "vst3-midi-controller-mapping-native-worker.mjs",
     `#!/usr/bin/env node
 const expectedCommands = new Set([
-  "midi cc:74:0.25:2:3:bus=1;bend:-0.5:2:4:bus=1;pressure:0.75:2:5:bus=1",
-  "midi cc:1:0.4:0:0;bend:0.1:0:1;pressure:0.3:0:2"
+  "midi cc:74:0.25:2:3:bus=1;bend:-0.5:2:4:bus=1;pressure:0.75:2:5:bus=1;program:7:2:6:bus=1",
+  "midi cc:1:0.4:0:0;bend:0.1:0:1;pressure:0.3:0:2;program:2:0:3"
 ]);
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
 process.stdin.setEncoding("utf8");
@@ -373,7 +375,7 @@ process.stdin.on("data", (chunk) => {
     }
     process.stdout.write(JSON.stringify(
       expectedCommands.has(line)
-        ? { ok: true, eventCount: 3 }
+        ? { ok: true, eventCount: 4 }
         : { error: "bad_mapped_midi_controller_events" }
     ) + "\\n");
   }

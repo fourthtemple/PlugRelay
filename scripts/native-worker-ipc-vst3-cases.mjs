@@ -296,10 +296,11 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
       [
         { type: "noteOn", note: 60, velocity: 0.8, channel: 0, time: 0, busIndex: 3 },
         { type: "noteExpression", typeId: 0, value: 0.5, noteId: 42, channel: 0, time: 1, busIndex: 3 },
-        { type: "controlChange", controller: 74, value: 0.25, channel: 2, time: 3, busIndex: 3 }
+        { type: "controlChange", controller: 74, value: 0.25, channel: 2, time: 3, busIndex: 3 },
+        { type: "programChange", program: 7, channel: 2, time: 4, busIndex: 3 }
       ],
       "vst3"
-    ) === "on:60:0.8:0:0:bus=3;expr:0:0.5:42:0:1:bus=3;cc:74:0.25:2:3:bus=3",
+    ) === "on:60:0.8:0:0:bus=3;expr:0:0.5:42:0:1:bus=3;cc:74:0.25:2:3:bus=3;program:7:2:4:bus=3",
     "daemon normalizers encode VST3 event-bus worker events"
   );
 }
