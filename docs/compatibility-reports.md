@@ -72,6 +72,8 @@ JSON reports include a path-free `busProfile` for each probed plugin. Use it to 
 
 VST3 reports also include a path-free `vst3EventProfile` derived from bounded note-expression metadata. Use it to call out coverage such as `no-note-expressions`, `main-event-bus`, `non-main-event-bus`, `non-main-channel`, `text-expression`, and multi-event-bus or multi-channel fixtures without including plugin paths, preset contents, or license data.
 
+The summary report counts advertised `fileGrantOperations` such as `loadPreset`, `restoreState`, `saveStateDirectory`, `loadSample`, `openCacheDirectory`, and `loadLicense`. Treat this as workflow readiness metadata: it says which bounded file operations the plugin/worker exposes, not that private preset, sample, cache, or license files should be attached to public reports.
+
 ## Privacy And Safety
 
 Before posting, remove anything private that may appear in local output. Do not include:

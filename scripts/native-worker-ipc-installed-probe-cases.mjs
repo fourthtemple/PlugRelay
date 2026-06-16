@@ -43,6 +43,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       fileGrantPresetLoad: "applied",
       fileGrantStateSave: "applied",
       fileGrantSavedStateRestore: "applied",
+      fileGrantOperations: ["loadPreset", "restoreState", "saveStateDirectory", "loadSample"],
       busProfile: { category: "sidechain", flags: ["sidechain-input", "multi-input"] },
       vst3EventProfile: {
         category: "non-main-event-bus",
@@ -60,6 +61,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       listedPreset: "skipped",
       vst3ProgramData: "skipped-format",
       parameterDisplayInput: "skipped",
+      fileGrantOperations: ["loadPreset", "openCacheDirectory", "loadLicense"],
       busProfile: { category: "multi-output-instrument", flags: ["multi-output", "multi-output-instrument"] },
       automationLaneSkipped: "lv2-block-size-profile"
     }
@@ -68,6 +70,9 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     coverageSummary.coverage.listedPresets.applied === 1 &&
       coverageSummary.coverage.vst3ProgramData.restored === 1 &&
+      coverageSummary.coverage.fileGrantOperations.loadSample === 1 &&
+      coverageSummary.coverage.fileGrantOperations.openCacheDirectory === 1 &&
+      coverageSummary.coverage.fileGrantOperations.loadLicense === 1 &&
       coverageSummary.coverage.busLayouts.sidechain === 1 &&
       coverageSummary.coverage.busLayouts["flag:multi-output-instrument"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["non-main-event-bus"] === 1 &&
@@ -92,6 +97,7 @@ export function exerciseInstalledProbeSupport({ check }) {
   check(
     coverageLines.some((line) => line === "Feature coverage:") &&
       coverageLines.some((line) => line.includes("VST3 program data: 1 restored, 1 skipped-format")) &&
+      coverageLines.some((line) => line.includes("file grant operations advertised:")) &&
       coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),
     "installed plugin probe summary prints feature coverage"

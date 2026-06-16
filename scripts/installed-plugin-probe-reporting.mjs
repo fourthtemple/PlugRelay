@@ -1,4 +1,13 @@
 const REPORT_MODES = new Set(["full", "summary", "json"]);
+const KNOWN_FILE_GRANT_OPERATIONS = new Set([
+  "loadPreset",
+  "loadSample",
+  "openCacheDirectory",
+  "loadLicense",
+  "restoreState",
+  "saveStateDirectory",
+  "other"
+]);
 
 export function installedProbeReportMode(env = process.env) {
   const raw = String(env.SOUNDBRIDGE_PROBE_REPORT ?? "full").trim().toLowerCase();
@@ -82,6 +91,7 @@ function summarizeFeatureCoverage(results, options) {
     fileGrantPresetLoad: countStatuses(results, "fileGrantPresetLoad"),
     fileGrantStateSave: countStatuses(results, "fileGrantStateSave"),
     fileGrantSavedStateRestore: countStatuses(results, "fileGrantSavedStateRestore"),
+    fileGrantOperations: countFileGrantOperations(results),
     busLayouts: countBusLayouts(results),
     vst3EventProfiles: countVst3EventProfiles(results),
     automationLanes: countAutomationLanes(results),
@@ -127,6 +137,34 @@ function countBusLayouts(results) {
   return counts;
 }
 
+function countFileGrantOperations(results) {
+  const counts = {};
+  for (const result of results) {
+    if (!Array.isArray(result.fileGrantOperations)) {
+      counts.missing = (counts.missing ?? 0) + 1;
+      continue;
+    }
+
+    const knownOperations = uniqueKnownFileGrantOperations(result.fileGrantOperations);
+    if (knownOperations.length === 0) {
+      counts.none = (counts.none ?? 0) + 1;
+    }
+    for (const operation of knownOperations) {
+      counts[operation] = (counts[operation] ?? 0) + 1;
+    }
+    if (result.fileGrantOperations.some((operation) => !KNOWN_FILE_GRANT_OPERATIONS.has(String(operation)))) {
+      counts.unknown = (counts.unknown ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function uniqueKnownFileGrantOperations(operations) {
+  return [...new Set(operations.map((operation) => String(operation)).filter((operation) =>
+    KNOWN_FILE_GRANT_OPERATIONS.has(operation)
+  ))];
+}
+
 function countVst3EventProfiles(results) {
   const counts = {};
   for (const result of results) {
@@ -169,6 +207,7 @@ function printFeatureCoverage(coverage, stream) {
     ["file grant preset load", coverage.fileGrantPresetLoad],
     ["file grant state save", coverage.fileGrantStateSave],
     ["file grant saved-state restore", coverage.fileGrantSavedStateRestore],
+    ["file grant operations advertised", coverage.fileGrantOperations],
     ["bus layouts", coverage.busLayouts],
     ["VST3 event metadata", coverage.vst3EventProfiles],
     ["automation lanes", coverage.automationLanes],
