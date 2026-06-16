@@ -8,7 +8,11 @@ import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { applyNativeParameterSnapshot, parameterSnapshotResponse } from "./daemon-parameter-snapshots.mjs";
 import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
 import { exerciseInstalledProbeSupport } from "./native-worker-ipc-installed-probe-cases.mjs";
-import { exerciseGrantAwareNativeWorker, writeNativeWorkerIpcFixtures } from "./native-worker-ipc-fixtures.mjs";
+import {
+  exerciseGrantAwareNativeWorker,
+  exerciseVst3MultiBusNativeWorker,
+  writeNativeWorkerIpcFixtures
+} from "./native-worker-ipc-fixtures.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
@@ -237,7 +241,8 @@ try {
     hangingNativeCommandWorkerPath,
     stubbornExampleCommandWorkerPath,
     stubbornNativeCommandWorkerPath,
-    grantAwareNativeWorkerPath
+    grantAwareNativeWorkerPath,
+    multiBusNativeWorkerPath
   } = writeNativeWorkerIpcFixtures({ tempDir, fixtureGrantPath });
 
   const workers = createTestWorkers(nativeWorkerPath);
@@ -249,6 +254,13 @@ try {
     nativeWorkerInstance,
     tempDir,
     workerPath: grantAwareNativeWorkerPath
+  });
+
+  await exerciseVst3MultiBusNativeWorker({
+    check,
+    createTestWorkers,
+    tempDir,
+    workerPath: multiBusNativeWorkerPath
   });
 
   const fileGrantOperation = await exerciseDaemonFileGrantOperation({
@@ -578,7 +590,7 @@ function createTestWorkers(nativeRenderer, options = {}) {
   return createNativeWorkerProcesses({
     nativeRenderer,
     normalizers: createDaemonNormalizers(),
-    maxWorkerStdoutLineBytes: MAX_TEST_STDOUT_LINE_BYTES,
+    maxWorkerStdoutLineBytes: options.maxWorkerStdoutLineBytes ?? MAX_TEST_STDOUT_LINE_BYTES,
     maxWorkerCommandBytes: options.maxWorkerCommandBytes ?? MAX_TEST_COMMAND_BYTES,
     maxWorkerPendingCommandBytes: options.maxWorkerPendingCommandBytes ?? MAX_TEST_PENDING_COMMAND_BYTES,
     maxWorkerStderrLineBytes: MAX_TEST_STDERR_LINE_BYTES,

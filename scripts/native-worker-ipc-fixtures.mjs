@@ -77,6 +77,51 @@ export async function exerciseGrantAwareNativeWorker({
   grantWorker.destroy();
 }
 
+export async function exerciseVst3MultiBusNativeWorker({
+  check,
+  createTestWorkers,
+  tempDir,
+  workerPath
+}) {
+  const busWorkers = createTestWorkers(workerPath, {
+    maxWorkerCommandBytes: 4096,
+    maxWorkerPendingCommandBytes: 4096,
+    maxWorkerStdoutLineBytes: 2048
+  });
+  const busWorker = new busWorkers.NativeHostWorker(
+    { format: "vst3", bundlePath: tempDir, renderEngine: "native-vst3" },
+    vst3MultiBusInstance()
+  );
+
+  try {
+    await busWorker.ready;
+    const rendered = await busWorker.render({
+      frames: 2,
+      sampleRate: 48000,
+      channels: [[0.1, 0.2], [0.3, 0.4]],
+      inputBuses: [
+        { index: 0, channels: [[0.1, 0.2], [0.3, 0.4]] },
+        { index: 1, channels: [[0.5, 0.6]] }
+      ],
+      transport: { playing: true, samplePosition: 32 }
+    });
+
+    check(
+      Array.isArray(rendered.outputBuses) &&
+        rendered.outputBuses.length === 2 &&
+        rendered.outputBuses[1]?.index === 1 &&
+        JSON.stringify(rendered.outputBuses[1].channels) === JSON.stringify([[0.5, 0.6]]),
+      "native VST3 workers preserve multi-bus render responses"
+    );
+    check(
+      JSON.stringify(rendered.outputBuses?.[0]?.channels) === JSON.stringify(rendered.channels),
+      "native VST3 workers keep bus 0 mirrored in legacy render channels"
+    );
+  } finally {
+    busWorker.destroy();
+  }
+}
+
 export function writeNativeWorkerIpcFixtures({ tempDir, fixtureGrantPath }) {
   return {
     exampleWorkerPath: writeExecutable(
@@ -267,7 +312,68 @@ process.stdin.resume();
 setTimeout(() => {}, 30000);
 `
     ),
-    grantAwareNativeWorkerPath: writeGrantAwareNativeWorker(tempDir, fixtureGrantPath)
+    grantAwareNativeWorkerPath: writeGrantAwareNativeWorker(tempDir, fixtureGrantPath),
+    multiBusNativeWorkerPath: writeVst3MultiBusNativeWorker(tempDir)
+  };
+}
+
+function vst3MultiBusInstance() {
+  return {
+    sampleRate: 48000,
+    maxBlockSize: 2,
+    inputChannels: 2,
+    outputChannels: 2,
+    kind: "effect",
+    layout: {
+      requestedInputChannels: 2,
+      requestedOutputChannels: 2,
+      inputChannels: 2,
+      outputChannels: 2,
+      inputBuses: 2,
+      outputBuses: 2,
+      inputBusLayouts: [
+        {
+          index: 0,
+          direction: "input",
+          mediaType: "audio",
+          name: "Main Input",
+          type: "main",
+          channels: 2,
+          active: true
+        },
+        {
+          index: 1,
+          direction: "input",
+          mediaType: "audio",
+          name: "Aux Input",
+          type: "aux",
+          channels: 1,
+          active: true
+        }
+      ],
+      outputBusLayouts: [
+        {
+          index: 0,
+          direction: "output",
+          mediaType: "audio",
+          name: "Main Output",
+          type: "main",
+          channels: 2,
+          active: true
+        },
+        {
+          index: 1,
+          direction: "output",
+          mediaType: "audio",
+          name: "Aux Output",
+          type: "aux",
+          channels: 1,
+          active: true
+        }
+      ],
+      sampleRate: 48000,
+      maxBlockSize: 2
+    }
   };
 }
 
@@ -338,6 +444,89 @@ process.stdin.on("data", (chunk) => {
     process.stdout.write(JSON.stringify({
       applied: sampleApplied || stateDirectoryApplied,
       status: stateDirectoryApplied ? "state-dir-ok" : "grant-ok"
+    }) + "\\n");
+  }
+});
+setTimeout(() => {}, 30000);
+`
+  );
+}
+
+function writeVst3MultiBusNativeWorker(tempDir) {
+  return writeExecutable(
+    tempDir,
+    "vst3-multi-bus-native-worker.mjs",
+    `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
+process.stdin.setEncoding("utf8");
+let buffer = "";
+
+function parseChannels(token, frames) {
+  if (!token || token === "-") {
+    return [];
+  }
+  return token.split("|").map((channel) => {
+    const samples = channel.split(",");
+    return Array.from({ length: frames }, (_, frame) => Number(samples[frame] ?? 0));
+  });
+}
+
+function parseInputBuses(token, frames) {
+  if (!token || token === "-") {
+    return [];
+  }
+  return token.split(";").map((bus) => {
+    const separator = bus.indexOf("=");
+    return {
+      index: Number(bus.slice(0, separator)),
+      channels: parseChannels(bus.slice(separator + 1), frames)
+    };
+  });
+}
+
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  while (true) {
+    const newline = buffer.indexOf("\\n");
+    if (newline < 0) {
+      return;
+    }
+    const line = buffer.slice(0, newline).trim();
+    buffer = buffer.slice(newline + 1);
+    if (line === "quit") {
+      process.exit(0);
+    }
+    const parts = line.split(" ");
+    if (parts[0] !== "render") {
+      process.stdout.write(JSON.stringify({ error: "unknown_command" }) + "\\n");
+      continue;
+    }
+
+    const frames = Number(parts[1]);
+    const channels = parseChannels(parts[3], frames);
+    const inputBuses = parseInputBuses(parts[4], frames);
+    const expectedChannels = [[0.1, 0.2], [0.3, 0.4]];
+    const expectedBuses = [
+      { index: 0, channels: [[0.1, 0.2], [0.3, 0.4]] },
+      { index: 1, channels: [[0.5, 0.6]] }
+    ];
+    const requestMatched = frames === 2 &&
+      Number(parts[2]) === 48000 &&
+      parts[5] === "playing=1,sample=32" &&
+      JSON.stringify(channels) === JSON.stringify(expectedChannels) &&
+      JSON.stringify(inputBuses) === JSON.stringify(expectedBuses);
+    if (!requestMatched) {
+      process.stdout.write(JSON.stringify({ error: "bad_multibus_render" }) + "\\n");
+      continue;
+    }
+
+    const mainOutput = [[0.6, 0.8], [0.3, 0.4]];
+    process.stdout.write(JSON.stringify({
+      channels: mainOutput,
+      outputBuses: [
+        { index: 0, channels: mainOutput },
+        { index: 1, channels: [[0.5, 0.6]] }
+      ]
     }) + "\\n");
   }
 });
