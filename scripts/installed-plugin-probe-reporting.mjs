@@ -117,9 +117,114 @@ function summarizeCompatibilityMatrix(results) {
       parameterMetadata: safeMatrixText(parameterMetadataStatus(result), 64),
       parameterDisplayInput: safeMatrixText(result.parameterDisplayInput ?? "missing", 64),
       automation: safeMatrixText(automationLaneStatus(result), 64),
+      featureStatus: summarizeFeatureStatus(result),
       fileGrantOperations: safeMatrixArray(result.fileGrantOperations, 64)
     });
   });
+}
+
+function summarizeFeatureStatus(result) {
+  return {
+    instantiation: phaseGroupStatus(result, ["createInstance"]),
+    parameters: parameterFeatureStatus(result),
+    presetSnapshots: safeMatrixText(result.listedPreset ?? "missing", 64),
+    vst3ProgramData: safeMatrixText(result.vst3ProgramData ?? "missing", 64),
+    state: phaseGroupStatus(result, ["getState", "setState"]),
+    fileGrants: fileGrantFeatureStatus(result),
+    midiEvents: phaseGroupStatus(result, ["sendMidiEvents", "sendMidiNoteOff"]),
+    automation: safeMatrixText(automationLaneStatus(result), 64),
+    rendering: renderingFeatureStatus(result),
+    busLayouts: busLayoutFeatureStatus(result),
+    latencyTail: phaseGroupStatus(result, ["getLatency", "getTailTime"]),
+    editor: editorFeatureStatus(result)
+  };
+}
+
+function parameterFeatureStatus(result) {
+  if (hasFailedPhase(result, ["getParameters", "setParameter", "setParameterDisplayValue"])) {
+    return "failed";
+  }
+  return hasOkPhase(result, "getParameters") || Number.isInteger(result.parameterCount) ? "passed" : "missing";
+}
+
+function fileGrantFeatureStatus(result) {
+  if (hasFailedPhase(result, [
+    "createPresetFileGrant",
+    "attachPresetFileGrant",
+    "useFileGrantLoadPreset",
+    "createStateFileGrant",
+    "attachStateFileGrant",
+    "useFileGrantRestoreState",
+    "createStateDirectoryGrant",
+    "attachStateDirectoryGrant",
+    "useFileGrantSaveStateDirectory",
+    "createSavedStateFileGrant",
+    "attachSavedStateFileGrant",
+    "useFileGrantRestoreSavedState"
+  ])) {
+    return "failed";
+  }
+
+  const workflowStatuses = [
+    result.fileGrantStateRestore,
+    result.fileGrantPresetLoad,
+    result.fileGrantStateSave,
+    result.fileGrantSavedStateRestore
+  ].filter(Boolean).map(String);
+  if (workflowStatuses.some((status) => status === "applied")) {
+    return "passed";
+  }
+  if (workflowStatuses.length > 0 && workflowStatuses.every((status) => status === "skipped")) {
+    return "skipped";
+  }
+  if (Array.isArray(result.fileGrantOperations) && result.fileGrantOperations.length > 0) {
+    return "advertised";
+  }
+  return "missing";
+}
+
+function renderingFeatureStatus(result) {
+  if (hasFailedPhase(result, ["processAudioBlock"])) {
+    return "failed";
+  }
+  return result.renderSignal === "signal" || result.renderSignal === "silent" || hasOkPhase(result, "processAudioBlock")
+    ? "passed"
+    : "missing";
+}
+
+function busLayoutFeatureStatus(result) {
+  if (hasFailedPhase(result, ["createInstance", "processAudioBlock"])) {
+    return "failed";
+  }
+  return result.busProfile?.category ? "passed" : "missing";
+}
+
+function editorFeatureStatus(result) {
+  if (hasFailedPhase(result, ["openNativeEditor", "closeNativeEditor"])) {
+    return "failed";
+  }
+  return result.nativeEditor?.transport || (hasOkPhase(result, "openNativeEditor") && hasOkPhase(result, "closeNativeEditor"))
+    ? "passed"
+    : "not-requested";
+}
+
+function phaseGroupStatus(result, names) {
+  if (hasFailedPhase(result, names)) {
+    return "failed";
+  }
+  if (names.every((name) => hasOkPhase(result, name))) {
+    return "passed";
+  }
+  return names.some((name) => hasOkPhase(result, name)) ? "partial" : "missing";
+}
+
+function hasFailedPhase(result, names) {
+  const phaseNames = new Set(names);
+  return (result.phases ?? []).some((phaseResult) => phaseNames.has(phaseResult.name) && phaseResult.ok === false);
+}
+
+function hasOkPhase(result, name) {
+  return (result.phases ?? []).some((phaseResult) => phaseResult.name === name && phaseResult.ok === true);
 }
 
 function summarizeFeatureCoverage(results, options) {

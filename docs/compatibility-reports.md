@@ -89,7 +89,7 @@ The summary report counts advertised `fileGrantOperations` such as `loadPreset`,
 
 Render-signal coverage is reported as `signal`, `silent`, or `missing`. A `silent` result means `processAudioBlock` completed and the response shape matched the negotiated layout, but the probe did not observe non-zero samples in the main channels or explicit output buses. Include it in reports when a plugin appears to load correctly but produces no audible output.
 
-Matrix reports include one compact entry per probed plugin with path-redacted identity text, pass/fail status, failure phase/code, render-signal status, bus/event categories, program metadata status, automation status, parameter metadata status, and advertised file-grant operations. They are meant for compatibility dashboards and triage; attach the full JSON report when maintainers need phase timings or detailed per-plugin payloads.
+Matrix reports include one compact entry per probed plugin with path-redacted identity text, pass/fail status, failure phase/code, render-signal status, bus/event categories, program metadata status, automation status, parameter metadata status, and advertised file-grant operations. Each entry also includes a `featureStatus` object for dashboard-friendly buckets: `instantiation`, `parameters`, `presetSnapshots`, `vst3ProgramData`, `state`, `fileGrants`, `midiEvents`, `automation`, `rendering`, `busLayouts`, `latencyTail`, and `editor`. They are meant for compatibility dashboards and triage; attach the full JSON report when maintainers need phase timings or detailed per-plugin payloads.
 
 ## Privacy And Safety
 

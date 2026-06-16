@@ -38,6 +38,30 @@ export function exerciseInstalledProbeSupport({ check }) {
     "installed plugin probe accepts matrix report mode"
   );
 
+  const passedFeaturePhases = [
+    "createInstance",
+    "getParameters",
+    "setParameter",
+    "setParameterDisplayValue",
+    "setPreset",
+    "getVst3ProgramData",
+    "setVst3ProgramData",
+    "getState",
+    "setState",
+    "useFileGrantLoadPreset",
+    "useFileGrantRestoreState",
+    "useFileGrantSaveStateDirectory",
+    "useFileGrantRestoreSavedState",
+    "getLatency",
+    "getTailTime",
+    "setAutomationLane",
+    "sendMidiEvents",
+    "processAudioBlock",
+    "clearAutomationLane",
+    "sendMidiNoteOff",
+    "openNativeEditor",
+    "closeNativeEditor"
+  ].map((name) => ({ name, ok: true }));
   const coverageResults = [
     {
       ok: true,
@@ -66,7 +90,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       },
       automationLanePointCount: 2,
       renderSignal: "signal",
-      nativeEditor: { transport: "native-broker" }
+      nativeEditor: { transport: "native-broker" },
+      phases: passedFeaturePhases
     },
     {
       ok: true,
@@ -111,8 +136,14 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].vst3ProgramLists === "listed" &&
       coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
       coverageSummary.matrix[0].automation === "applied" &&
+      coverageSummary.matrix[0].featureStatus.instantiation === "passed" &&
+      coverageSummary.matrix[0].featureStatus.parameters === "passed" &&
+      coverageSummary.matrix[0].featureStatus.fileGrants === "passed" &&
+      coverageSummary.matrix[0].featureStatus.rendering === "passed" &&
+      coverageSummary.matrix[0].featureStatus.editor === "passed" &&
       coverageSummary.matrix[1].name === "[local-path]" &&
       coverageSummary.matrix[1].vst3ProgramLists === "skipped-format" &&
+      coverageSummary.matrix[1].featureStatus.fileGrants === "advertised" &&
       coverageSummary.matrix[1].fileGrantOperations.includes("loadLicense"),
     "installed plugin probe builds path-free compatibility matrix entries"
   );
@@ -185,7 +216,8 @@ export function exerciseInstalledProbeSupport({ check }) {
     matrixReport.matrix.length === 3 &&
       matrixReport.matrix[2].pluginId === "[local-path]" &&
       matrixReport.matrix[2].failedPhase === "createInstance" &&
-      matrixReport.matrix[2].failureCode === "[local-path]: bad",
+      matrixReport.matrix[2].failureCode === "[local-path]: bad" &&
+      matrixReport.matrix[2].featureStatus.instantiation === "failed",
     "installed plugin probe prints compact compatibility matrix JSON"
   );
 
