@@ -75,6 +75,12 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
     )) === "bad_program_data",
     "daemon normalizers reject wrong-format VST3 program data"
   );
+  check(
+    (await rejectedCode(() =>
+      unitNormalizers.normalizeVst3ProgramData({ programListId: 7, programIndex: 0 })
+    )) === "bad_program_data",
+    "daemon normalizers reject missing VST3 program data bytes"
+  );
 
   const fakeInstance = vst3ProgramDataInstance();
   const programDataSupport = createProgramDataSupport({
@@ -134,6 +140,11 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
     "daemon VST3 program-data helper rejects non-base64 program bytes"
   );
   check(
+    (await rejectedCode(() => programDataSupport.setVst3ProgramData("inst-test", programEnvelope({ data: undefined }), {}))) ===
+      "bad_program_data",
+    "daemon VST3 program-data helper rejects restore envelopes without bytes"
+  );
+  check(
     (await rejectedCode(() => programDataSupport.setVst3ProgramData("inst-test", programEnvelope({ programListId: 8 }), {}))) ===
       "program_data_not_supported",
     "daemon VST3 program-data helper rejects unlisted restore targets"
@@ -167,6 +178,11 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
   check(
     (await rejectedCode(() => programDataSupport.getVst3ProgramData("inst-test", 7, 0, {}))) === "bad_program_data",
     "daemon VST3 program-data helper rejects wrong-format worker export metadata"
+  );
+  fakeInstance.workerProgramData = { format: "vst3", programListId: 7, programIndex: 0 };
+  check(
+    (await rejectedCode(() => programDataSupport.getVst3ProgramData("inst-test", 7, 0, {}))) === "bad_program_data",
+    "daemon VST3 program-data helper rejects worker exports without bytes"
   );
   delete fakeInstance.workerProgramData;
 
