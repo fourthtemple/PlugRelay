@@ -89,6 +89,7 @@ export function exerciseInstalledProbeSupport({ check }) {
         channels: [0, 3]
       },
       automationLanePointCount: 2,
+      hostTransport: "accepted",
       renderSignal: "signal",
       nativeEditor: { transport: "native-broker" },
       phases: passedFeaturePhases
@@ -124,6 +125,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.vst3EventProfiles["non-main-event-bus"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:text-expression"] === 1 &&
       coverageSummary.coverage.automationLanes.applied === 1 &&
+      coverageSummary.coverage.hostTransport.accepted === 1 &&
       coverageSummary.coverage.renderSignals.signal === 1 &&
       coverageSummary.coverage.renderSignals.silent === 1 &&
       coverageSummary.coverage.nativeEditor.opened === 1,
@@ -136,9 +138,11 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].vst3ProgramLists === "listed" &&
       coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
       coverageSummary.matrix[0].automation === "applied" &&
+      coverageSummary.matrix[0].hostTransport === "accepted" &&
       coverageSummary.matrix[0].featureStatus.instantiation === "passed" &&
       coverageSummary.matrix[0].featureStatus.parameters === "passed" &&
       coverageSummary.matrix[0].featureStatus.fileGrants === "passed" &&
+      coverageSummary.matrix[0].featureStatus.transport === "accepted" &&
       coverageSummary.matrix[0].featureStatus.rendering === "passed" &&
       coverageSummary.matrix[0].featureStatus.editor === "passed" &&
       coverageSummary.matrix[1].name === "[local-path]" &&
@@ -192,6 +196,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("parameter metadata:")) &&
       coverageLines.some((line) => line.includes("file grant operations advertised:")) &&
       coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
+      coverageLines.some((line) => line.includes("host transport:")) &&
       coverageLines.some((line) => line.includes("render signal:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),
     "installed plugin probe summary prints feature coverage"

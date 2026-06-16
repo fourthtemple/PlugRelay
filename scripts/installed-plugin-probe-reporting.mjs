@@ -117,6 +117,7 @@ function summarizeCompatibilityMatrix(results) {
       parameterMetadata: safeMatrixText(parameterMetadataStatus(result), 64),
       parameterDisplayInput: safeMatrixText(result.parameterDisplayInput ?? "missing", 64),
       automation: safeMatrixText(automationLaneStatus(result), 64),
+      hostTransport: safeMatrixText(result.hostTransport ?? "missing", 64),
       featureStatus: summarizeFeatureStatus(result),
       fileGrantOperations: safeMatrixArray(result.fileGrantOperations, 64)
     });
@@ -133,6 +134,7 @@ function summarizeFeatureStatus(result) {
     fileGrants: fileGrantFeatureStatus(result),
     midiEvents: phaseGroupStatus(result, ["sendMidiEvents", "sendMidiNoteOff"]),
     automation: safeMatrixText(automationLaneStatus(result), 64),
+    transport: hostTransportFeatureStatus(result),
     rendering: renderingFeatureStatus(result),
     busLayouts: busLayoutFeatureStatus(result),
     latencyTail: phaseGroupStatus(result, ["getLatency", "getTailTime"]),
@@ -192,6 +194,13 @@ function renderingFeatureStatus(result) {
     : "missing";
 }
 
+function hostTransportFeatureStatus(result) {
+  if (hasFailedPhase(result, ["processAudioBlock"])) {
+    return "failed";
+  }
+  return safeMatrixText(result.hostTransport ?? "missing", 64);
+}
+
 function busLayoutFeatureStatus(result) {
   if (hasFailedPhase(result, ["createInstance", "processAudioBlock"])) {
     return "failed";
@@ -242,6 +251,7 @@ function summarizeFeatureCoverage(results, options) {
     busLayouts: countBusLayouts(results),
     vst3EventProfiles: countVst3EventProfiles(results),
     automationLanes: countAutomationLanes(results),
+    hostTransport: countStatuses(results, "hostTransport"),
     renderSignals: countStatuses(results, "renderSignal"),
     nativeEditor: countNativeEditor(results, options)
   };
@@ -432,6 +442,7 @@ function printFeatureCoverage(coverage, stream) {
     ["bus layouts", coverage.busLayouts],
     ["VST3 event metadata", coverage.vst3EventProfiles],
     ["automation lanes", coverage.automationLanes],
+    ["host transport", coverage.hostTransport],
     ["render signal", coverage.renderSignals],
     ["native editor broker", coverage.nativeEditor]
   ]) {

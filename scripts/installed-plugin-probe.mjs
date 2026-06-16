@@ -275,16 +275,16 @@ async function probePlugin(socket, session, plugin) {
     result.midiEventCount = midiAccepted.eventCount;
 
     const renderPayload = renderPayloadForLayout(instanceId, result.layout);
-    if (automationLaneApplied) {
-      renderPayload.transport = { samplePosition: 4096, tempo: SAMPLE_RATE / 400 };
-    }
+    renderPayload.transport = renderTransportContext();
     const rendered = await phase(result, "processAudioBlock", async () => {
       const response = await request(socket, "processAudioBlock", renderPayload, true, session);
       assertRenderMatchesLayout(response, result.layout);
+      assertRenderTransport(response, renderPayload.transport);
       return response;
     });
     result.renderedChannels = Array.isArray(rendered.channels) ? rendered.channels.length : 0;
     result.renderSignal = summarizeProbeRenderSignal(rendered);
+    result.hostTransport = "accepted";
 
     if (automationLaneApplied) {
       await phase(result, "clearAutomationLane", () =>
@@ -468,6 +468,16 @@ function renderPayloadForLayout(instanceId, layout) {
   };
 }
 
+function renderTransportContext() {
+  return {
+    playing: true,
+    samplePosition: 4096,
+    tempo: SAMPLE_RATE / 400,
+    timeSignatureNumerator: 4,
+    timeSignatureDenominator: 4
+  };
+}
+
 function isNativePluginFormat(format) {
   const normalized = String(format ?? "").toLowerCase();
   return normalized === "vst3" || normalized === "au" || normalized === "lv2";
@@ -526,6 +536,16 @@ function assertRenderMatchesLayout(rendered, layout) {
     error.code = "bad_render_layout";
     throw error;
   }
+}
+
+function assertRenderTransport(rendered, expected) {
+  const actual = rendered.transport;
+  assertProbe(actual && typeof actual === "object", "bad_render_transport", "render response did not echo bounded host transport");
+  assertProbe(actual.playing === true, "bad_render_transport", "render response lost host playing state");
+  assertProbe(actual.samplePosition === expected.samplePosition, "bad_render_transport", "render response lost host sample position");
+  assertProbe(Math.abs(Number(actual.tempo) - expected.tempo) < 0.000001, "bad_render_transport", "render response lost host tempo");
+  assertProbe(actual.timeSignatureNumerator === 4, "bad_render_transport", "render response lost host time signature numerator");
+  assertProbe(actual.timeSignatureDenominator === 4, "bad_render_transport", "render response lost host time signature denominator");
 }
 
 function boundedLayoutSummary(layout) {
