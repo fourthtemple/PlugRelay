@@ -123,6 +123,29 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
   );
   delete fakeInstance.workerProgramData;
 
+  fakeInstance.workerParameters = [
+    { id: "program", name: "Program", normalizedValue: 0, defaultNormalizedValue: 0, automatable: true },
+    { id: "variant", name: "Variant", normalizedValue: 0.5, defaultNormalizedValue: 0.5, automatable: true }
+  ];
+  const cappedParameterProgramDataSupport = createProgramDataSupport({
+    fakeInstance,
+    maxPluginParameters: 1,
+    normalizers: unitNormalizers,
+    protocolError
+  });
+  const cappedParameterRestore = await cappedParameterProgramDataSupport.setVst3ProgramData("inst-test", programEnvelope(), {});
+  check(
+    cappedParameterRestore.restored === true &&
+      cappedParameterRestore.parameterMetadataAtLimit === true &&
+      cappedParameterRestore.parameters.length === 2 &&
+      fakeInstance.nativeParameterIds.has("variant"),
+    "daemon VST3 program-data helper reports capped parameter refreshes"
+  );
+  delete fakeInstance.workerParameters;
+  fakeInstance.parameters = [];
+  fakeInstance.nativeParameterIds = new Set();
+  fakeInstance.parameterMetadataAtLimit = false;
+
   check(
     (await rejectedCode(() => programDataSupport.setVst3ProgramData("inst-test", programEnvelope({ pluginId: "vst3:other" }), {}))) ===
       "program_data_plugin_mismatch",
@@ -284,6 +307,7 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
 function createProgramDataSupport({
   fakeInstance,
   maxPluginProgramDataEnvelopeBytes = 1024 * 1024,
+  maxPluginParameters,
   normalizers,
   protocolError
 }) {
@@ -293,6 +317,7 @@ function createProgramDataSupport({
     },
     limits: {
       maxPluginProgramDataEnvelopeBytes,
+      ...(maxPluginParameters ? { maxPluginParameters } : {}),
       maxPluginPrograms: 256
     },
     normalizers,
@@ -328,7 +353,9 @@ function vst3ProgramDataInstance() {
       instance.restoredProgramData = { programListId, programIndex, data };
     },
     async getParameters() {
-      return [{ id: "program", name: "Program", normalizedValue: 0, defaultNormalizedValue: 0, automatable: true }];
+      return instance.workerParameters ?? [
+        { id: "program", name: "Program", normalizedValue: 0, defaultNormalizedValue: 0, automatable: true }
+      ];
     }
   };
   return instance;

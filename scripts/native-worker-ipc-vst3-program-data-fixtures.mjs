@@ -30,9 +30,12 @@ export async function exerciseVst3ProgramDataNativeWorker({
 
     const restoredEmpty = await programDataWorker.setVst3ProgramData(-2147483648, 0, "");
     const restoredBytes = await programDataWorker.setVst3ProgramData(7, 2, "YWI=");
+    const restoredPaddedBytes = await programDataWorker.setVst3ProgramData(2147483647, 255, "+/8=");
     check(
-      restoredEmpty?.restored === "empty" && restoredBytes?.restored === "bytes",
-      "native VST3 workers encode signed and empty program-data restore commands"
+      restoredEmpty?.restored === "empty" &&
+        restoredBytes?.restored === "bytes" &&
+        restoredPaddedBytes?.restored === "padded-bytes",
+      "native VST3 workers encode signed, empty, and padded program-data restore commands"
     );
   } finally {
     programDataWorker.destroy();
@@ -88,7 +91,8 @@ const responses = new Map([
     { programData: { format: "vst3", programListId: 2147483647, programIndex: 255, data: "" } }
   ],
   ["setProgramData -2147483648 0 -", { ok: true, restored: "empty" }],
-  ["setProgramData 7 2 YWI=", { ok: true, restored: "bytes" }]
+  ["setProgramData 7 2 YWI=", { ok: true, restored: "bytes" }],
+  ["setProgramData 2147483647 255 +/8=", { ok: true, restored: "padded-bytes" }]
 ]);
 
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
