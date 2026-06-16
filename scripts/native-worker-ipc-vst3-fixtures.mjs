@@ -59,6 +59,27 @@ export async function exerciseVst3MultiBusNativeWorker({
         JSON.stringify(sidechainRendered.outputBuses?.[2]?.channels) === JSON.stringify([[-0.1, -0.3]]),
       "native VST3 workers route explicit sidechain buses independently of legacy channels"
     );
+    const multiAuxRendered = await busWorker.render({
+      frames: 2,
+      sampleRate: 48000,
+      channels: [[0, 0], [0, 0]],
+      inputBuses: [
+        { index: 0, channels: [[0.1, 0.1], [0.2, 0.2]] },
+        { index: 1, channels: [[0.3, 0.4]] },
+        { index: 2, channels: [[0.5, 0.6], [0.7, 0.8]] }
+      ],
+      transport: { samplePosition: 112 }
+    });
+    const multiAuxBuses = new Map((multiAuxRendered.outputBuses ?? []).map((bus) => [bus.index, bus.channels]));
+    check(
+      multiAuxRendered.outputBuses?.length === 4 &&
+        JSON.stringify(multiAuxRendered.channels) === JSON.stringify([[0.8, 1], [0.7, 0.8]]) &&
+        JSON.stringify(multiAuxBuses.get(0)) === JSON.stringify(multiAuxRendered.channels) &&
+        JSON.stringify(multiAuxBuses.get(1)) === JSON.stringify([[0.3, 0.4]]) &&
+        JSON.stringify(multiAuxBuses.get(2)) === JSON.stringify([[-0.5, -0.6]]) &&
+        JSON.stringify(multiAuxBuses.get(4)) === JSON.stringify([[0.5, 0.6], [0.7, 0.8]]),
+      "native VST3 workers preserve multiple aux input and nonsequential output buses"
+    );
     const weirdRendered = await busWorker.render({
       frames: 2,
       sampleRate: 48000,
@@ -280,8 +301,8 @@ function vst3MultiBusInstance() {
       requestedOutputChannels: 2,
       inputChannels: 2,
       outputChannels: 2,
-      inputBuses: 2,
-      outputBuses: 3,
+      inputBuses: 3,
+      outputBuses: 4,
       inputBusLayouts: [
         {
           index: 0,
@@ -299,6 +320,15 @@ function vst3MultiBusInstance() {
           name: "Aux Input",
           type: "aux",
           channels: 1,
+          active: true
+        },
+        {
+          index: 2,
+          direction: "input",
+          mediaType: "audio",
+          name: "Aux Input 2",
+          type: "aux",
+          channels: 2,
           active: true
         }
       ],
@@ -328,6 +358,15 @@ function vst3MultiBusInstance() {
           name: "Sidechain Monitor",
           type: "aux",
           channels: 1,
+          active: true
+        },
+        {
+          index: 4,
+          direction: "output",
+          mediaType: "audio",
+          name: "Aux Output 2",
+          type: "aux",
+          channels: 2,
           active: true
         }
       ],
@@ -616,6 +655,31 @@ process.stdin.on("data", (chunk) => {
           { index: 0, channels: sidechainMainOutput },
           { index: 1, channels: [[0.1, 0.3]] },
           { index: 2, channels: [[-0.1, -0.3]] }
+        ]
+      }) + "\\n");
+      continue;
+    }
+
+    const multiAuxLegacyChannels = [[0, 0], [0, 0]];
+    const multiAuxInputBuses = [
+      { index: 0, channels: [[0.1, 0.1], [0.2, 0.2]] },
+      { index: 1, channels: [[0.3, 0.4]] },
+      { index: 2, channels: [[0.5, 0.6], [0.7, 0.8]] }
+    ];
+    const multiAuxRequestMatched = frames === 2 &&
+      Number(parts[2]) === 48000 &&
+      parts[5] === "sample=112" &&
+      JSON.stringify(channels) === JSON.stringify(multiAuxLegacyChannels) &&
+      JSON.stringify(inputBuses) === JSON.stringify(multiAuxInputBuses);
+    if (multiAuxRequestMatched) {
+      const multiAuxMainOutput = [[0.8, 1], [0.7, 0.8]];
+      process.stdout.write(JSON.stringify({
+        channels: multiAuxMainOutput,
+        outputBuses: [
+          { index: 4, channels: [[0.5, 0.6], [0.7, 0.8]] },
+          { index: 1, channels: [[0.3, 0.4]] },
+          { index: 0, channels: multiAuxMainOutput },
+          { index: 2, channels: [[-0.5, -0.6]] }
         ]
       }) + "\\n");
       continue;
