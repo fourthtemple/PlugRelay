@@ -31,6 +31,7 @@ import {
   summarizeProbeOutputBusSignal,
   summarizeProbeRenderSignal
 } from "./installed-plugin-probe-rendering.mjs";
+import { renderPayloadForLayout } from "./installed-plugin-probe-render-payload.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { createInstalledProbeReporter, installedProbeReportMode } from "./installed-plugin-probe-reporting.mjs";
 import {
@@ -362,7 +363,10 @@ async function probePlugin(socket, session, plugin) {
       ? result.midiControllerEventCount > 0 ? "accepted" : "missing"
       : "skipped-format";
 
-    const renderPayload = renderPayloadForLayout(instanceId, result.layout);
+    const renderPayload = renderPayloadForLayout(instanceId, result.layout, {
+      maxBlockSize: MAX_BLOCK_SIZE,
+      sampleRate: SAMPLE_RATE
+    });
     renderPayload.transport = renderTransportContext();
     const rendered = await phase(result, "processAudioBlock", async () => {
       const response = await request(socket, "processAudioBlock", renderPayload, true, session);
@@ -493,32 +497,6 @@ function assertNativeEditorResponse(response, plugin, instanceId) {
   assertProbe(response.plugin?.pluginId === plugin.pluginId, "bad_native_editor_response", "native editor plugin id mismatch");
   assertProbe(response.plugin?.format === plugin.format, "bad_native_editor_response", "native editor plugin format mismatch");
   assertNoNativeLaunchData(response, "native editor response", assertProbe);
-}
-
-function renderPayloadForLayout(instanceId, layout) {
-  const inputChannels = clampInt(layout?.inputChannels, 0, 32, 0);
-  const frames = layoutBlockSize(layout);
-  const bus0Channels = Array.from({ length: inputChannels }, () => Array(frames).fill(0.05));
-  const inputBuses = inputChannels > 0 ? [{ index: 0, channels: bus0Channels }] : [];
-  const inputBusLayouts = Array.isArray(layout?.inputBusLayouts) ? layout.inputBusLayouts : [];
-  for (const bus of inputBusLayouts) {
-    const index = clampInt(bus?.index, 0, 31, 0);
-    const channels = clampInt(bus?.channels, 0, 32, 0);
-    if (index === 0 || bus?.active !== true || channels <= 0 || inputBuses.some((candidate) => candidate.index === index)) {
-      continue;
-    }
-    inputBuses.push({
-      index,
-      channels: Array.from({ length: channels }, () => Array(frames).fill(0.025))
-    });
-  }
-  return {
-    instanceId,
-    frames,
-    sampleRate: SAMPLE_RATE,
-    channels: Array.from({ length: inputChannels }, () => Array(frames).fill(0)),
-    inputBuses
-  };
 }
 
 function renderTransportContext() {

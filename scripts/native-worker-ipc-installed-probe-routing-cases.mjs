@@ -10,6 +10,7 @@ import {
   summarizeProbeOutputBusSignal,
   summarizeProbeRenderSignal
 } from "./installed-plugin-probe-rendering.mjs";
+import { renderPayloadForLayout } from "./installed-plugin-probe-render-payload.mjs";
 
 export function exerciseInstalledProbeRoutingSupport({ check }) {
   const sidechainProfile = summarizeProbeBusLayout(
@@ -128,8 +129,47 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
     "installed plugin probe classifies output-bus render signal coverage"
   );
 
+  exerciseRenderPayloadCoverage({ check });
   exerciseRenderLayoutValidation({ check });
   exerciseProbeMidiCoverage({ check });
+}
+
+function exerciseRenderPayloadCoverage({ check }) {
+  const sidechainPayload = renderPayloadForLayout(
+    "inst-sidechain",
+    {
+      inputChannels: 2,
+      inputBusLayouts: [
+        { index: 0, channels: 2, active: true },
+        { index: 1, channels: 1, active: true },
+        { index: 2, channels: 1, active: false },
+        { index: 1, channels: 1, active: true }
+      ],
+      maxBlockSize: 4
+    },
+    { maxBlockSize: 64, sampleRate: 48000 }
+  );
+  const clampedPayload = renderPayloadForLayout(
+    "inst-clamp",
+    { inputChannels: 1, maxBlockSize: 4096 },
+    { maxBlockSize: 64 }
+  );
+  check(
+    sidechainPayload.frames === 4 &&
+      sidechainPayload.sampleRate === 48000 &&
+      sidechainPayload.channels.length === 2 &&
+      sidechainPayload.channels[0].every((sample) => sample === 0) &&
+      sidechainPayload.inputBuses.length === 2 &&
+      sidechainPayload.inputBuses[0].index === 0 &&
+      sidechainPayload.inputBuses[0].channels.length === 2 &&
+      sidechainPayload.inputBuses[0].channels[0][0] === 0.05 &&
+      sidechainPayload.inputBuses[1].index === 1 &&
+      sidechainPayload.inputBuses[1].channels.length === 1 &&
+      sidechainPayload.inputBuses[1].channels[0][0] > 0 &&
+      sidechainPayload.inputBuses[1].channels[0][0] !== sidechainPayload.inputBuses[0].channels[0][0] &&
+      clampedPayload.frames === 64,
+    "installed plugin probe builds explicit sidechain render payloads"
+  );
 }
 
 function exerciseRenderLayoutValidation({ check }) {
