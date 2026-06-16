@@ -33,11 +33,18 @@ export function exerciseInstalledProbeSupport({ check }) {
     installedProbeReportMode({ SOUNDBRIDGE_PROBE_REPORT: "summary" }) === "summary",
     "installed plugin probe accepts summary report mode"
   );
+  check(
+    installedProbeReportMode({ SOUNDBRIDGE_PROBE_REPORT: "matrix" }) === "matrix",
+    "installed plugin probe accepts matrix report mode"
+  );
 
   const coverageResults = [
     {
       ok: true,
       format: "vst3",
+      pluginId: "vst3:neutral-effect",
+      name: "Neutral Effect",
+      vendor: "Example Vendor",
       listedPreset: "applied",
       vst3ProgramData: "restored",
       vst3ProgramListCount: 2,
@@ -64,6 +71,9 @@ export function exerciseInstalledProbeSupport({ check }) {
     {
       ok: true,
       format: "au",
+      pluginId: "au:neutral-instrument",
+      name: "/Users/test/Neutral.component",
+      vendor: "Neutral Vendor",
       listedPreset: "skipped",
       vst3ProgramData: "skipped-format",
       parameterCount: 0,
@@ -93,6 +103,18 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.renderSignals.silent === 1 &&
       coverageSummary.coverage.nativeEditor.opened === 1,
     "installed plugin probe summarizes feature coverage"
+  );
+  check(
+    coverageSummary.matrix.length === 2 &&
+      coverageSummary.matrix[0].pluginId === "vst3:neutral-effect" &&
+      coverageSummary.matrix[0].renderSignal === "signal" &&
+      coverageSummary.matrix[0].vst3ProgramLists === "listed" &&
+      coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
+      coverageSummary.matrix[0].automation === "applied" &&
+      coverageSummary.matrix[1].name === "[local-path]" &&
+      coverageSummary.matrix[1].vst3ProgramLists === "skipped-format" &&
+      coverageSummary.matrix[1].fileGrantOperations.includes("loadLicense"),
+    "installed plugin probe builds path-free compatibility matrix entries"
   );
   check(
     summarizeProbeResults(coverageResults).coverage.nativeEditor["not-requested"] === 2,
@@ -142,6 +164,29 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("render signal:")) &&
       coverageLines.some((line) => line.includes("bus layouts:")),
     "installed plugin probe summary prints feature coverage"
+  );
+  const matrixLines = [];
+  createInstalledProbeReporter({
+    formats: new Set(["vst3"]),
+    maxBlockSize: 64,
+    mode: "matrix",
+    stream: { log: (line) => matrixLines.push(line) }
+  }).printSummary([
+    ...coverageResults,
+    {
+      ok: false,
+      pluginId: "/Users/test/Failed.vst3",
+      format: "vst3",
+      phases: [{ name: "createInstance", ok: false, error: { code: "/Users/test/failed.vst3: bad" } }]
+    }
+  ]);
+  const matrixReport = JSON.parse(matrixLines.join("\n"));
+  check(
+    matrixReport.matrix.length === 3 &&
+      matrixReport.matrix[2].pluginId === "[local-path]" &&
+      matrixReport.matrix[2].failedPhase === "createInstance" &&
+      matrixReport.matrix[2].failureCode === "[local-path]: bad",
+    "installed plugin probe prints compact compatibility matrix JSON"
   );
 
   const sidechainProfile = summarizeProbeBusLayout(

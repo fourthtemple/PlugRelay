@@ -194,6 +194,12 @@ For a compact pass/fail and feature-coverage report without the full per-plugin 
 SOUNDBRIDGE_PROBE_REPORT=summary SOUNDBRIDGE_PROBE_FILTER="Plugin Name" npm run probe:installed
 ```
 
+For a compact JSON artifact intended for compatibility matrix ingestion:
+
+```sh
+SOUNDBRIDGE_PROBE_REPORT=matrix SOUNDBRIDGE_PROBE_FILTER="Plugin Name" npm run --silent probe:installed
+```
+
 For GitHub plugin compatibility requests, attach a focused JSON probe report:
 
 ```sh

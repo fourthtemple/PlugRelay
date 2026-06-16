@@ -1,4 +1,6 @@
-const REPORT_MODES = new Set(["full", "summary", "json"]);
+import { redactLocalPaths } from "./local-path-redaction.mjs";
+
+const REPORT_MODES = new Set(["full", "summary", "json", "matrix"]);
 const KNOWN_FILE_GRANT_OPERATIONS = new Set([
   "loadPreset",
   "loadSample",
@@ -12,7 +14,7 @@ const KNOWN_FILE_GRANT_OPERATIONS = new Set([
 export function installedProbeReportMode(env = process.env) {
   const raw = String(env.SOUNDBRIDGE_PROBE_REPORT ?? "full").trim().toLowerCase();
   if (!REPORT_MODES.has(raw)) {
-    throw new Error("SOUNDBRIDGE_PROBE_REPORT must be one of: full, summary, json");
+    throw new Error("SOUNDBRIDGE_PROBE_REPORT must be one of: full, summary, json, matrix");
   }
   return raw;
 }
@@ -27,7 +29,7 @@ export function createInstalledProbeReporter({
 }) {
   return {
     printIntro(selectedCount) {
-      if (mode === "json") {
+      if (mode === "json" || mode === "matrix") {
         return;
       }
       stream.log(
@@ -40,7 +42,7 @@ export function createInstalledProbeReporter({
     },
 
     printResult(result) {
-      if (mode === "json") {
+      if (mode === "json" || mode === "matrix") {
         return;
       }
       const status = result.ok ? "ok" : "FAIL";
@@ -51,7 +53,7 @@ export function createInstalledProbeReporter({
 
     printSummary(results) {
       const summary = summarizeProbeResults(results, { nativeEditorBroker });
-      if (mode !== "json") {
+      if (mode !== "json" && mode !== "matrix") {
         stream.log(`\n${summary.passed}/${summary.total} plugin(s) passed, ${summary.failed} failed.`);
         printFeatureCoverage(summary.coverage, stream);
       }
@@ -59,7 +61,10 @@ export function createInstalledProbeReporter({
         printFailureSummary(summary.failures, stream);
       }
       if (mode === "full" || mode === "json") {
-        stream.log(JSON.stringify({ passed: summary.passed, failed: summary.failed, coverage: summary.coverage, results }, null, 2));
+        stream.log(JSON.stringify({ passed: summary.passed, failed: summary.failed, coverage: summary.coverage, matrix: summary.matrix, results }, null, 2));
+      }
+      if (mode === "matrix") {
+        stream.log(JSON.stringify({ passed: summary.passed, failed: summary.failed, total: summary.total, coverage: summary.coverage, matrix: summary.matrix }, null, 2));
       }
       return summary;
     }
@@ -78,8 +83,43 @@ export function summarizeProbeResults(results, options = {}) {
     failed: results.length - passed,
     total: results.length,
     coverage: summarizeFeatureCoverage(results, options),
-    failures
+    failures,
+    matrix: summarizeCompatibilityMatrix(results)
   };
+}
+
+function summarizeCompatibilityMatrix(results) {
+  return results.map((result) => {
+    const failedPhase = firstFailedPhase(result);
+    const failureError = failedPhase?.error ?? result.error;
+    return removeEmpty({
+      pluginId: safeMatrixText(result.pluginId, 128),
+      name: safeMatrixText(result.name, 160),
+      vendor: safeMatrixText(result.vendor, 160),
+      format: safeMatrixText(result.format, 16),
+      kind: safeMatrixText(result.kind, 32),
+      ok: result.ok === true,
+      failedPhase: result.ok === true ? undefined : safeMatrixText(failedPhase?.name ?? "probe", 64),
+      failureCode: result.ok === true
+        ? undefined
+        : safeMatrixText(failureError?.code ?? failureError?.message ?? "unknown_error", 96),
+      renderSignal: safeMatrixText(result.renderSignal ?? "missing", 32),
+      busCategory: safeMatrixText(result.busProfile?.category ?? "missing", 64),
+      busFlags: safeMatrixArray(result.busProfile?.flags, 64),
+      vst3EventCategory: safeMatrixText(
+        result.vst3EventProfile?.category ??
+          (String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format"),
+        64
+      ),
+      vst3EventFlags: safeMatrixArray(result.vst3EventProfile?.flags, 64),
+      vst3ProgramData: safeMatrixText(result.vst3ProgramData ?? "missing", 64),
+      vst3ProgramLists: safeMatrixText(vst3ProgramListStatus(result), 64),
+      parameterMetadata: safeMatrixText(parameterMetadataStatus(result), 64),
+      parameterDisplayInput: safeMatrixText(result.parameterDisplayInput ?? "missing", 64),
+      automation: safeMatrixText(automationLaneStatus(result), 64),
+      fileGrantOperations: safeMatrixArray(result.fileGrantOperations, 64)
+    });
+  });
 }
 
 function summarizeFeatureCoverage(results, options) {
@@ -114,11 +154,7 @@ function countStatuses(results, field) {
 function countAutomationLanes(results) {
   const counts = {};
   for (const result of results) {
-    const status = Number.isInteger(result.automationLanePointCount)
-      ? "applied"
-      : result.automationLaneSkipped
-        ? `skipped-${result.automationLaneSkipped}`
-        : "missing";
+    const status = automationLaneStatus(result);
     counts[status] = (counts[status] ?? 0) + 1;
   }
   return counts;
@@ -127,11 +163,7 @@ function countAutomationLanes(results) {
 function countParameterMetadata(results) {
   const counts = {};
   for (const result of results) {
-    const status = result.parameterMetadataAtLimit === true
-      ? "at-limit"
-      : Number.isInteger(result.parameterCount)
-        ? result.parameterCount > 0 ? "listed" : "none"
-        : "missing";
+    const status = parameterMetadataStatus(result);
     counts[status] = (counts[status] ?? 0) + 1;
   }
   return counts;
@@ -140,14 +172,34 @@ function countParameterMetadata(results) {
 function countVst3ProgramLists(results) {
   const counts = {};
   for (const result of results) {
-    const status = String(result.format ?? "").toLowerCase() !== "vst3"
-      ? "skipped-format"
-      : Number.isInteger(result.vst3ProgramListCount)
-        ? result.vst3ProgramListCount > 0 ? "listed" : "none"
-        : "missing";
+    const status = vst3ProgramListStatus(result);
     counts[status] = (counts[status] ?? 0) + 1;
   }
   return counts;
+}
+
+function automationLaneStatus(result) {
+  return Number.isInteger(result.automationLanePointCount)
+    ? "applied"
+    : result.automationLaneSkipped
+      ? `skipped-${result.automationLaneSkipped}`
+      : "missing";
+}
+
+function parameterMetadataStatus(result) {
+  return result.parameterMetadataAtLimit === true
+    ? "at-limit"
+    : Number.isInteger(result.parameterCount)
+      ? result.parameterCount > 0 ? "listed" : "none"
+      : "missing";
+}
+
+function vst3ProgramListStatus(result) {
+  return String(result.format ?? "").toLowerCase() !== "vst3"
+    ? "skipped-format"
+    : Number.isInteger(result.vst3ProgramListCount)
+      ? result.vst3ProgramListCount > 0 ? "listed" : "none"
+      : "missing";
 }
 
 function countBusLayouts(results) {
@@ -192,6 +244,39 @@ function uniqueKnownFileGrantOperations(operations) {
   return [...new Set(operations.map((operation) => String(operation)).filter((operation) =>
     KNOWN_FILE_GRANT_OPERATIONS.has(operation)
   ))];
+}
+
+function safeMatrixArray(value, maxBytes) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.map((entry) => safeMatrixText(entry, maxBytes)).filter(Boolean))];
+}
+
+function safeMatrixText(value, maxBytes) {
+  const text = redactLocalPaths(value).replace(/\u0000/g, "");
+  let output = "";
+  for (const char of text) {
+    const codePoint = char.codePointAt(0);
+    if ((codePoint >= 0 && codePoint < 0x20) || codePoint === 0x7f) {
+      continue;
+    }
+    if (Buffer.byteLength(output + char, "utf8") > maxBytes) {
+      break;
+    }
+    output += char;
+  }
+  return output;
+}
+
+function removeEmpty(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) =>
+      entry !== undefined &&
+        entry !== "" &&
+        (!Array.isArray(entry) || entry.length > 0)
+    )
+  );
 }
 
 function countVst3EventProfiles(results) {
