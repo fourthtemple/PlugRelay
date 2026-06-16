@@ -178,7 +178,15 @@ function summarizeCompatibilityMatrix(results, options) {
       automation: safeMatrixText(automationLaneStatus(result), 64),
       automationLanePointCount: safeMatrixInteger(result.automationLanePointCount, 0, 4096),
       midiEventCount: safeMatrixInteger(result.midiEventCount, 0, 4096),
-      midiControllerEventCount: safeMatrixInteger(result.midiControllerEventCount, 0, 4096),
+      midiControllerEventCount: safeMatrixInteger(
+        result.midiControllerEventProfile?.eventCount ?? result.midiControllerEventCount,
+        0,
+        4096
+      ),
+      midiControllerEventTypes: safeMatrixArray(result.midiControllerEventProfile?.types, 64),
+      midiControllerNumbers: safeMatrixIntegerArray(result.midiControllerEventProfile?.controllers, 0, 127),
+      midiControllerChannels: safeMatrixIntegerArray(result.midiControllerEventProfile?.channels, 0, 15),
+      midiControllerEventBuses: safeMatrixIntegerArray(result.midiControllerEventProfile?.eventBuses, 0, 31),
       vst3MidiControllerEvents: safeMatrixText(vst3MidiControllerEventStatus(result), 64),
       hostTransport: safeMatrixText(result.hostTransport ?? "missing", 64),
       fileGrantSampleLoad: safeMatrixText(result.fileGrantSampleLoad ?? "missing", 64),

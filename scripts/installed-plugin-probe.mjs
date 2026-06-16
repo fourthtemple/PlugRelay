@@ -19,7 +19,7 @@ import {
 import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
-import { midiControllerEventCount, midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
+import { midiEventsForBlock, summarizeProbeMidiControllerEvents } from "./installed-plugin-probe-midi.mjs";
 import {
   assertParameterDisplayMetadata,
   probeParameterDisplayInput,
@@ -356,7 +356,8 @@ async function probePlugin(socket, session, plugin) {
       throw error;
     }
     result.midiEventCount = midiAccepted.eventCount;
-    result.midiControllerEventCount = midiControllerEventCount(midiEvents);
+    result.midiControllerEventProfile = summarizeProbeMidiControllerEvents(midiEvents);
+    result.midiControllerEventCount = result.midiControllerEventProfile.eventCount;
     result.vst3MidiControllerEvents = String(plugin.format ?? "").toLowerCase() === "vst3"
       ? result.midiControllerEventCount > 0 ? "accepted" : "missing"
       : "skipped-format";

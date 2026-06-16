@@ -23,14 +23,46 @@ export function midiEventsForBlock(format, frames = 64, maxBlockSize = 64) {
 }
 
 export function midiControllerEventCount(events) {
+  return summarizeProbeMidiControllerEvents(events).eventCount;
+}
+
+export function summarizeProbeMidiControllerEvents(events) {
   if (!Array.isArray(events)) {
-    return 0;
+    return emptyMidiControllerProfile();
   }
-  return events.filter((event) =>
+  const controllerEvents = events.filter((event) =>
     event?.type === "controlChange" ||
       event?.type === "pitchBend" ||
       event?.type === "channelPressure"
-  ).length;
+  );
+  return {
+    eventCount: controllerEvents.length,
+    types: knownControllerEventTypes(controllerEvents),
+    controllers: uniqueSortedIntegers(controllerEvents.map((event) => event.controller), 0, 127),
+    channels: uniqueSortedIntegers(controllerEvents.map((event) => event.channel ?? 0), 0, 15),
+    eventBuses: uniqueSortedIntegers(controllerEvents.map((event) => event.busIndex ?? 0), 0, 31)
+  };
+}
+
+function emptyMidiControllerProfile() {
+  return {
+    eventCount: 0,
+    types: [],
+    controllers: [],
+    channels: [],
+    eventBuses: []
+  };
+}
+
+function knownControllerEventTypes(events) {
+  const present = new Set(events.map((event) => event.type));
+  return ["controlChange", "pitchBend", "channelPressure"].filter((type) => present.has(type));
+}
+
+function uniqueSortedIntegers(values, min, max) {
+  return [...new Set(values.filter((value) =>
+    Number.isInteger(value) && value >= min && value <= max
+  ))].sort((left, right) => left - right);
 }
 
 function clampInt(value, min, max, fallback) {

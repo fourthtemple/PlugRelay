@@ -7,7 +7,11 @@ import { summarizeProbeVst3Events } from "./installed-plugin-probe-events.mjs";
 import { installedProbeErrorSummary } from "./installed-plugin-probe-errors.mjs";
 import { installedProbeFormats } from "./installed-plugin-probe-formats.mjs";
 import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
-import { midiControllerEventCount, midiEventsForBlock } from "./installed-plugin-probe-midi.mjs";
+import {
+  midiControllerEventCount,
+  midiEventsForBlock,
+  summarizeProbeMidiControllerEvents
+} from "./installed-plugin-probe-midi.mjs";
 import { summarizeParameterProfile } from "./installed-plugin-probe-parameters.mjs";
 import { exerciseInstalledProbeProgramSupport } from "./native-worker-ipc-installed-probe-program-cases.mjs";
 import {
@@ -160,6 +164,13 @@ export function exerciseInstalledProbeSupport({ check }) {
       },
       automationLanePointCount: 2,
       midiEventCount: 7,
+      midiControllerEventProfile: {
+        eventCount: 3,
+        types: ["controlChange", "pitchBend", "channelPressure"],
+        controllers: [1],
+        channels: [0],
+        eventBuses: [0]
+      },
       midiControllerEventCount: 3,
       vst3MidiControllerEvents: "accepted",
       hostTransport: "accepted",
@@ -306,6 +317,11 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].vst3EventChannels) === JSON.stringify([0, 3]) &&
       coverageSummary.matrix[0].midiEventCount === 7 &&
       coverageSummary.matrix[0].midiControllerEventCount === 3 &&
+      JSON.stringify(coverageSummary.matrix[0].midiControllerEventTypes) ===
+        JSON.stringify(["controlChange", "pitchBend", "channelPressure"]) &&
+      JSON.stringify(coverageSummary.matrix[0].midiControllerNumbers) === JSON.stringify([1]) &&
+      JSON.stringify(coverageSummary.matrix[0].midiControllerChannels) === JSON.stringify([0]) &&
+      JSON.stringify(coverageSummary.matrix[0].midiControllerEventBuses) === JSON.stringify([0]) &&
       coverageSummary.matrix[0].vst3MidiControllerEvents === "accepted" &&
       coverageSummary.matrix[0].hostTransport === "accepted" &&
       coverageSummary.matrix[0].latencyTail === "latency-tail" &&
@@ -584,10 +600,16 @@ export function exerciseInstalledProbeSupport({ check }) {
     "installed plugin probe validates negotiated output-bus render layouts"
   );
   const vst3MidiEvents = midiEventsForBlock("vst3", 64, 64);
+  const vst3MidiControllerProfile = summarizeProbeMidiControllerEvents(vst3MidiEvents);
   check(
     vst3MidiEvents.some((event) => event.type === "noteExpression" && event.noteId === 77) &&
       vst3MidiEvents.some((event) => event.type === "noteExpressionText" && event.text === "probe" && event.noteId === 77) &&
       midiControllerEventCount(vst3MidiEvents) === 3 &&
+      vst3MidiControllerProfile.eventCount === 3 &&
+      JSON.stringify(vst3MidiControllerProfile.types) === JSON.stringify(["controlChange", "pitchBend", "channelPressure"]) &&
+      JSON.stringify(vst3MidiControllerProfile.controllers) === JSON.stringify([1]) &&
+      JSON.stringify(vst3MidiControllerProfile.channels) === JSON.stringify([0]) &&
+      JSON.stringify(vst3MidiControllerProfile.eventBuses) === JSON.stringify([0]) &&
       midiEventsForBlock("au", 64, 64).every((event) => !event.type.startsWith("noteExpression")),
     "installed plugin probe sends VST3 note-expression and MIDI-controller coverage"
   );
