@@ -36,6 +36,10 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       { type: "noteExpression", typeId: 1, value: 0, noteId: 0, channel: 0, time: 0 },
       { type: "noteExpressionText", typeId: 6, text: "z", noteId: 0, channel: 0, time: 1 }
     ]);
+    const delimiterText = await noteExpressionWorker.sendMidiEvents([
+      { type: "noteOn", note: 72, velocity: 0.7, channel: 2, time: 0, noteId: 99, busIndex: 2 },
+      { type: "noteExpressionText", typeId: 6, text: "expr:bus=2;line\nrobot\u{1f916}", noteId: 99, channel: 2, time: 3, busIndex: 2 }
+    ]);
     const notes = await noteExpressionWorker.sendMidiEvents([
       { type: "noteOn", note: 67, channel: 0, time: 0, busIndex: 2 },
       { type: "noteOff", note: 67, channel: 0, time: 3, busIndex: 2 },
@@ -46,6 +50,7 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       "native VST3 workers encode bounded note-expression value/text event lists"
     );
     check(minimum.eventCount === 3, "native VST3 workers encode minimum note-expression value/text boundaries");
+    check(delimiterText.eventCount === 2, "native VST3 workers base64-encode delimiter-rich note-expression text");
     check(notes.eventCount === 3, "native VST3 workers encode routed note and poly-pressure event boundaries");
     const invalidTextMessages = await Promise.all([
       rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
@@ -172,6 +177,7 @@ function writeVst3NoteExpressionNativeWorker(tempDir) {
 const utf8Text = "\\u00b5-tilt";
 const maxUtf8Text = "\\u00b5".repeat(128);
 const maxText = "x".repeat(256);
+const delimiterText = "expr:bus=2;line\\nrobot\\u{1f916}";
 const expectedCommands = new Set([
   "midi on:60:0.8:1:0:42:bus=2;expr:0:0.5:42:1:2:bus=2;exprText:6:Ym93:42:1:4:bus=2",
   [
@@ -182,6 +188,10 @@ const expectedCommands = new Set([
     \`exprText:6:\${Buffer.from(maxText, "utf8").toString("base64")}:2147483647:15:7\`
   ].join(";"),
   "midi on:0:0.1:0:0:0;expr:1:0:0:0:0;exprText:6:eg==:0:0:1",
+  [
+    "midi on:72:0.7:2:0:99:bus=2",
+    \`exprText:6:\${Buffer.from(delimiterText, "utf8").toString("base64")}:99:2:3:bus=2\`
+  ].join(";"),
   "midi on:67:0.8:0:0:bus=2;off:67:0:0:3:bus=2;poly:67:0.25:0:4:88:bus=2"
 ]);
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
