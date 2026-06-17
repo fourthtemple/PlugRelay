@@ -104,6 +104,26 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile: saturatedMappingProfile
     }
   ]).matrix[0];
+  const invalidFloodMappingProfile = summarizeParameterProfile([
+    {
+      id: "valid-after-invalid-flood",
+      vst3MidiMappings: [
+        ...Array.from({ length: 256 }, () => ({
+          busIndex: 99,
+          channel: 0,
+          controller: 1
+        })),
+        { busIndex: "2", channel: "3", controller: "74" }
+      ]
+    }
+  ], { format: "vst3" });
+  const invalidFloodMappingMatrix = summarizeProbeResults([
+    {
+      ok: true,
+      format: "vst3",
+      parameterProfile: invalidFloodMappingProfile
+    }
+  ]).matrix[0];
   const failedParameterSummary = summarizeProbeResults([
     {
       ok: false,
@@ -241,6 +261,17 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       saturatedMappingMatrix.parameterInvalidVst3MidiMappingCount === 3 &&
       saturatedMappingMatrix.parameterInvalidVst3MidiMappingRouteCount === 2 &&
       saturatedMappingMatrix.parameterInvalidVst3MidiMappingControllerCount === 2 &&
+      invalidFloodMappingProfile.vst3MidiMappedParameterCount === 1 &&
+      invalidFloodMappingProfile.vst3MidiMappingCount === 1 &&
+      invalidFloodMappingProfile.invalidVst3MidiMappingCount === 256 &&
+      invalidFloodMappingProfile.invalidVst3MidiMappingRouteCount === 256 &&
+      invalidFloodMappingProfile.flags.includes("vst3-midi-mapping") &&
+      invalidFloodMappingProfile.flags.includes("invalid-vst3-midi-mapping-route") &&
+      invalidFloodMappingMatrix.parameterVst3MidiMappingCount === 1 &&
+      invalidFloodMappingMatrix.parameterInvalidVst3MidiMappingCount === 256 &&
+      JSON.stringify(invalidFloodMappingMatrix.parameterVst3MidiMappingControllers) === JSON.stringify([74]) &&
+      JSON.stringify(invalidFloodMappingMatrix.parameterVst3MidiMappingBuses) === JSON.stringify([2]) &&
+      JSON.stringify(invalidFloodMappingMatrix.parameterVst3MidiMappingChannels) === JSON.stringify([3]) &&
       failedParameterSummary.coverage.parameterMetadata.failed === 2 &&
       failedParameterSummary.coverage.parameterProfiles.failed === 2 &&
       failedParameterSummary.matrix[0].parameterMetadata === "failed" &&
