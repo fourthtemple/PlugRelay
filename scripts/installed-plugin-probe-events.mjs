@@ -24,10 +24,12 @@ export function summarizeProbeVst3Events(plugin) {
   const channels = uniqueSorted(expressions.map((expression) => expression.channel));
   const typeIds = uniqueSorted(expressions.map((expression) => expression.typeId));
   const duplicateTypeIdCount = duplicateCount(expressions.map((expression) => expression.typeId));
+  const duplicateRouteCount = duplicateCount(expressions.map(noteExpressionRouteKey));
   const textExpressionCount = expressions.filter(isTextExpression).length;
   const nameFallbackExpressionCount = expressions.filter((expression) => expression.nameFallback).length;
   const flags = expressionFlags(expressions, eventBuses, channels, {
     defaultRouteExpressionCount,
+    duplicateRouteCount,
     duplicateTypeIdCount,
     invalidAssociatedParameterCount,
     invalidExpressionCount,
@@ -53,6 +55,7 @@ export function summarizeProbeVst3Events(plugin) {
     invalidNoteExpressionUnitLinkCount: invalidUnitLinkCount,
     noAssociatedParameterSentinelCount,
     duplicateNoteExpressionTypeIdCount: duplicateTypeIdCount,
+    duplicateNoteExpressionRouteCount: duplicateRouteCount,
     associatedParameterCount: expressions.filter((expression) => expression.hasAssociatedParameter).length,
     unitLinkedExpressionCount: expressions.filter((expression) => expression.hasUnitLink).length,
     fixedValueRangeCount: expressions.filter((expression) => expression.fixedValueRange).length,
@@ -73,6 +76,7 @@ function expressionFlags(
   channels,
   {
     defaultRouteExpressionCount,
+    duplicateRouteCount,
     duplicateTypeIdCount,
     invalidAssociatedParameterCount,
     invalidExpressionCount,
@@ -117,6 +121,9 @@ function expressionFlags(
   }
   if (duplicateTypeIdCount > 0) {
     flags.push("duplicate-note-expression-type-id");
+  }
+  if (duplicateRouteCount > 0) {
+    flags.push("duplicate-note-expression-route");
   }
   if (defaultRouteExpressionCount > 0) {
     flags.push("default-note-expression-route");
@@ -171,6 +178,10 @@ function expressionFlags(
 
 function isTextExpression(expression) {
   return expression.typeId === TEXT_NOTE_EXPRESSION_TYPE_ID;
+}
+
+function noteExpressionRouteKey(expression) {
+  return `${expression.typeId}:${expression.busIndex}:${expression.channel}`;
 }
 
 function expressionCategory(expressions, eventBuses, channels, invalidExpressionCount, invalidRouteExpressionCount) {

@@ -33,6 +33,19 @@ export function exerciseInstalledProbeEventSupport({ check }) {
   });
   const summary = summarizeProbeResults([{ ok: true, format: "vst3", vst3EventProfile: profile }]);
   const matrix = summary.matrix[0];
+  const duplicateRouteProfile = summarizeProbeVst3Events({
+    format: "vst3",
+    vst3NoteExpressions: [
+      { typeId: 6, busIndex: 2, channel: 3 },
+      { typeId: 6, busIndex: 2, channel: 3 },
+      { typeId: 6, busIndex: 3, channel: 3 }
+    ]
+  });
+  const duplicateRouteMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    vst3EventProfile: duplicateRouteProfile
+  }]).matrix[0];
   check(
     profile.noteExpressionCount === 3 &&
       profile.valueExpressionCount === 2 &&
@@ -49,7 +62,13 @@ export function exerciseInstalledProbeEventSupport({ check }) {
       matrix.vst3FixedNoteExpressionValueRangeCount === 1 &&
       matrix.vst3SteppedNoteExpressionCount === 1 &&
       matrix.vst3NameFallbackNoteExpressionCount === 1 &&
-      matrix.vst3InvalidNoteExpressionValueMetadataCount === 1,
+      matrix.vst3InvalidNoteExpressionValueMetadataCount === 1 &&
+      duplicateRouteProfile.duplicateNoteExpressionTypeIdCount === 2 &&
+      duplicateRouteProfile.duplicateNoteExpressionRouteCount === 1 &&
+      duplicateRouteProfile.flags.includes("duplicate-note-expression-type-id") &&
+      duplicateRouteProfile.flags.includes("duplicate-note-expression-route") &&
+      duplicateRouteMatrix.vst3DuplicateNoteExpressionRouteCount === 1 &&
+      duplicateRouteMatrix.vst3EventFlags.includes("duplicate-note-expression-route"),
     "installed plugin probe reports VST3 note-expression text/value metadata"
   );
 

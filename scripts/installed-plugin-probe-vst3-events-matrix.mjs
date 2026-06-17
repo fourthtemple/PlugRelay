@@ -23,6 +23,7 @@ export function vst3EventMatrixFields(result) {
     vst3InvalidUnitLinkedNoteExpressionCount: safeMatrixInteger(profile?.invalidNoteExpressionUnitLinkCount, 0, 256),
     vst3NoAssociatedParameterSentinelCount: safeMatrixInteger(profile?.noAssociatedParameterSentinelCount, 0, 256),
     vst3DuplicateNoteExpressionTypeIdCount: safeMatrixInteger(profile?.duplicateNoteExpressionTypeIdCount, 0, 256),
+    vst3DuplicateNoteExpressionRouteCount: safeMatrixInteger(profile?.duplicateNoteExpressionRouteCount, 0, 256),
     vst3AssociatedNoteExpressionCount: safeMatrixInteger(profile?.associatedParameterCount, 0, 256),
     vst3UnitLinkedNoteExpressionCount: safeMatrixInteger(profile?.unitLinkedExpressionCount, 0, 256),
     vst3FixedNoteExpressionValueRangeCount: safeMatrixInteger(profile?.fixedValueRangeCount, 0, 256),
