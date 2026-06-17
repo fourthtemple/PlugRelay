@@ -28,6 +28,7 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       { type: "noteOn", note: 64, velocity: 0.5, channel: 15, time: 0, noteId: 2147483647 },
       { type: "noteExpression", typeId: 4294967295, value: 1, noteId: 2147483647, channel: 15, time: 1 },
       { type: "noteExpressionText", typeId: 6, text: "\u00b5-tilt", noteId: 2147483647, channel: 15, time: 2 },
+      { type: "noteExpressionText", typeId: 6, text: "\u00b5".repeat(128), noteId: 2147483647, channel: 15, time: 6 },
       { type: "noteExpressionText", typeId: 6, text: "x".repeat(256), noteId: 2147483647, channel: 15, time: 7 }
     ]);
     const minimum = await noteExpressionWorker.sendMidiEvents([
@@ -41,7 +42,7 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       { type: "polyPressure", note: 67, pressure: 0.25, channel: 0, time: 4, noteId: 88, busIndex: 2 }
     ]);
     check(
-      routed.eventCount === 3 && bounded.eventCount === 4,
+      routed.eventCount === 3 && bounded.eventCount === 5,
       "native VST3 workers encode bounded note-expression value/text event lists"
     );
     check(minimum.eventCount === 3, "native VST3 workers encode minimum note-expression value/text boundaries");
@@ -55,6 +56,9 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       ])),
       rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
         { type: "noteExpressionText", typeId: 6, text: "x".repeat(257), noteId: 1, channel: 0, time: 0 }
+      ])),
+      rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
+        { type: "noteExpressionText", typeId: 6, text: "\u00b5".repeat(129), noteId: 1, channel: 0, time: 0 }
       ]))
     ]);
     check(
@@ -166,6 +170,7 @@ function writeVst3NoteExpressionNativeWorker(tempDir) {
     "vst3-note-expression-native-worker.mjs",
     `#!/usr/bin/env node
 const utf8Text = "\\u00b5-tilt";
+const maxUtf8Text = "\\u00b5".repeat(128);
 const maxText = "x".repeat(256);
 const expectedCommands = new Set([
   "midi on:60:0.8:1:0:42:bus=2;expr:0:0.5:42:1:2:bus=2;exprText:6:Ym93:42:1:4:bus=2",
@@ -173,6 +178,7 @@ const expectedCommands = new Set([
     "midi on:64:0.5:15:0:2147483647",
     "expr:4294967295:1:2147483647:15:1",
     \`exprText:6:\${Buffer.from(utf8Text, "utf8").toString("base64")}:2147483647:15:2\`,
+    \`exprText:6:\${Buffer.from(maxUtf8Text, "utf8").toString("base64")}:2147483647:15:6\`,
     \`exprText:6:\${Buffer.from(maxText, "utf8").toString("base64")}:2147483647:15:7\`
   ].join(";"),
   "midi on:0:0.1:0:0:0;expr:1:0:0:0:0;exprText:6:eg==:0:0:1",
