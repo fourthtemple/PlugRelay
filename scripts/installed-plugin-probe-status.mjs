@@ -393,7 +393,8 @@ export function hostTransportStatus(result) {
   if (hasFailedPhase(result, ["processAudioBlock"])) {
     return "failed";
   }
-  return safeMatrixText(result.hostTransport ?? "missing", 64);
+  const status = String(result.hostTransport ?? "missing");
+  return status === "accepted" || status === "failed" ? status : "missing";
 }
 
 function busLayoutFeatureStatus(result) {

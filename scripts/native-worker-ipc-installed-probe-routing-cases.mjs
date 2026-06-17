@@ -297,6 +297,11 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
     ok: true,
     outputBusSignalProfile
   }]);
+  const statusOnlyTransportSummary = summarizeProbeResults([
+    { ok: true, hostTransport: "accepted" },
+    { ok: false, hostTransport: "failed" },
+    { ok: true, hostTransport: "unexpected-transport" }
+  ]);
   check(
     outputBusSignalProfile.category === "main-aux-signal" &&
       outputBusSignalProfile.signalOutputBusCount === 2 &&
@@ -343,6 +348,12 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       failedRenderSummary.matrix[0].featureStatus.transport === "failed" &&
       statusOnlyRenderSummary.matrix[0].featureStatus.rendering === "failed" &&
       statusOnlyRenderSummary.matrix[1].featureStatus.rendering === "passed" &&
+      statusOnlyTransportSummary.coverage.hostTransport.accepted === 1 &&
+      statusOnlyTransportSummary.coverage.hostTransport.failed === 1 &&
+      statusOnlyTransportSummary.coverage.hostTransport.missing === 1 &&
+      statusOnlyTransportSummary.matrix[0].featureStatus.transport === "accepted" &&
+      statusOnlyTransportSummary.matrix[1].featureStatus.transport === "failed" &&
+      statusOnlyTransportSummary.matrix[2].featureStatus.transport === "missing" &&
       missingOutputSignalProfile.category === "main-signal" &&
       missingOutputSignalProfile.signalOutputBusCount === 1 &&
       missingOutputSignalProfile.silentOutputBusCount === 1 &&
