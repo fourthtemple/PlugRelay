@@ -20,12 +20,20 @@ export async function exerciseVst3ProgramDataNativeWorker({
   try {
     await programDataWorker.ready;
     const exported = await programDataWorker.getVst3ProgramData(2147483647, 255);
+    const exportedBytes = await programDataWorker.getVst3ProgramData(7, 2);
     check(
       exported?.programListId === 2147483647 &&
         exported.programIndex === 255 &&
         exported.size === 0 &&
         exported.data === "",
       "native VST3 workers preserve empty program-data exports"
+    );
+    check(
+      exportedBytes?.programListId === 7 &&
+        exportedBytes.programIndex === 2 &&
+        exportedBytes.size === 2 &&
+        exportedBytes.data === "YWI=",
+      "native VST3 workers derive program-data export sizes from bounded bytes"
     );
 
     const restoredEmpty = await programDataWorker.setVst3ProgramData(-2147483648, 0, "");
@@ -89,6 +97,10 @@ const responses = new Map([
   [
     "getProgramData 2147483647 255",
     { programData: { format: "vst3", programListId: 2147483647, programIndex: 255, data: "" } }
+  ],
+  [
+    "getProgramData 7 2",
+    { programData: { format: "vst3", programListId: 7, programIndex: 2, size: 999, data: "YWI=" } }
   ],
   ["setProgramData -2147483648 0 -", { ok: true, restored: "empty" }],
   ["setProgramData 7 2 YWI=", { ok: true, restored: "bytes" }],
