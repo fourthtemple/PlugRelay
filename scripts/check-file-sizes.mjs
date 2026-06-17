@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = process.cwd();
-const MAX_SOURCE_LINES = 799;
+const SOURCE_LINE_HARD_CAP = 800;
 const NEAR_LIMIT_LINES = 750;
 
 const NEAR_LIMIT_BUDGETS = new Map([]);
@@ -68,8 +68,8 @@ for (const file of sourceFiles(ROOT)) {
   const lines = lineCount(file);
   const nearLimitBudget = NEAR_LIMIT_BUDGETS.get(relative);
   if (nearLimitBudget != null) {
-    if (nearLimitBudget >= MAX_SOURCE_LINES) {
-      failures.push(`${relative}: near-limit budget ${nearLimitBudget} must stay below hard cap ${MAX_SOURCE_LINES}.`);
+    if (nearLimitBudget >= SOURCE_LINE_HARD_CAP) {
+      failures.push(`${relative}: near-limit budget ${nearLimitBudget} must stay below hard cap ${SOURCE_LINE_HARD_CAP}.`);
     }
     if (lines > nearLimitBudget) {
       failures.push(`${relative}: ${lines} lines exceeds reviewed near-limit budget ${nearLimitBudget}; split it or reduce it.`);
@@ -79,8 +79,8 @@ for (const file of sourceFiles(ROOT)) {
     }
     continue;
   }
-  if (lines > MAX_SOURCE_LINES) {
-    failures.push(`${relative}: ${lines} lines exceeds ${MAX_SOURCE_LINES}; split the file before adding more behavior.`);
+  if (lines >= SOURCE_LINE_HARD_CAP) {
+    failures.push(`${relative}: ${lines} lines reaches hard cap ${SOURCE_LINE_HARD_CAP}; split the file before adding more behavior.`);
   } else if (lines >= NEAR_LIMIT_LINES) {
     failures.push(`${relative}: ${lines} lines exceeds near-limit threshold ${NEAR_LIMIT_LINES}; extract a focused module or add a reviewed budget.`);
   }
@@ -101,5 +101,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `File-size fitness check passed (${MAX_SOURCE_LINES} line hard cap, ${NEAR_LIMIT_LINES} line near-limit threshold, ${NEAR_LIMIT_BUDGETS.size} reviewed near-limit budgets).`
+  `File-size fitness check passed (<${SOURCE_LINE_HARD_CAP} line hard cap, ${NEAR_LIMIT_LINES} line near-limit threshold, ${NEAR_LIMIT_BUDGETS.size} reviewed near-limit budgets).`
 );
