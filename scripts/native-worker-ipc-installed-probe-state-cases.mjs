@@ -2,6 +2,7 @@ import {
   nativeStateFileText,
   summarizeNativeStateProfile
 } from "./installed-plugin-probe-file-grants.mjs";
+import { summarizeProbeResults } from "./installed-plugin-probe-reporting.mjs";
 
 export function exerciseInstalledProbeStateSupport({ check }) {
   const vst3ProbeState = nativeStateEnvelope({
@@ -27,6 +28,23 @@ export function exerciseInstalledProbeStateSupport({ check }) {
   const invalidComponentProfile = summarizeNativeStateProfile("vst3", nativeStateEnvelope({ format: "vst3", component: "bad" }));
   const invalidControllerProfile = summarizeNativeStateProfile("vst3", nativeStateEnvelope({ format: "vst3", controller: "bad" }));
   const formatMismatchProfile = summarizeNativeStateProfile("vst3", lv2ProbeState);
+  const failedStateSummary = summarizeProbeResults([
+    {
+      ok: false,
+      format: "vst3",
+      pluginId: "vst3:state-create-failed",
+      phases: [{ name: "createInstance", ok: false, error: { code: "native_worker_failed" } }]
+    },
+    {
+      ok: false,
+      format: "vst3",
+      pluginId: "vst3:state-read-failed",
+      phases: [
+        { name: "createInstance", ok: true },
+        { name: "getState", ok: false, error: { code: "bad_state_snapshot" } }
+      ]
+    }
+  ]);
 
   check(
     nativeStateFileText("vst3", vst3ProbeState) === "Y29tcG9uZW50 Y29udHJvbGxlcg==\n" &&
@@ -58,8 +76,14 @@ export function exerciseInstalledProbeStateSupport({ check }) {
       invalidControllerProfile.flags.includes("invalid-controller-base64") &&
       formatMismatchProfile.category === "format-mismatch" &&
       summarizeNativeStateProfile("vst3", Buffer.from("{}", "utf8").toString("base64")).category === "generic-state" &&
-      summarizeNativeStateProfile("vst3", "not-state").category === "invalid",
-    "installed plugin probe classifies bounded native state profiles"
+      summarizeNativeStateProfile("vst3", "not-state").category === "invalid" &&
+      failedStateSummary.coverage.stateProfiles.failed === 2 &&
+      failedStateSummary.matrix[0].stateProfile === "failed" &&
+      failedStateSummary.matrix[0].featureStatus.instantiation === "failed" &&
+      failedStateSummary.matrix[0].featureStatus.state === "missing" &&
+      failedStateSummary.matrix[1].stateProfile === "failed" &&
+      failedStateSummary.matrix[1].featureStatus.state === "failed",
+    "installed plugin probe classifies bounded native state profiles and failures"
   );
 }
 

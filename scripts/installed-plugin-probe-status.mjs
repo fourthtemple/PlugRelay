@@ -65,7 +65,7 @@ export function stateProfileStatus(result) {
   if (result.stateProfile?.category) {
     return result.stateProfile.category;
   }
-  if (hasFailedPhase(result, ["getState"])) {
+  if (hasFailedPhase(result, ["createInstance", "getState"])) {
     return "failed";
   }
   return hasOkPhase(result, "getState") ? "unprofiled" : "missing";
