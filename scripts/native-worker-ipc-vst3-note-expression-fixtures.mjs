@@ -72,6 +72,13 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       ),
       "native VST3 workers reject malformed note-expression text before IPC"
     );
+    const nonStringTextMessage = await rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
+      { type: "noteExpressionText", typeId: 6, text: 7, noteId: 1, channel: 0, time: 0 }
+    ]));
+    check(
+      nonStringTextMessage === "VST3 note-expression text must be a string.",
+      "native VST3 workers reject non-string note-expression text before IPC"
+    );
     const invalidValueMessages = await Promise.all([
       rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
         { type: "noteExpression", typeId: -1, value: 0.5, noteId: 1, channel: 0, time: 0 }
