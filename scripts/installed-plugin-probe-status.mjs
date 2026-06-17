@@ -11,7 +11,7 @@ export function summarizeFeatureStatus(result, options) {
     vst3ProgramData: safeMatrixText(vst3ProgramDataStatus(result), 64),
     state: phaseGroupStatus(result, ["getState", "setState"]),
     fileGrants: fileGrantFeatureStatus(result),
-    midiEvents: phaseGroupStatus(result, ["sendMidiEvents", "sendMidiNoteOff"]),
+    midiEvents: midiEventsFeatureStatus(result),
     automation: safeMatrixText(automationLaneStatus(result), 64),
     transport: hostTransportStatus(result),
     rendering: renderingFeatureStatus(result),
@@ -319,6 +319,35 @@ function renderingFeatureStatus(result) {
     hasOkPhase(result, "processAudioBlock")
     ? "passed"
     : "missing";
+}
+
+function midiEventsFeatureStatus(result) {
+  const statuses = [
+    midiTimingStatus(result),
+    vst3MidiControllerEventStatus(result),
+    vst3MidiProgramChangeEventStatus(result)
+  ];
+  if (hasFailedPhase(result, ["sendMidiEvents", "sendMidiNoteOff"]) || statuses.includes("failed")) {
+    return "failed";
+  }
+  if (statuses.some(isPassedMidiStatus) || hasAcceptedMidiEventCount(result)) {
+    return "passed";
+  }
+  if (hasOkPhase(result, "sendMidiEvents") || hasOkPhase(result, "sendMidiNoteOff")) {
+    return "partial";
+  }
+  return "missing";
+}
+
+function hasAcceptedMidiEventCount(result) {
+  return Number.isInteger(result.midiEventCount) && result.midiEventCount > 0;
+}
+
+function isPassedMidiStatus(status) {
+  return status === "accepted" ||
+    status === "block-boundary" ||
+    status === "scheduled-offsets" ||
+    status === "single-offset";
 }
 
 export function hostTransportStatus(result) {
