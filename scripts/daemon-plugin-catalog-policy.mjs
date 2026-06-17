@@ -1,6 +1,7 @@
 import { isKnownAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
 import { FILE_GRANT_OPERATION_NAMES, isKnownFileGrantOperation } from "./daemon-file-grant-operations.mjs";
 
+// Keep this list aligned with operations implemented by the native host workers.
 const NATIVE_FILE_GRANT_OPERATIONS = Object.freeze(["loadPreset", "restoreState", "saveStateDirectory"]);
 const PLUGIN_EDITOR_KINDS = Object.freeze(["generic-parameters", "native-window"]);
 
