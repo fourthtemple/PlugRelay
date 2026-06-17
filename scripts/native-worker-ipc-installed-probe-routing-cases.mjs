@@ -143,10 +143,10 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
   const vst3EventProfile = summarizeProbeVst3Events({
     format: "vst3",
     vst3NoteExpressions: [
-      { typeId: 0, busIndex: 0, channel: 0 },
-      { typeId: 6, busIndex: 2, channel: 3, unitId: 4, associatedParameterId: "param-1" },
+      { typeId: 0, busIndex: 0, channel: 0, bipolar: true },
+      { typeId: 6, busIndex: 2, channel: 3, unitId: 4, associatedParameterId: "param-1", oneShot: true },
       { typeId: 6, busIndex: 2, channel: 3 },
-      { typeId: 7, busIndex: 99, channel: 99 },
+      { typeId: 7, busIndex: 99, channel: 99, absolute: true },
       { typeId: "bad", busIndex: 0, channel: 0 }
     ]
   });
@@ -168,12 +168,18 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       vst3EventProfile.duplicateNoteExpressionTypeIdCount === 1 &&
       vst3EventProfile.associatedParameterCount === 1 &&
       vst3EventProfile.unitLinkedExpressionCount === 1 &&
+      vst3EventProfile.bipolarExpressionCount === 1 &&
+      vst3EventProfile.oneShotExpressionCount === 1 &&
+      vst3EventProfile.absoluteExpressionCount === 1 &&
       JSON.stringify(vst3EventProfile.typeIds) === JSON.stringify([0, 6, 7]) &&
       JSON.stringify(vst3EventProfile.eventBuses) === JSON.stringify([0, 2]) &&
       vst3EventProfile.flags.includes("text-expression") &&
       vst3EventProfile.flags.includes("value-expression") &&
       vst3EventProfile.flags.includes("associated-parameter") &&
       vst3EventProfile.flags.includes("unit-linked-expression") &&
+      vst3EventProfile.flags.includes("bipolar-expression") &&
+      vst3EventProfile.flags.includes("one-shot-expression") &&
+      vst3EventProfile.flags.includes("absolute-expression") &&
       vst3EventProfile.flags.includes("invalid-note-expression") &&
       vst3EventProfile.flags.includes("invalid-note-expression-route") &&
       vst3EventProfile.flags.includes("duplicate-note-expression-type-id") &&

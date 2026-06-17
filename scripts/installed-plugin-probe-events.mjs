@@ -35,6 +35,9 @@ export function summarizeProbeVst3Events(plugin) {
     duplicateNoteExpressionTypeIdCount: duplicateTypeIdCount,
     associatedParameterCount: expressions.filter((expression) => expression.hasAssociatedParameter).length,
     unitLinkedExpressionCount: expressions.filter((expression) => expression.hasUnitLink).length,
+    bipolarExpressionCount: expressions.filter((expression) => expression.bipolar).length,
+    oneShotExpressionCount: expressions.filter((expression) => expression.oneShot).length,
+    absoluteExpressionCount: expressions.filter((expression) => expression.absolute).length,
     metadataAtLimit,
     eventBuses,
     channels,
@@ -94,6 +97,15 @@ function expressionFlags(
   }
   if (expressions.some((expression) => expression.hasUnitLink)) {
     flags.push("unit-linked-expression");
+  }
+  if (expressions.some((expression) => expression.bipolar)) {
+    flags.push("bipolar-expression");
+  }
+  if (expressions.some((expression) => expression.oneShot)) {
+    flags.push("one-shot-expression");
+  }
+  if (expressions.some((expression) => expression.absolute)) {
+    flags.push("absolute-expression");
   }
   if (metadataAtLimit) {
     flags.push("metadata-at-limit");
@@ -163,7 +175,10 @@ function normalizeNoteExpression(expression) {
       (hasOwn(expression, "busIndex") && busIndex === undefined) ||
       (hasOwn(expression, "channel") && channel === undefined),
     hasAssociatedParameter: typeof expression.associatedParameterId === "string" && expression.associatedParameterId.length > 0,
-    hasUnitLink: unitId !== undefined
+    hasUnitLink: unitId !== undefined,
+    bipolar: expression.bipolar === true,
+    oneShot: expression.oneShot === true,
+    absolute: expression.absolute === true
   };
 }
 
