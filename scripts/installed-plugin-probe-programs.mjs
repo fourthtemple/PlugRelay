@@ -161,6 +161,8 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       programListCount: 0,
       programDataListCount: 0,
       candidateProgramCount: 0,
+      unitLinkedProgramListCount: 0,
+      invalidProgramListUnitCount: 0,
       programListMetadataAtLimit: false,
       programMetadataAtLimit: false,
       noProgramListSentinelCount: 0
@@ -182,6 +184,8 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   let duplicateProgramListIdCount = 0;
   let duplicateProgramIndexCount = 0;
   let noProgramListSentinelCount = 0;
+  let unitLinkedProgramListCount = 0;
+  let invalidProgramListUnitCount = 0;
   let programMetadataAtLimit = false;
 
   if (lists.length === 0) {
@@ -208,6 +212,14 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       duplicateProgramListIdCount += 1;
     }
     seenProgramListIds.add(programListId);
+    const unitId = boundedUnitId(programList.unitId);
+    if (unitId !== undefined) {
+      unitLinkedProgramListCount += 1;
+      flags.push("unit-linked-program-list");
+    } else if (hasOwn(programList, "unitId")) {
+      invalidProgramListUnitCount += 1;
+      flags.push("invalid-program-list-unit");
+    }
 
     if (programList?.programDataSupported !== true) {
       if (programList?.programDataSupported === false) {
@@ -288,6 +300,8 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     duplicateProgramListIdCount,
     duplicateProgramIndexCount,
     noProgramListSentinelCount,
+    unitLinkedProgramListCount,
+    invalidProgramListUnitCount,
     programListMetadataAtLimit,
     programMetadataAtLimit
   };
@@ -323,6 +337,10 @@ function boundedProgramIndex(value) {
   return boundedInt(value, 0, MAX_PLUGIN_PROGRAMS - 1);
 }
 
+function boundedUnitId(value) {
+  return boundedInt(value, -2147483648, 2147483647);
+}
+
 function boundedProgramListIdCounts(programLists) {
   const counts = new Map();
   for (const programList of programLists) {
@@ -353,6 +371,10 @@ function boundedInt(value, min, max) {
     return undefined;
   }
   return value;
+}
+
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
 }
 
 function assertBoundedParameterSnapshot(response, assertProbe, context) {

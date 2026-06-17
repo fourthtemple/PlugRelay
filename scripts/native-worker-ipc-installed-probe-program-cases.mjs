@@ -4,6 +4,7 @@ import {
   summarizeVst3ProgramDataProfile,
   vst3ProgramDataByteLength
 } from "./installed-plugin-probe-programs.mjs";
+import { summarizeProbeResults } from "./installed-plugin-probe-reporting.mjs";
 
 export function exerciseInstalledProbeProgramSupport({ check }) {
   check(
@@ -67,7 +68,7 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
     format: "vst3",
     vst3ProgramLists: [
       { id: 1, programDataSupported: false, programs: [{ index: 0 }] },
-      { id: 2, programDataSupported: true, programs: [{ index: 3 }, { index: 3 }, { index: 4 }, { index: "bad" }] }
+      { id: 2, unitId: 4, programDataSupported: true, programs: [{ index: 3 }, { index: 3 }, { index: 4 }, { index: "bad" }] }
     ]
   });
   const weirdProgramDataProfile = summarizeVst3ProgramDataProfile({
@@ -77,9 +78,19 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       { id: -1, programDataSupported: true, programs: [{ index: 1 }] },
       { id: 4, programDataSupported: true, programs: [] },
       { id: 4, programDataSupported: true, programs: [] },
-      { id: 5, programDataSupported: true, programs: [{ index: 256 }] }
+      { id: 5, unitId: "bad", programDataSupported: true, programs: [{ index: 256 }] }
     ]
   });
+  const targetedProgramDataMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    vst3ProgramDataProfile: targetedProgramDataProfile
+  }]).matrix[0];
+  const weirdProgramDataMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    vst3ProgramDataProfile: weirdProgramDataProfile
+  }]).matrix[0];
   const ambiguousProgramDataProfile = summarizeVst3ProgramDataProfile({
     format: "vst3",
     vst3ProgramLists: [
@@ -111,18 +122,24 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       targetedProgramDataProfile.unsupportedProgramListCount === 1 &&
       targetedProgramDataProfile.invalidProgramIndexCount === 1 &&
       targetedProgramDataProfile.duplicateProgramIndexCount === 1 &&
+      targetedProgramDataProfile.unitLinkedProgramListCount === 1 &&
       targetedProgramDataProfile.flags.includes("duplicate-program-index") &&
+      targetedProgramDataProfile.flags.includes("unit-linked-program-list") &&
+      targetedProgramDataMatrix.vst3ProgramDataUnitLinkedLists === 1 &&
       weirdProgramDataProfile.category === "no-valid-programs" &&
       weirdProgramDataProfile.invalidProgramListCount === 2 &&
       weirdProgramDataProfile.noProgramListSentinelCount === 1 &&
       weirdProgramDataProfile.emptyProgramListCount === 2 &&
       weirdProgramDataProfile.invalidProgramIndexCount === 1 &&
       weirdProgramDataProfile.duplicateProgramListIdCount === 1 &&
+      weirdProgramDataProfile.invalidProgramListUnitCount === 1 &&
       weirdProgramDataProfile.flags.includes("invalid-program-list-id") &&
       weirdProgramDataProfile.flags.includes("no-program-list-sentinel") &&
       weirdProgramDataProfile.flags.includes("empty-program-list") &&
       weirdProgramDataProfile.flags.includes("invalid-program-index") &&
       weirdProgramDataProfile.flags.includes("duplicate-program-list-id") &&
+      weirdProgramDataProfile.flags.includes("invalid-program-list-unit") &&
+      weirdProgramDataMatrix.vst3ProgramDataInvalidUnitLinkedLists === 1 &&
       ambiguousProgramDataProfile.category === "no-valid-programs" &&
       ambiguousProgramDataProfile.candidateProgramCount === 0 &&
       ambiguousProgramDataProfile.duplicateProgramIndexCount === 1 &&
