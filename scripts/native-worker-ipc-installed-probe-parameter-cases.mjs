@@ -50,6 +50,23 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile
     }
   ]).matrix[0];
+  const cappedMappingProfile = summarizeParameterProfile([
+    {
+      id: "mapped-at-limit",
+      vst3MidiMappings: Array.from({ length: 257 }, (_, index) => ({
+        busIndex: 0,
+        channel: 0,
+        controller: index % 128
+      }))
+    }
+  ], { format: "vst3" });
+  const cappedMappingMatrix = summarizeProbeResults([
+    {
+      ok: true,
+      format: "vst3",
+      parameterProfile: cappedMappingProfile
+    }
+  ]).matrix[0];
   const failedParameterSummary = summarizeProbeResults([
     {
       ok: false,
@@ -140,6 +157,12 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       JSON.stringify(matrix.parameterVst3MidiMappingBuses) === JSON.stringify([0, 1]) &&
       JSON.stringify(matrix.parameterVst3MidiMappingChannels) === JSON.stringify([0, 2]) &&
       matrix.parameterFlags.includes("program-change-without-list") &&
+      cappedMappingProfile.vst3MidiMappingCount === 256 &&
+      cappedMappingProfile.vst3MidiDuplicateMappingCount === 128 &&
+      cappedMappingProfile.flags.includes("vst3-midi-mapping-at-limit") &&
+      cappedMappingMatrix.parameterVst3MidiMappingCount === 256 &&
+      cappedMappingMatrix.parameterVst3MidiDuplicateMappingCount === 128 &&
+      cappedMappingMatrix.parameterFlags.includes("vst3-midi-mapping-at-limit") &&
       failedParameterSummary.coverage.parameterMetadata.failed === 2 &&
       failedParameterSummary.coverage.parameterProfiles.failed === 2 &&
       failedParameterSummary.matrix[0].parameterMetadata === "failed" &&
