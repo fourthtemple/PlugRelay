@@ -46,6 +46,47 @@ export async function exerciseInstalledProbeFileGrantSupport({ check }) {
         fs.readdirSync(tempDir).length === 0,
       "installed plugin probe skips unadvertised advanced file-grant workflows before path use"
     );
+
+    const advertisedResult = {};
+    const observedRequests = [];
+    const advertisedArgs = {
+      ...args,
+      plugin: {
+        format: "vst3",
+        pluginId: "vst3:file-grant-fixture",
+        fileGrantOperations: ["loadSample", "openCacheDirectory", "loadLicense", "other"]
+      },
+      request: createPathFreeGrantRequest(observedRequests),
+      result: advertisedResult
+    };
+
+    await probeFileGrantSampleLoad(advertisedArgs);
+    await probeFileGrantCacheDirectoryOpen(advertisedArgs);
+    await probeFileGrantLicenseLoad(advertisedArgs);
+    await probeFileGrantOtherPresetLoad(advertisedArgs);
+
+    const createRequests = observedRequests.filter((request) => request.method === "createFileGrant");
+    const useRequests = observedRequests.filter((request) => request.method === "useFileGrant");
+    check(
+      advertisedResult.fileGrantSampleLoad === "applied" &&
+        advertisedResult.fileGrantCacheDirectoryOpen === "applied" &&
+        advertisedResult.fileGrantLicenseLoad === "applied" &&
+        advertisedResult.fileGrantOtherPresetLoad === "applied" &&
+        JSON.stringify(createRequests.map((request) => grantShape(request.payload))) === JSON.stringify([
+          { purpose: "sample", access: "read", kind: "file" },
+          { purpose: "cache", access: "readWrite", kind: "directory" },
+          { purpose: "license", access: "read", kind: "file" },
+          { purpose: "preset", access: "read", kind: "file" }
+        ]) &&
+        JSON.stringify(useRequests.map((request) => useGrantShape(request.payload))) === JSON.stringify([
+          { operation: "loadSample" },
+          { operation: "openCacheDirectory" },
+          { operation: "loadLicense" },
+          { operation: "other", purpose: "preset", access: "read", kind: "file" }
+        ]) &&
+        fs.readdirSync(tempDir).length === 0,
+      "installed plugin probe applies advertised advanced file-grant workflows with bounded grant shapes"
+    );
   } finally {
     fs.rmSync(tempDir, { force: true, recursive: true });
   }
@@ -62,4 +103,34 @@ function assertProbe(ok, code, message) {
 
 async function recordPhase(_result, _name, operation) {
   return operation();
+}
+
+function createPathFreeGrantRequest(observedRequests) {
+  return async (_socket, method, payload) => {
+    observedRequests.push({ method, payload });
+    if (method === "createFileGrant") {
+      return { grantId: `grant-${observedRequests.length}` };
+    }
+    if (method === "useFileGrant") {
+      return { applied: true, operation: payload.operation };
+    }
+    return { ok: true };
+  };
+}
+
+function grantShape(payload) {
+  return {
+    purpose: payload.purpose,
+    access: payload.access,
+    kind: payload.kind
+  };
+}
+
+function useGrantShape(payload) {
+  return {
+    operation: payload.operation,
+    ...(payload.purpose ? { purpose: payload.purpose } : {}),
+    ...(payload.access ? { access: payload.access } : {}),
+    ...(payload.kind ? { kind: payload.kind } : {})
+  };
 }
