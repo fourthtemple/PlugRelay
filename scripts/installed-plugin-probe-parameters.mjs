@@ -59,6 +59,8 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
       programChangeCount: 0,
       programChangeWithoutListCount: 0,
       vst3UnitCount: 0,
+      vst3UnitProgramListLinkCount: 0,
+      invalidVst3UnitProgramListLinkCount: 0,
       duplicateParameterIdCount: 0
     };
   }
@@ -77,6 +79,8 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     programChangeCount: 0,
     programChangeWithoutListCount: 0,
     vst3UnitCount: 0,
+    vst3UnitProgramListLinkCount: 0,
+    invalidVst3UnitProgramListLinkCount: 0,
     duplicateParameterIdCount: 0
   };
 
@@ -112,6 +116,12 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     }
     if (isVst3 && parameter?.vst3Unit && typeof parameter.vst3Unit === "object") {
       profile.vst3UnitCount += 1;
+      const programListId = boundedVst3ProgramListId(parameter.vst3Unit.programListId);
+      if (programListId !== undefined) {
+        profile.vst3UnitProgramListLinkCount += 1;
+      } else if (hasOwn(parameter.vst3Unit, "programListId")) {
+        profile.invalidVst3UnitProgramListLinkCount += 1;
+      }
     }
   }
 
@@ -168,8 +178,26 @@ function parameterProfileFlags(profile, { atLimit, isVst3 }) {
   if (isVst3 && profile.vst3UnitCount > 0) {
     flags.push("vst3-units");
   }
+  if (isVst3 && profile.vst3UnitProgramListLinkCount > 0) {
+    flags.push("vst3-unit-program-list-link");
+  }
+  if (isVst3 && profile.invalidVst3UnitProgramListLinkCount > 0) {
+    flags.push("invalid-vst3-unit-program-list-link");
+  }
   if (profile.duplicateParameterIdCount > 0) {
     flags.push("duplicate-parameter-id");
   }
   return flags;
+}
+
+function boundedVst3ProgramListId(value) {
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < -2_147_483_648 || numeric > 2_147_483_647 || numeric === -1) {
+    return undefined;
+  }
+  return numeric;
+}
+
+function hasOwn(object, key) {
+  return object != null && Object.prototype.hasOwnProperty.call(object, key);
 }
