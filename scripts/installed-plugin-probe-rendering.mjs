@@ -49,16 +49,26 @@ export function summarizeProbeRenderSignal(rendered) {
 }
 
 export function summarizeProbeOutputBusSignal(rendered, layout) {
+  const activeBuses = activeOutputLayouts(layout);
   if (!Array.isArray(rendered?.outputBuses)) {
-    return { category: "missing", flags: ["missing-output-buses"], outputBusCount: 0, signalOutputBusCount: 0 };
+    return {
+      category: "missing",
+      flags: ["missing-output-buses"],
+      outputBusCount: activeBuses.length,
+      signalOutputBusCount: 0,
+      silentOutputBusCount: 0,
+      missingOutputBusCount: activeBuses.length,
+      missingOutputBusIndexes: activeBuses.map((bus) => bus.index)
+    };
   }
   const outputBuses = indexedOutputBuses(rendered.outputBuses);
-  const activeBuses = activeOutputLayouts(layout);
   const signalOutputBusIndexes = [];
   const silentOutputBusIndexes = [];
+  const missingOutputBusIndexes = [];
   for (const layoutBus of activeBuses) {
     const bus = outputBuses.get(layoutBus.index);
     if (!bus) {
+      missingOutputBusIndexes.push(layoutBus.index);
       continue;
     }
     if (hasSignal(bus.channels)) {
@@ -73,19 +83,22 @@ export function summarizeProbeOutputBusSignal(rendered, layout) {
     ...(mainSignal ? ["main-signal"] : []),
     ...(auxSignal ? ["aux-signal"] : []),
     ...(signalOutputBusIndexes.length > 1 ? ["multi-output-signal"] : []),
-    ...(silentOutputBusIndexes.length > 0 ? ["silent-output-bus"] : [])
+    ...(silentOutputBusIndexes.length > 0 ? ["silent-output-bus"] : []),
+    ...(missingOutputBusIndexes.length > 0 ? ["missing-output-bus"] : [])
   ];
   if (flags.length === 0) {
     flags.push("silent");
   }
   return {
-    category: outputBusSignalCategory({ auxSignal, mainSignal, signalOutputBusIndexes }),
+    category: outputBusSignalCategory({ activeBuses, auxSignal, mainSignal, missingOutputBusIndexes, signalOutputBusIndexes }),
     flags,
     outputBusCount: activeBuses.length,
     signalOutputBusCount: signalOutputBusIndexes.length,
     silentOutputBusCount: silentOutputBusIndexes.length,
+    missingOutputBusCount: missingOutputBusIndexes.length,
     signalOutputBusIndexes,
-    silentOutputBusIndexes
+    silentOutputBusIndexes,
+    missingOutputBusIndexes
   };
 }
 
@@ -107,7 +120,10 @@ function indexedOutputBuses(outputBuses) {
   return byIndex;
 }
 
-function outputBusSignalCategory({ auxSignal, mainSignal, signalOutputBusIndexes }) {
+function outputBusSignalCategory({ activeBuses, auxSignal, mainSignal, missingOutputBusIndexes, signalOutputBusIndexes }) {
+  if (activeBuses.length > 0 && missingOutputBusIndexes.length === activeBuses.length) {
+    return "missing";
+  }
   if (mainSignal && auxSignal) {
     return "main-aux-signal";
   }
