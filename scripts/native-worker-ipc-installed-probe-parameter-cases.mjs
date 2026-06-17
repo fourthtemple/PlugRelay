@@ -26,6 +26,7 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       name: "",
       vst3Unit: { id: 3, programListId: false },
       vst3MidiMappings: [
+        { busIndex: 1, channel: 2, controller: 74 },
         { busIndex: 0, channel: 0, controller: 128 },
         { busIndex: 0, channel: 0, controller: 129 }
       ]
@@ -172,15 +173,16 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.vst3UnitProgramListLinkCount === 1 &&
       parameterProfile.invalidVst3UnitProgramListLinkCount === 1 &&
       parameterProfile.vst3MidiMappedParameterCount === 3 &&
-      parameterProfile.vst3MidiMappingCount === 8 &&
+      parameterProfile.vst3MidiMappingCount === 9 &&
       parameterProfile.vst3MidiMappingControllerCount === 6 &&
       parameterProfile.vst3MidiMappingBusCount === 4 &&
       parameterProfile.vst3MidiMappingChannelCount === 4 &&
-      parameterProfile.vst3MidiDuplicateMappingCount === 1 &&
+      parameterProfile.vst3MidiDuplicateMappingCount === 2 &&
+      parameterProfile.vst3MidiCrossParameterDuplicateMappingCount === 1 &&
       parameterProfile.invalidVst3MidiMappingCount === 5 &&
       parameterProfile.invalidVst3MidiMappingRouteCount === 4 &&
       parameterProfile.invalidVst3MidiMappingControllerCount === 2 &&
-      parameterProfile.vst3MidiCcMappingCount === 6 &&
+      parameterProfile.vst3MidiCcMappingCount === 7 &&
       parameterProfile.vst3MidiAftertouchMappingCount === 1 &&
       parameterProfile.vst3MidiPitchBendMappingCount === 1 &&
       parameterProfile.flags.includes("program-change") &&
@@ -194,6 +196,7 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.flags.includes("vst3-midi-mapping-non-main-event-bus") &&
       parameterProfile.flags.includes("vst3-midi-mapping-non-main-channel") &&
       parameterProfile.flags.includes("vst3-midi-mapping-duplicate") &&
+      parameterProfile.flags.includes("vst3-midi-mapping-cross-parameter-duplicate") &&
       parameterProfile.flags.includes("invalid-vst3-midi-mapping") &&
       parameterProfile.flags.includes("invalid-vst3-midi-mapping-route") &&
       parameterProfile.flags.includes("invalid-vst3-midi-mapping-controller") &&
@@ -207,18 +210,20 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       matrix.parameterVst3UnitProgramListLinkCount === 1 &&
       matrix.parameterInvalidVst3UnitProgramListLinkCount === 1 &&
       matrix.parameterVst3MidiMappedParameterCount === 3 &&
-      matrix.parameterVst3MidiMappingCount === 8 &&
-      matrix.parameterVst3MidiDuplicateMappingCount === 1 &&
+      matrix.parameterVst3MidiMappingCount === 9 &&
+      matrix.parameterVst3MidiDuplicateMappingCount === 2 &&
+      matrix.parameterVst3MidiCrossParameterDuplicateMappingCount === 1 &&
       matrix.parameterInvalidVst3MidiMappingCount === 5 &&
       matrix.parameterInvalidVst3MidiMappingRouteCount === 4 &&
       matrix.parameterInvalidVst3MidiMappingControllerCount === 2 &&
-      matrix.parameterVst3MidiCcMappingCount === 6 &&
+      matrix.parameterVst3MidiCcMappingCount === 7 &&
       matrix.parameterVst3MidiAftertouchMappingCount === 1 &&
       matrix.parameterVst3MidiPitchBendMappingCount === 1 &&
       JSON.stringify(matrix.parameterVst3MidiMappingControllers) === JSON.stringify([0, 1, 74, 127, 128, 129]) &&
       JSON.stringify(matrix.parameterVst3MidiMappingBuses) === JSON.stringify([0, 1, 2, 31]) &&
       JSON.stringify(matrix.parameterVst3MidiMappingChannels) === JSON.stringify([0, 2, 3, 15]) &&
       matrix.parameterFlags.includes("program-change-without-list") &&
+      matrix.parameterFlags.includes("vst3-midi-mapping-cross-parameter-duplicate") &&
       cappedMappingProfile.vst3MidiMappingCount === 256 &&
       cappedMappingProfile.vst3MidiDuplicateMappingCount === 128 &&
       cappedMappingProfile.flags.includes("vst3-midi-mapping-at-limit") &&

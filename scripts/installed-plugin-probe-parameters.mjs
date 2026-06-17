@@ -73,6 +73,7 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
       vst3MidiMappingBusCount: 0,
       vst3MidiMappingChannelCount: 0,
       vst3MidiDuplicateMappingCount: 0,
+      vst3MidiCrossParameterDuplicateMappingCount: 0,
       invalidVst3MidiMappingCount: 0,
       invalidVst3MidiMappingRouteCount: 0,
       invalidVst3MidiMappingControllerCount: 0,
@@ -110,6 +111,7 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     vst3MidiMappingBusCount: 0,
     vst3MidiMappingChannelCount: 0,
     vst3MidiDuplicateMappingCount: 0,
+    vst3MidiCrossParameterDuplicateMappingCount: 0,
     invalidVst3MidiMappingCount: 0,
     invalidVst3MidiMappingRouteCount: 0,
     invalidVst3MidiMappingControllerCount: 0,
@@ -126,8 +128,8 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
   const midiMappingControllers = new Set();
   const midiMappingBuses = new Set();
   const midiMappingChannels = new Set();
-  const midiMappingKeys = new Set();
-  for (const parameter of bounded) {
+  const midiMappingOwners = new Map();
+  for (const [parameterIndex, parameter] of bounded.entries()) {
     const parameterId = typeof parameter?.id === "string" ? parameter.id : "";
     if (parameterId) {
       if (seenIds.has(parameterId)) {
@@ -207,10 +209,15 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
           profile.vst3MidiCcMappingCount += 1;
         }
         const mappingKey = `${mapping.busIndex}:${mapping.channel}:${mapping.controller}`;
-        if (midiMappingKeys.has(mappingKey)) {
+        const existingOwner = midiMappingOwners.get(mappingKey);
+        if (existingOwner !== undefined) {
           profile.vst3MidiDuplicateMappingCount += 1;
+          if (existingOwner !== parameterIndex) {
+            profile.vst3MidiCrossParameterDuplicateMappingCount += 1;
+          }
+        } else {
+          midiMappingOwners.set(mappingKey, parameterIndex);
         }
-        midiMappingKeys.add(mappingKey);
       }
     }
   }
@@ -302,6 +309,9 @@ function parameterProfileFlags(profile, { atLimit, isVst3 }) {
     }
     if (profile.vst3MidiDuplicateMappingCount > 0) {
       flags.push("vst3-midi-mapping-duplicate");
+    }
+    if (profile.vst3MidiCrossParameterDuplicateMappingCount > 0) {
+      flags.push("vst3-midi-mapping-cross-parameter-duplicate");
     }
     if (profile.vst3MidiCcMappingCount > 0) {
       flags.push("vst3-midi-mapping-cc");
