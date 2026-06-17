@@ -390,6 +390,9 @@ bool HostedVst3Effect::midiEventToParameterChange(
           id) != Steinberg::kResultOk) {
     return false;
   }
+  if (id == Steinberg::Vst::kNoParamId) {
+    return false;
+  }
 
   normalizedValue = std::clamp(normalizedValue, 0.0, 1.0);
   if (controller_->setParamNormalized(id, normalizedValue) != Steinberg::kResultOk) {
