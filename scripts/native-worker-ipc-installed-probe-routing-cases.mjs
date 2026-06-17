@@ -267,7 +267,8 @@ function exerciseRenderPayloadCoverage({ check }) {
         { index: 0, channels: 2, active: true },
         { index: 1, channels: 1, active: true },
         { index: 2, channels: 1, active: false },
-        { index: 1, channels: 1, active: true }
+        { index: 1, channels: 1, active: true },
+        { index: 3, channels: 2, active: true }
       ],
       maxBlockSize: 4
     },
@@ -283,7 +284,7 @@ function exerciseRenderPayloadCoverage({ check }) {
       sidechainPayload.sampleRate === 48000 &&
       sidechainPayload.channels.length === 2 &&
       sidechainPayload.channels[0].every((sample) => sample === 0) &&
-      sidechainPayload.inputBuses.length === 2 &&
+      sidechainPayload.inputBuses.length === 3 &&
       sidechainPayload.inputBuses[0].index === 0 &&
       sidechainPayload.inputBuses[0].channels.length === 2 &&
       sidechainPayload.inputBuses[0].channels[0][0] === 0.05 &&
@@ -291,6 +292,9 @@ function exerciseRenderPayloadCoverage({ check }) {
       sidechainPayload.inputBuses[1].channels.length === 1 &&
       sidechainPayload.inputBuses[1].channels[0][0] > 0 &&
       sidechainPayload.inputBuses[1].channels[0][0] !== sidechainPayload.inputBuses[0].channels[0][0] &&
+      sidechainPayload.inputBuses[2].index === 3 &&
+      sidechainPayload.inputBuses[2].channels.length === 2 &&
+      sidechainPayload.inputBuses[2].channels[0][0] !== sidechainPayload.inputBuses[1].channels[0][0] &&
       clampedPayload.frames === 64,
     "installed plugin probe builds explicit sidechain render payloads"
   );
@@ -337,6 +341,18 @@ function exerciseRenderLayoutValidation({ check }) {
   } catch (error) {
     mismatchedMainCode = error.code;
   }
+  let mismatchedAuxCode = "";
+  try {
+    assertProbeRenderMatchesLayout({
+      channels: [[0, 0], [0.1, 0.1]],
+      outputBuses: [
+        { index: 0, channels: [[0, 0], [0.1, 0.1]] },
+        { index: 2, channels: [[0.2, 0.2], [0.3, 0.3]] }
+      ]
+    }, multiOutputLayout, 2);
+  } catch (error) {
+    mismatchedAuxCode = error.code;
+  }
   let duplicateBusCode = "";
   try {
     assertProbeRenderMatchesLayout({
@@ -354,6 +370,7 @@ function exerciseRenderLayoutValidation({ check }) {
     goodMultiOutputCode === "ok" &&
       missingBusCode === "bad_render_layout" &&
       mismatchedMainCode === "bad_render_layout" &&
+      mismatchedAuxCode === "bad_render_layout" &&
       duplicateBusCode === "bad_render_layout",
     "installed plugin probe validates negotiated output-bus render layouts"
   );
