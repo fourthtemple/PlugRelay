@@ -69,12 +69,18 @@ export function vst3MidiControllerEventStatus(result) {
   if (result.vst3MidiControllerEvents !== undefined) {
     return result.vst3MidiControllerEvents;
   }
+  if (String(result.format ?? "").toLowerCase() === "vst3" && hasFailedPhase(result, ["sendMidiEvents"])) {
+    return "failed";
+  }
   return String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format";
 }
 
 export function vst3MidiProgramChangeEventStatus(result) {
   if (result.vst3MidiProgramChangeEvents !== undefined) {
     return result.vst3MidiProgramChangeEvents;
+  }
+  if (String(result.format ?? "").toLowerCase() === "vst3" && hasFailedPhase(result, ["sendMidiEvents"])) {
+    return "failed";
   }
   return String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format";
 }

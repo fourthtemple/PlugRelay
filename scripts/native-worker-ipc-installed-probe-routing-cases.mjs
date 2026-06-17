@@ -504,6 +504,12 @@ function exerciseProbeMidiCoverage({ check }) {
     format: "vst3",
     midiProgramChangeEventProfile: vst3MidiProgramChangeProfile
   }]).matrix[0];
+  const failedMidiSummary = summarizeProbeResults([{
+    ok: false,
+    format: "vst3",
+    pluginId: "vst3:failed-midi-events",
+    phases: [{ name: "sendMidiEvents", ok: false, error: { code: "bad_midi_result" } }]
+  }]);
   check(
     vst3MidiEvents.length === 16 &&
       vst3MidiEvents.some((event) => event.type === "noteExpression" && event.noteId === 77) &&
@@ -565,6 +571,11 @@ function exerciseProbeMidiCoverage({ check }) {
       invalidProgramChangeProfile.flags.includes("invalid-program-route") &&
       !invalidProgramChangeProfile.flags.includes("non-main-event-bus") &&
       !invalidProgramChangeProfile.flags.includes("non-main-channel") &&
+      failedMidiSummary.coverage.vst3MidiControllerEvents.failed === 1 &&
+      failedMidiSummary.coverage.vst3MidiProgramChangeEvents.failed === 1 &&
+      failedMidiSummary.matrix[0].vst3MidiControllerEvents === "failed" &&
+      failedMidiSummary.matrix[0].vst3MidiProgramChangeEvents === "failed" &&
+      failedMidiSummary.matrix[0].featureStatus.midiEvents === "failed" &&
       midiEventsForBlock("au", 64, 64).every((event) => !event.type.startsWith("noteExpression")),
     "installed plugin probe sends VST3 note-expression, MIDI-controller, and program-change coverage"
   );
