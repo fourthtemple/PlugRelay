@@ -35,11 +35,17 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       { type: "noteExpression", typeId: 1, value: 0, noteId: 0, channel: 0, time: 0 },
       { type: "noteExpressionText", typeId: 6, text: "z", noteId: 0, channel: 0, time: 1 }
     ]);
+    const notes = await noteExpressionWorker.sendMidiEvents([
+      { type: "noteOn", note: 67, channel: 0, time: 0, busIndex: 2 },
+      { type: "noteOff", note: 67, channel: 0, time: 3, busIndex: 2 },
+      { type: "polyPressure", note: 67, pressure: 0.25, channel: 0, time: 4, noteId: 88, busIndex: 2 }
+    ]);
     check(
       routed.eventCount === 3 && bounded.eventCount === 4,
       "native VST3 workers encode bounded note-expression value/text event lists"
     );
     check(minimum.eventCount === 3, "native VST3 workers encode minimum note-expression value/text boundaries");
+    check(notes.eventCount === 3, "native VST3 workers encode routed note and poly-pressure event boundaries");
     const invalidTextMessages = await Promise.all([
       rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
         { type: "noteExpressionText", typeId: 6, text: "", noteId: 1, channel: 0, time: 0 }
@@ -83,6 +89,33 @@ export async function exerciseVst3NoteExpressionNativeWorker({
         "VST3 note-expression noteId must be an integer in 0..2147483647."
       ]),
       "native VST3 workers reject malformed note-expression value metadata before IPC"
+    );
+    const invalidNoteMessages = await Promise.all([
+      rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
+        { type: "noteOn", note: -1, velocity: 0.8, channel: 0, time: 0 }
+      ])),
+      rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
+        { type: "noteOn", note: 60, velocity: 2, channel: 0, time: 0 }
+      ])),
+      rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
+        { type: "polyPressure", note: 60, pressure: -0.1, channel: 0, time: 0 }
+      ])),
+      rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
+        { type: "noteOn", note: 60, velocity: 0.8, channel: 0, time: 0, noteId: 2147483648 }
+      ])),
+      rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
+        { type: "noteOn", note: 60, velocity: 0.8, channel: 0, time: 8192 }
+      ]))
+    ]);
+    check(
+      JSON.stringify(invalidNoteMessages) === JSON.stringify([
+        "MIDI note must be an integer in 0..127.",
+        "MIDI velocity must be a number in 0..1.",
+        "MIDI pressure must be a number in 0..1.",
+        "MIDI noteId must be an integer in 0..2147483647.",
+        "MIDI time must be an integer in 0..8191."
+      ]),
+      "native VST3 workers reject malformed note and poly-pressure events before IPC"
     );
   } finally {
     noteExpressionWorker.destroy();
@@ -142,7 +175,8 @@ const expectedCommands = new Set([
     \`exprText:6:\${Buffer.from(utf8Text, "utf8").toString("base64")}:2147483647:15:2\`,
     \`exprText:6:\${Buffer.from(maxText, "utf8").toString("base64")}:2147483647:15:7\`
   ].join(";"),
-  "midi on:0:0.1:0:0:0;expr:1:0:0:0:0;exprText:6:eg==:0:0:1"
+  "midi on:0:0.1:0:0:0;expr:1:0:0:0:0;exprText:6:eg==:0:0:1",
+  "midi on:67:0.8:0:0:bus=2;off:67:0:0:3:bus=2;poly:67:0.25:0:4:88:bus=2"
 ]);
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
 process.stdin.setEncoding("utf8");
