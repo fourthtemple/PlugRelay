@@ -10,6 +10,7 @@ import { applyNativeParameterSnapshot, parameterSnapshotResponse } from "./daemo
 import { exerciseInstalledProbeSupport } from "./native-worker-ipc-installed-probe-cases.mjs";
 import { exerciseInstalledProbeEventSupport } from "./native-worker-ipc-installed-probe-event-cases.mjs";
 import { exerciseInstalledProbeFileGrantSupport } from "./native-worker-ipc-installed-probe-file-grant-cases.mjs";
+import { exerciseInstalledProbeLatencySupport } from "./native-worker-ipc-installed-probe-latency-cases.mjs";
 import { exerciseInstalledProbeMidiSupport } from "./native-worker-ipc-installed-probe-midi-cases.mjs";
 import { exerciseInstalledProbeParameterSupport } from "./native-worker-ipc-installed-probe-parameter-cases.mjs";
 import { exerciseInstalledProbeStateSupport } from "./native-worker-ipc-installed-probe-state-cases.mjs";
@@ -60,6 +61,7 @@ try {
   await exerciseInstalledProbeSupport({ check });
   exerciseInstalledProbeEventSupport({ check });
   await exerciseInstalledProbeFileGrantSupport({ check });
+  exerciseInstalledProbeLatencySupport({ check });
   exerciseInstalledProbeMidiSupport({ check });
   exerciseInstalledProbeParameterSupport({ check });
   exerciseInstalledProbeStateSupport({ check });

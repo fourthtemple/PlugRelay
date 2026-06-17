@@ -16,7 +16,7 @@ export function summarizeFeatureStatus(result, options) {
     transport: hostTransportStatus(result),
     rendering: renderingFeatureStatus(result),
     busLayouts: busLayoutFeatureStatus(result),
-    latencyTail: phaseGroupStatus(result, ["getLatency", "getTailTime"]),
+    latencyTail: latencyTailFeatureStatus(result),
     editor: nativeEditorStatus(result, options)
   };
 }
@@ -333,6 +333,14 @@ function busLayoutFeatureStatus(result) {
     return "failed";
   }
   return result.busProfile?.category ? "passed" : "missing";
+}
+
+function latencyTailFeatureStatus(result) {
+  const status = latencyTailStatus(result);
+  if (status === "failed" || status === "partial" || status === "missing") {
+    return status;
+  }
+  return "passed";
 }
 
 function phaseGroupStatus(result, names) {
