@@ -59,6 +59,24 @@ export async function exerciseVst3MultiBusNativeWorker({
         JSON.stringify(sidechainRendered.outputBuses?.[2]?.channels) === JSON.stringify([[-0.1, -0.3]]),
       "native VST3 workers route explicit sidechain buses independently of legacy channels"
     );
+    const explicitMainBusRendered = await busWorker.render({
+      frames: 2,
+      sampleRate: 48000,
+      channels: [[0, 0], [0, 0]],
+      inputBuses: [
+        { index: 0, channels: [[0.9, 0.8], [0.7, 0.6]] },
+        { index: 1, channels: [[0.2, 0.1]] }
+      ],
+      transport: { samplePosition: 200 }
+    });
+    const explicitMainBuses = new Map((explicitMainBusRendered.outputBuses ?? []).map((bus) => [bus.index, bus.channels]));
+    check(
+      explicitMainBusRendered.outputBuses?.length === 2 &&
+        JSON.stringify(explicitMainBusRendered.channels) === JSON.stringify([[1, 0.9], [0.7, 0.6]]) &&
+        JSON.stringify(explicitMainBuses.get(0)) === JSON.stringify(explicitMainBusRendered.channels) &&
+        JSON.stringify(explicitMainBuses.get(1)) === JSON.stringify([[0.2, 0.1]]),
+      "native VST3 workers let explicit main input buses override legacy channels"
+    );
     const auxOnlyInputRendered = await busWorker.render({
       frames: 2,
       sampleRate: 48000,
@@ -456,6 +474,28 @@ process.stdin.on("data", (chunk) => {
           { index: 0, channels: sidechainMainOutput },
           { index: 1, channels: [[0.1, 0.3]] },
           { index: 2, channels: [[-0.1, -0.3]] }
+        ]
+      }) + "\\n");
+      continue;
+    }
+
+    const explicitMainLegacyChannels = [[0, 0], [0, 0]];
+    const explicitMainInputBuses = [
+      { index: 0, channels: [[0.9, 0.8], [0.7, 0.6]] },
+      { index: 1, channels: [[0.2, 0.1]] }
+    ];
+    const explicitMainRequestMatched = frames === 2 &&
+      Number(parts[2]) === 48000 &&
+      parts[5] === "sample=200" &&
+      JSON.stringify(channels) === JSON.stringify(explicitMainLegacyChannels) &&
+      JSON.stringify(inputBuses) === JSON.stringify(explicitMainInputBuses);
+    if (explicitMainRequestMatched) {
+      const explicitMainOutput = [[1.1, 0.9], [0.7, 0.6]];
+      process.stdout.write(JSON.stringify({
+        channels: explicitMainOutput,
+        outputBuses: [
+          { index: 0, channels: explicitMainOutput },
+          { index: 1, channels: [[0.2, 0.1]] }
         ]
       }) + "\\n");
       continue;
