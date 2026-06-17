@@ -114,10 +114,12 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       targetedProgramDataProfile.flags.includes("duplicate-program-index") &&
       weirdProgramDataProfile.category === "no-valid-programs" &&
       weirdProgramDataProfile.invalidProgramListCount === 2 &&
+      weirdProgramDataProfile.noProgramListSentinelCount === 1 &&
       weirdProgramDataProfile.emptyProgramListCount === 2 &&
       weirdProgramDataProfile.invalidProgramIndexCount === 1 &&
       weirdProgramDataProfile.duplicateProgramListIdCount === 1 &&
       weirdProgramDataProfile.flags.includes("invalid-program-list-id") &&
+      weirdProgramDataProfile.flags.includes("no-program-list-sentinel") &&
       weirdProgramDataProfile.flags.includes("empty-program-list") &&
       weirdProgramDataProfile.flags.includes("invalid-program-index") &&
       weirdProgramDataProfile.flags.includes("duplicate-program-list-id") &&

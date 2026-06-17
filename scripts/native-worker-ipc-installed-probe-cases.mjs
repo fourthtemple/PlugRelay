@@ -88,7 +88,8 @@ export function exerciseInstalledProbeSupport({ check }) {
         unsupportedProgramListCount: 1,
         invalidProgramIndexCount: 2,
         duplicateProgramListIdCount: 1,
-        duplicateProgramIndexCount: 1
+        duplicateProgramIndexCount: 1,
+        noProgramListSentinelCount: 1
       },
       vst3ProgramListCount: 2,
       parameterCount: 1024,
@@ -346,6 +347,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].vst3ProgramDataInvalidProgramIndexes === 2 &&
       coverageSummary.matrix[0].vst3ProgramDataDuplicateProgramListIds === 1 &&
       coverageSummary.matrix[0].vst3ProgramDataDuplicateProgramIndexes === 1 &&
+      coverageSummary.matrix[0].vst3ProgramDataNoProgramListSentinels === 1 &&
       coverageSummary.matrix[0].vst3ProgramLists === "listed" &&
       coverageSummary.matrix[0].parameterMetadata === "at-limit" &&
       coverageSummary.matrix[0].parameterProfile === "writable" &&

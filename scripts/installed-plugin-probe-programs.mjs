@@ -162,7 +162,8 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       programDataListCount: 0,
       candidateProgramCount: 0,
       programListMetadataAtLimit: false,
-      programMetadataAtLimit: false
+      programMetadataAtLimit: false,
+      noProgramListSentinelCount: 0
     };
   }
 
@@ -180,6 +181,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   let invalidProgramIndexCount = 0;
   let duplicateProgramListIdCount = 0;
   let duplicateProgramIndexCount = 0;
+  let noProgramListSentinelCount = 0;
   let programMetadataAtLimit = false;
 
   if (lists.length === 0) {
@@ -194,6 +196,10 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   for (const programList of lists) {
     const programListId = boundedProgramListId(programList?.id);
     if (programListId === undefined) {
+      if (programList?.id === VST3_NO_PROGRAM_LIST_ID) {
+        noProgramListSentinelCount += 1;
+        flags.push("no-program-list-sentinel");
+      }
       invalidProgramListCount += 1;
       flags.push("invalid-program-list-id");
       continue;
@@ -281,6 +287,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     invalidProgramIndexCount,
     duplicateProgramListIdCount,
     duplicateProgramIndexCount,
+    noProgramListSentinelCount,
     programListMetadataAtLimit,
     programMetadataAtLimit
   };
