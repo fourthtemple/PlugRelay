@@ -48,12 +48,18 @@ export function summarizeProbeMidiControllerEvents(events) {
   const types = knownControllerEventTypes(controllerEvents);
   const invalidControllerNumberCount = controllerEvents.filter(invalidControllerNumber).length;
   const invalidControllerRouteCount = controllerEvents.filter(invalidEventRoute).length;
+  const invalidControllerValueCount = controllerEvents.filter(invalidControllerValue).length;
   return {
     eventCount: controllerEvents.length,
     controllerFamilyCount: types.length,
     invalidControllerNumberCount,
     invalidControllerRouteCount,
-    flags: midiControllerFlags(controllerEvents, types, { invalidControllerNumberCount, invalidControllerRouteCount }),
+    invalidControllerValueCount,
+    flags: midiControllerFlags(controllerEvents, types, {
+      invalidControllerNumberCount,
+      invalidControllerRouteCount,
+      invalidControllerValueCount
+    }),
     types,
     controllers: uniqueSortedIntegers(controllerEvents.map((event) => event.controller), 0, 127),
     channels: uniqueSortedIntegers(controllerEvents.map((event) => event.channel ?? 0), 0, 15),
@@ -110,6 +116,7 @@ function emptyMidiControllerProfile() {
     controllerFamilyCount: 0,
     invalidControllerNumberCount: 0,
     invalidControllerRouteCount: 0,
+    invalidControllerValueCount: 0,
     flags: ["no-controller-events"],
     types: [],
     controllers: [],
@@ -149,7 +156,7 @@ function knownControllerEventTypes(events) {
 function midiControllerFlags(
   events,
   types = knownControllerEventTypes(events),
-  { invalidControllerNumberCount = 0, invalidControllerRouteCount = 0 } = {}
+  { invalidControllerNumberCount = 0, invalidControllerRouteCount = 0, invalidControllerValueCount = 0 } = {}
 ) {
   if (events.length === 0) {
     return ["no-controller-events"];
@@ -173,6 +180,10 @@ function midiControllerFlags(
   if (invalidControllerRouteCount > 0) {
     flags.push("invalid-controller-route");
   }
+  if (invalidControllerValueCount > 0) {
+    flags.push("invalid-controller-value");
+  }
+  flags.push(...controllerValueFlags(events));
   return flags;
 }
 
@@ -232,6 +243,10 @@ function invalidControllerNumber(event) {
   return event?.type === "controlChange" && boundedInt(event.controller, 0, 127) === undefined;
 }
 
+function invalidControllerValue(event) {
+  return controllerValueRange(event) === undefined;
+}
+
 function invalidProgramNumber(event) {
   return boundedInt(event?.program, 0, 127) === undefined;
 }
@@ -243,6 +258,42 @@ function invalidEventRoute(event) {
 
 function boundedInt(value, min, max) {
   return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+}
+
+function controllerValueFlags(events) {
+  const ranges = events.map(controllerValueRange).filter(Boolean);
+  const flags = [];
+  if (ranges.some(({ value, min }) => value === min)) {
+    flags.push("min-controller-value");
+  }
+  if (ranges.some(({ value, max }) => value === max)) {
+    flags.push("max-controller-value");
+  }
+  if (ranges.some(({ value }) => value < 0)) {
+    flags.push("negative-controller-value");
+  }
+  if (ranges.some(({ value }) => value > 0)) {
+    flags.push("positive-controller-value");
+  }
+  return flags;
+}
+
+function controllerValueRange(event) {
+  if (event?.type === "controlChange") {
+    return boundedNumberRange(event.value, 0, 1);
+  }
+  if (event?.type === "pitchBend") {
+    return boundedNumberRange(event.value, -1, 1);
+  }
+  if (event?.type === "channelPressure") {
+    return boundedNumberRange(event.pressure, 0, 1);
+  }
+  return undefined;
+}
+
+function boundedNumberRange(value, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max ? { value: number, min, max } : undefined;
 }
 
 function hasOwn(object, key) {

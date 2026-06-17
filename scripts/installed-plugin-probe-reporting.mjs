@@ -247,6 +247,7 @@ function summarizeCompatibilityMatrix(results, options) {
       midiControllerFamilyCount: safeMatrixInteger(result.midiControllerEventProfile?.controllerFamilyCount, 0, 16),
       midiControllerInvalidNumberCount: safeMatrixInteger(result.midiControllerEventProfile?.invalidControllerNumberCount, 0, 4096),
       midiControllerInvalidRouteCount: safeMatrixInteger(result.midiControllerEventProfile?.invalidControllerRouteCount, 0, 4096),
+      midiControllerInvalidValueCount: safeMatrixInteger(result.midiControllerEventProfile?.invalidControllerValueCount, 0, 4096),
       midiControllerFlags: safeMatrixArray(result.midiControllerEventProfile?.flags, 64),
       midiControllerEventTypes: safeMatrixArray(result.midiControllerEventProfile?.types, 64),
       midiControllerNumbers: safeMatrixIntegerArray(result.midiControllerEventProfile?.controllers, 0, 127),
