@@ -253,6 +253,7 @@ const responses = {
   programLists: {
     vst3ProgramLists: [
       { id: "bad", programs: [{ index: 0 }] },
+      { id: -1, programs: [{ index: 0, name: "Sentinel", normalizedValue: 0 }] },
       {
         id: 2147483647,
         name: "",

@@ -139,7 +139,7 @@ std::string programListInfoToJson(
       programList.programCount,
       0,
       kMaxWorkerProgramsPerParameter);
-  if (programCount <= 0) {
+  if (programList.id == Steinberg::Vst::kNoProgramListId || programCount <= 0) {
     return "";
   }
 

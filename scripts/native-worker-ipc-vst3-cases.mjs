@@ -60,6 +60,7 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
   );
   const [partialProgramList] = unitNormalizers.normalizeVst3ProgramLists([
     { id: "bad", programs: [{ index: 0, name: "Broken", normalizedValue: 0.25 }] },
+    { id: -1, programs: [{ index: 0, name: "Sentinel", normalizedValue: 0.25 }] },
     {
       id: 8,
       unitId: "bad",

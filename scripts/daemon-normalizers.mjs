@@ -1,5 +1,6 @@
 export function createDaemonNormalizers(options = {}) {
   const vst3NoParamId = "4294967295";
+  const vst3NoProgramListId = -1;
   const limits = {
     maxAudioChannels: positiveInteger(options.maxAudioChannels, 32),
     maxBlockSize: positiveInteger(options.maxBlockSize, 8192),
@@ -197,7 +198,8 @@ export function createDaemonNormalizers(options = {}) {
   }
 
   function normalizeProgramListId(value) {
-    return normalizeSignedInt32(value);
+    const id = normalizeSignedInt32(value);
+    return id === vst3NoProgramListId ? undefined : id;
   }
 
   function normalizeSignedInt32(value) {
