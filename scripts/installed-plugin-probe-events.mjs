@@ -10,6 +10,7 @@ export function summarizeProbeVst3Events(plugin) {
 
   const {
     expressions,
+    defaultRouteExpressionCount,
     invalidAssociatedParameterCount,
     invalidExpressionCount,
     invalidRouteExpressionCount,
@@ -23,6 +24,7 @@ export function summarizeProbeVst3Events(plugin) {
   const duplicateTypeIdCount = duplicateCount(expressions.map((expression) => expression.typeId));
   const textExpressionCount = expressions.filter(isTextExpression).length;
   const flags = expressionFlags(expressions, eventBuses, channels, {
+    defaultRouteExpressionCount,
     duplicateTypeIdCount,
     invalidAssociatedParameterCount,
     invalidExpressionCount,
@@ -38,6 +40,7 @@ export function summarizeProbeVst3Events(plugin) {
     noteExpressionCount: expressions.length,
     valueExpressionCount: expressions.length - textExpressionCount,
     textExpressionCount,
+    defaultRouteExpressionCount,
     invalidAssociatedParameterCount,
     invalidNoteExpressionCount: invalidExpressionCount,
     invalidNoteExpressionRouteCount: invalidRouteExpressionCount,
@@ -63,6 +66,7 @@ function expressionFlags(
   eventBuses,
   channels,
   {
+    defaultRouteExpressionCount,
     duplicateTypeIdCount,
     invalidAssociatedParameterCount,
     invalidExpressionCount,
@@ -103,6 +107,9 @@ function expressionFlags(
   }
   if (duplicateTypeIdCount > 0) {
     flags.push("duplicate-note-expression-type-id");
+  }
+  if (defaultRouteExpressionCount > 0) {
+    flags.push("default-note-expression-route");
   }
   if (eventBuses.some((busIndex) => busIndex > 0)) {
     flags.push("non-main-event-bus");
@@ -170,6 +177,7 @@ function boundedNoteExpressionProfile(value) {
   if (!Array.isArray(value)) {
     return {
       expressions: [],
+      defaultRouteExpressionCount: 0,
       invalidAssociatedParameterCount: 0,
       invalidExpressionCount: 0,
       invalidRouteExpressionCount: 0,
@@ -179,6 +187,7 @@ function boundedNoteExpressionProfile(value) {
     };
   }
   const expressions = [];
+  let defaultRouteExpressionCount = 0;
   let invalidAssociatedParameterCount = 0;
   let invalidExpressionCount = 0;
   let invalidRouteExpressionCount = 0;
@@ -190,6 +199,9 @@ function boundedNoteExpressionProfile(value) {
       expressions.push(normalized);
       if (normalized.invalidRouteMetadata) {
         invalidRouteExpressionCount += 1;
+      }
+      if (normalized.defaultRouteMetadata) {
+        defaultRouteExpressionCount += 1;
       }
       if (normalized.invalidValueMetadata) {
         invalidValueMetadataCount += 1;
@@ -206,6 +218,7 @@ function boundedNoteExpressionProfile(value) {
   }
   return {
     expressions,
+    defaultRouteExpressionCount,
     invalidAssociatedParameterCount,
     invalidExpressionCount,
     invalidRouteExpressionCount,
@@ -235,6 +248,7 @@ function normalizeNoteExpression(expression) {
     invalidRouteMetadata:
       (hasOwn(expression, "busIndex") && busIndex === undefined) ||
       (hasOwn(expression, "channel") && channel === undefined),
+    defaultRouteMetadata: !hasOwn(expression, "busIndex") || !hasOwn(expression, "channel"),
     invalidValueMetadata: valueMetadata.invalid,
     invalidAssociatedParameterMetadata: hasOwn(expression, "associatedParameterId") && associatedParameterId === undefined,
     invalidUnitLinkMetadata: hasOwn(expression, "unitId") && unitId === undefined,

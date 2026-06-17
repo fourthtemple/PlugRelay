@@ -147,7 +147,7 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
     vst3NoteExpressions: [
       { typeId: 0, busIndex: 0, channel: 0, minValue: 0.5, maxValue: 0.5, defaultValue: 0.5, stepCount: 4, bipolar: true },
       { typeId: 6, busIndex: 2, channel: 3, unitId: 4, associatedParameterId: "param-1", oneShot: true },
-      { typeId: 6, busIndex: 2, channel: 3 },
+      { typeId: 6 },
       { typeId: 7, busIndex: 99, channel: 99, minValue: 1, maxValue: 0, unitId: "bad", associatedParameterId: "4294967295", absolute: true },
       { typeId: "bad", busIndex: 0, channel: 0 }
     ]
@@ -170,6 +170,7 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       vst3EventProfile.noteExpressionCount === 4 &&
       vst3EventProfile.valueExpressionCount === 2 &&
       vst3EventProfile.textExpressionCount === 2 &&
+      vst3EventProfile.defaultRouteExpressionCount === 1 &&
       vst3EventProfile.invalidNoteExpressionCount === 1 &&
       vst3EventProfile.invalidNoteExpressionRouteCount === 1 &&
       vst3EventProfile.invalidAssociatedParameterCount === 1 &&
@@ -194,6 +195,7 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       vst3EventProfile.flags.includes("absolute-expression") &&
       vst3EventProfile.flags.includes("invalid-note-expression") &&
       vst3EventProfile.flags.includes("invalid-note-expression-route") &&
+      vst3EventProfile.flags.includes("default-note-expression-route") &&
       vst3EventProfile.flags.includes("invalid-associated-parameter") &&
       vst3EventProfile.flags.includes("invalid-value-metadata") &&
       vst3EventProfile.flags.includes("invalid-unit-link") &&
@@ -201,6 +203,7 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       vst3EventProfile.flags.includes("stepped-expression") &&
       vst3EventProfile.flags.includes("duplicate-note-expression-type-id") &&
       vst3EventMatrix.vst3InvalidAssociatedNoteExpressionCount === 1 &&
+      vst3EventMatrix.vst3DefaultRoutedNoteExpressionCount === 1 &&
       vst3EventMatrix.vst3InvalidNoteExpressionValueMetadataCount === 1 &&
       vst3EventMatrix.vst3InvalidUnitLinkedNoteExpressionCount === 1 &&
       vst3EventMatrix.vst3FixedNoteExpressionValueRangeCount === 1 &&
