@@ -32,6 +32,14 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       id: "read-only",
       automatable: false,
       readOnly: true
+    },
+    {
+      id: "invalid-mapping-only",
+      automatable: false,
+      readOnly: true,
+      vst3MidiMappings: [
+        { busIndex: 1, channel: 99, controller: 74 }
+      ]
     }
   ], { format: "vst3" });
   const matrix = summarizeProbeResults([
@@ -57,6 +65,7 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.vst3MidiMappingBusCount === 2 &&
       parameterProfile.vst3MidiMappingChannelCount === 2 &&
       parameterProfile.vst3MidiDuplicateMappingCount === 1 &&
+      parameterProfile.invalidVst3MidiMappingCount === 2 &&
       parameterProfile.vst3MidiCcMappingCount === 3 &&
       parameterProfile.vst3MidiAftertouchMappingCount === 1 &&
       parameterProfile.vst3MidiPitchBendMappingCount === 1 &&
@@ -71,6 +80,7 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.flags.includes("vst3-midi-mapping-non-main-event-bus") &&
       parameterProfile.flags.includes("vst3-midi-mapping-non-main-channel") &&
       parameterProfile.flags.includes("vst3-midi-mapping-duplicate") &&
+      parameterProfile.flags.includes("invalid-vst3-midi-mapping") &&
       parameterProfile.flags.includes("vst3-midi-mapping-cc") &&
       parameterProfile.flags.includes("vst3-midi-mapping-aftertouch") &&
       parameterProfile.flags.includes("vst3-midi-mapping-pitch-bend") &&
@@ -83,6 +93,7 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       matrix.parameterVst3MidiMappedParameterCount === 2 &&
       matrix.parameterVst3MidiMappingCount === 5 &&
       matrix.parameterVst3MidiDuplicateMappingCount === 1 &&
+      matrix.parameterInvalidVst3MidiMappingCount === 2 &&
       matrix.parameterVst3MidiCcMappingCount === 3 &&
       matrix.parameterVst3MidiAftertouchMappingCount === 1 &&
       matrix.parameterVst3MidiPitchBendMappingCount === 1 &&

@@ -72,6 +72,7 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
       vst3MidiMappingBusCount: 0,
       vst3MidiMappingChannelCount: 0,
       vst3MidiDuplicateMappingCount: 0,
+      invalidVst3MidiMappingCount: 0,
       vst3MidiCcMappingCount: 0,
       vst3MidiAftertouchMappingCount: 0,
       vst3MidiPitchBendMappingCount: 0,
@@ -106,6 +107,7 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     vst3MidiMappingBusCount: 0,
     vst3MidiMappingChannelCount: 0,
     vst3MidiDuplicateMappingCount: 0,
+    invalidVst3MidiMappingCount: 0,
     vst3MidiCcMappingCount: 0,
     vst3MidiAftertouchMappingCount: 0,
     vst3MidiPitchBendMappingCount: 0,
@@ -165,9 +167,14 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
       }
     }
     const remainingMidiMappings = MAX_VST3_MIDI_MAPPINGS - profile.vst3MidiMappingCount;
-    const midiMappings = isVst3 && remainingMidiMappings > 0
-      ? validVst3MidiMappings(parameter?.vst3MidiMappings, remainingMidiMappings)
-      : [];
+    const midiMappingProfile = isVst3 && remainingMidiMappings > 0
+      ? boundedVst3MidiMappings(parameter?.vst3MidiMappings, remainingMidiMappings)
+      : { valid: [], invalidCount: 0 };
+    const midiMappings = midiMappingProfile.valid;
+    profile.invalidVst3MidiMappingCount = Math.min(
+      MAX_VST3_MIDI_MAPPINGS,
+      profile.invalidVst3MidiMappingCount + midiMappingProfile.invalidCount
+    );
     if (midiMappings.length > 0) {
       profile.vst3MidiMappedParameterCount += 1;
       profile.vst3MidiMappingCount += midiMappings.length;
@@ -289,27 +296,41 @@ function parameterProfileFlags(profile, { atLimit, isVst3 }) {
       flags.push("vst3-midi-mapping-pitch-bend");
     }
   }
+  if (isVst3 && profile.invalidVst3MidiMappingCount > 0) {
+    flags.push("invalid-vst3-midi-mapping");
+  }
   if (profile.duplicateParameterIdCount > 0) {
     flags.push("duplicate-parameter-id");
   }
   return flags;
 }
 
-function validVst3MidiMappings(mappings, limit = MAX_VST3_MIDI_MAPPINGS) {
+function boundedVst3MidiMappings(mappings, limit = MAX_VST3_MIDI_MAPPINGS) {
   if (!Array.isArray(mappings)) {
-    return [];
+    return { valid: [], invalidCount: 0 };
   }
-  return mappings.slice(0, limit).filter((mapping) =>
-    Number.isInteger(mapping?.busIndex) &&
-      mapping.busIndex >= 0 &&
-      mapping.busIndex <= 31 &&
-      Number.isInteger(mapping.channel) &&
-      mapping.channel >= 0 &&
-      mapping.channel <= 15 &&
-      Number.isInteger(mapping.controller) &&
-      mapping.controller >= 0 &&
-      mapping.controller <= 129
-  );
+  const valid = [];
+  let invalidCount = 0;
+  for (const mapping of mappings.slice(0, limit)) {
+    if (validVst3MidiMapping(mapping)) {
+      valid.push(mapping);
+    } else {
+      invalidCount += 1;
+    }
+  }
+  return { valid, invalidCount };
+}
+
+function validVst3MidiMapping(mapping) {
+  return Number.isInteger(mapping?.busIndex) &&
+    mapping.busIndex >= 0 &&
+    mapping.busIndex <= 31 &&
+    Number.isInteger(mapping.channel) &&
+    mapping.channel >= 0 &&
+    mapping.channel <= 15 &&
+    Number.isInteger(mapping.controller) &&
+    mapping.controller >= 0 &&
+    mapping.controller <= 129;
 }
 
 function sortedIntegers(values) {
