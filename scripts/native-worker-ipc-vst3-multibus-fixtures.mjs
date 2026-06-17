@@ -80,6 +80,23 @@ export async function exerciseVst3MultiBusNativeWorker({
         JSON.stringify(multiAuxBuses.get(4)) === JSON.stringify([[0.5, 0.6], [0.7, 0.8]]),
       "native VST3 workers preserve multiple aux input and nonsequential output buses"
     );
+    const outOfOrderMainRendered = await busWorker.render({
+      frames: 2,
+      sampleRate: 48000,
+      channels: [[0, 0], [0, 0]],
+      transport: { samplePosition: 168 }
+    });
+    check(
+      outOfOrderMainRendered.outputBuses?.length === 3 &&
+        outOfOrderMainRendered.outputBuses[0]?.index === 0 &&
+        outOfOrderMainRendered.outputBuses[1]?.index === 1 &&
+        outOfOrderMainRendered.outputBuses[2]?.index === 2 &&
+        JSON.stringify(outOfOrderMainRendered.channels) === JSON.stringify([[0.2, 0.4], [0.6, 0.8]]) &&
+        JSON.stringify(outOfOrderMainRendered.outputBuses[0].channels) === JSON.stringify(outOfOrderMainRendered.channels) &&
+        JSON.stringify(outOfOrderMainRendered.outputBuses[1].channels) === JSON.stringify([[0.1, 0.3]]) &&
+        JSON.stringify(outOfOrderMainRendered.outputBuses[2].channels) === JSON.stringify([[-0.1, -0.3]]),
+      "native VST3 workers pin out-of-order main output buses to legacy channels"
+    );
     const sparseAuxRendered = await busWorker.render({
       frames: 2,
       sampleRate: 48000,
@@ -404,6 +421,24 @@ process.stdin.on("data", (chunk) => {
           { index: 1, channels: [[0.3, 0.4]] },
           { index: 0, channels: multiAuxMainOutput },
           { index: 2, channels: [[-0.5, -0.6]] }
+        ]
+      }) + "\\n");
+      continue;
+    }
+
+    const outOfOrderMainRequestMatched = frames === 2 &&
+      Number(parts[2]) === 48000 &&
+      parts[4] === "-" &&
+      parts[5] === "sample=168" &&
+      JSON.stringify(channels) === JSON.stringify([[0, 0], [0, 0]]);
+    if (outOfOrderMainRequestMatched) {
+      const outOfOrderMainOutput = [[0.2, 0.4], [0.6, 0.8]];
+      process.stdout.write(JSON.stringify({
+        channels: outOfOrderMainOutput,
+        outputBuses: [
+          { index: 2, channels: [[-0.1, -0.3]] },
+          { index: 0, channels: [[0.9, 0.9], [0.7, 0.7]] },
+          { index: 1, channels: [[0.1, 0.3]] }
         ]
       }) + "\\n");
       continue;
