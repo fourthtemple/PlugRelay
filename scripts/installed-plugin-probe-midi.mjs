@@ -27,7 +27,7 @@ export function midiEventsForBlock(format, frames = 64, maxBlockSize = 64) {
     events.push({ type: "channelPressure", pressure: 0.6, channel: 2, time: offset(0.875), busIndex: 1 });
     events.push({ type: "programChange", program: 2, channel: 0, time: offset(0.90625) });
     events.push({ type: "programChange", program: 7, channel: 2, time: offset(0.921875), busIndex: 1 });
-    events.push({ type: "noteOff", note: 62, velocity: 0, channel: 1, time: offset(0.9375), noteId: busNoteId, busIndex: 1 });
+    events.push({ type: "noteOff", note: 62, velocity: 0, channel: 1, time: offset(1), noteId: busNoteId, busIndex: 1 });
   }
   return events;
 }
@@ -82,6 +82,28 @@ export function summarizeProbeMidiProgramChangeEvents(events) {
   };
 }
 
+export function summarizeProbeMidiTiming(events, maxBlockSize = 8192) {
+  if (!Array.isArray(events)) {
+    return emptyMidiTimingProfile();
+  }
+  const blockSize = clampInt(maxBlockSize, 1, 8192, 8192);
+  const times = events.map((event) => event?.time ?? 0);
+  const validTimes = times.filter((time) => boundedInt(time, 0, blockSize - 1) !== undefined);
+  const uniqueTimes = uniqueSortedIntegers(validTimes, 0, blockSize - 1);
+  const invalidTimeCount = times.length - validTimes.length;
+  return {
+    category: midiTimingCategory(uniqueTimes, blockSize, invalidTimeCount),
+    eventCount: events.length,
+    timedEventCount: validTimes.length,
+    invalidTimeCount,
+    uniqueTimeCount: uniqueTimes.length,
+    minTime: uniqueTimes[0],
+    maxTime: uniqueTimes.at(-1),
+    blockSize,
+    flags: midiTimingFlags(uniqueTimes, blockSize, invalidTimeCount)
+  };
+}
+
 function emptyMidiControllerProfile() {
   return {
     eventCount: 0,
@@ -105,6 +127,17 @@ function emptyMidiProgramChangeProfile() {
     programs: [],
     channels: [],
     eventBuses: []
+  };
+}
+
+function emptyMidiTimingProfile() {
+  return {
+    category: "no-midi-events",
+    eventCount: 0,
+    timedEventCount: 0,
+    invalidTimeCount: 0,
+    uniqueTimeCount: 0,
+    flags: ["no-midi-events"]
   };
 }
 
@@ -156,6 +189,41 @@ function midiProgramChangeFlags(events, { invalidProgramNumberCount = 0, invalid
   }
   if (invalidProgramRouteCount > 0) {
     flags.push("invalid-program-route");
+  }
+  return flags;
+}
+
+function midiTimingCategory(times, blockSize, invalidTimeCount) {
+  if (times.length === 0) {
+    return invalidTimeCount > 0 ? "invalid-time" : "no-midi-events";
+  }
+  const startsAtBlockStart = times.includes(0);
+  const reachesBlockEnd = times.includes(blockSize - 1);
+  if (startsAtBlockStart && reachesBlockEnd) {
+    return "block-boundary";
+  }
+  return times.length > 1 ? "scheduled-offsets" : "single-offset";
+}
+
+function midiTimingFlags(times, blockSize, invalidTimeCount) {
+  if (times.length === 0) {
+    return invalidTimeCount > 0 ? ["invalid-time"] : ["no-midi-events"];
+  }
+  const flags = [];
+  if (times.includes(0)) {
+    flags.push("block-start");
+  }
+  if (times.some((time) => time > 0 && time < blockSize - 1)) {
+    flags.push("interior-offsets");
+  }
+  if (times.includes(blockSize - 1)) {
+    flags.push("block-end");
+  }
+  if (times.length > 1) {
+    flags.push("multi-offset");
+  }
+  if (invalidTimeCount > 0) {
+    flags.push("invalid-time");
   }
   return flags;
 }

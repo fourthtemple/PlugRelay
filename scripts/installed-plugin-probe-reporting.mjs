@@ -230,6 +230,13 @@ function summarizeCompatibilityMatrix(results, options) {
       automation: safeMatrixText(automationLaneStatus(result), 64),
       automationLanePointCount: safeMatrixInteger(result.automationLanePointCount, 0, 4096),
       midiEventCount: safeMatrixInteger(result.midiEventCount, 0, 4096),
+      midiTiming: safeMatrixText(midiTimingStatus(result), 64),
+      midiTimingFlags: safeMatrixArray(result.midiTimingProfile?.flags, 64),
+      midiTimingUniqueOffsetCount: safeMatrixInteger(result.midiTimingProfile?.uniqueTimeCount, 0, 4096),
+      midiTimingMinOffset: safeMatrixInteger(result.midiTimingProfile?.minTime, 0, 8191),
+      midiTimingMaxOffset: safeMatrixInteger(result.midiTimingProfile?.maxTime, 0, 8191),
+      midiTimingBlockSize: safeMatrixInteger(result.midiTimingProfile?.blockSize, 1, 8192),
+      midiTimingInvalidOffsetCount: safeMatrixInteger(result.midiTimingProfile?.invalidTimeCount, 0, 4096),
       midiControllerEventCount: safeMatrixInteger(
         result.midiControllerEventProfile?.eventCount ?? result.midiControllerEventCount,
         0,
@@ -423,6 +430,7 @@ function summarizeFeatureCoverage(results, options) {
     vst3EventProfiles: countVst3EventProfiles(results),
     vst3MidiControllerEvents: countBy(results, vst3MidiControllerEventStatus),
     vst3MidiProgramChangeEvents: countBy(results, vst3MidiProgramChangeEventStatus),
+    midiTiming: countBy(results, midiTimingStatus),
     automationLanes: countAutomationLanes(results),
     hostTransport: countStatuses(results, "hostTransport"),
     latencyTail: countBy(results, latencyTailStatus),
@@ -524,6 +532,13 @@ function vst3MidiProgramChangeEventStatus(result) {
     return result.vst3MidiProgramChangeEvents;
   }
   return String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format";
+}
+
+function midiTimingStatus(result) {
+  if (result.midiTimingProfile?.category) {
+    return result.midiTimingProfile.category;
+  }
+  return Number.isInteger(result.midiEventCount) ? "unprofiled" : "missing";
 }
 
 function vst3ProgramDataProfileStatus(result) {
@@ -677,6 +692,7 @@ function printFeatureCoverage(coverage, stream) {
     ["VST3 event metadata", coverage.vst3EventProfiles],
     ["VST3 MIDI-controller events", coverage.vst3MidiControllerEvents],
     ["VST3 MIDI program-change events", coverage.vst3MidiProgramChangeEvents],
+    ["MIDI timing", coverage.midiTiming],
     ["automation lanes", coverage.automationLanes],
     ["host transport", coverage.hostTransport],
     ["latency/tail", coverage.latencyTail],

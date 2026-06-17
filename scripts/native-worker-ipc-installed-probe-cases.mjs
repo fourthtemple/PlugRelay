@@ -183,6 +183,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       },
       automationLanePointCount: 2,
       midiEventCount: 16,
+      midiTimingProfile: { category: "block-boundary", flags: ["block-start", "block-end"], uniqueTimeCount: 8, minTime: 0, maxTime: 63, blockSize: 64, invalidTimeCount: 0 },
       midiControllerEventProfile: {
         eventCount: 6,
         controllerFamilyCount: 3,
@@ -396,6 +397,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].vst3EventBuses) === JSON.stringify([0, 2]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventChannels) === JSON.stringify([0, 3]) &&
       coverageSummary.matrix[0].midiEventCount === 16 &&
+      coverageSummary.matrix[0].midiTiming === "block-boundary" &&
+      coverageSummary.matrix[0].midiTimingMaxOffset === 63 &&
       coverageSummary.matrix[0].midiControllerEventCount === 6 &&
       coverageSummary.matrix[0].midiControllerFamilyCount === 3 &&
       coverageSummary.matrix[0].midiControllerInvalidNumberCount === 1 &&
@@ -600,6 +603,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageLines.some((line) => line.includes("VST3 event metadata:")) &&
       coverageLines.some((line) => line.includes("VST3 MIDI-controller events:")) &&
       coverageLines.some((line) => line.includes("VST3 MIDI program-change events:")) &&
+      coverageLines.some((line) => line.includes("MIDI timing:")) &&
       coverageLines.some((line) => line.includes("host transport:")) &&
       coverageLines.some((line) => line.includes("latency/tail:")) &&
       coverageLines.some((line) => line.includes("render signal:")) &&

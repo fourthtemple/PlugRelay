@@ -22,7 +22,8 @@ import { summarizeProbeBusLayout } from "./installed-plugin-probe-layouts.mjs";
 import {
   midiEventsForBlock,
   summarizeProbeMidiControllerEvents,
-  summarizeProbeMidiProgramChangeEvents
+  summarizeProbeMidiProgramChangeEvents,
+  summarizeProbeMidiTiming
 } from "./installed-plugin-probe-midi.mjs";
 import {
   assertParameterDisplayMetadata,
@@ -361,6 +362,7 @@ async function probePlugin(socket, session, plugin) {
       throw error;
     }
     result.midiEventCount = midiAccepted.eventCount;
+    result.midiTimingProfile = summarizeProbeMidiTiming(midiEvents, layoutBlockSize(result.layout));
     result.midiControllerEventProfile = summarizeProbeMidiControllerEvents(midiEvents);
     result.midiControllerEventCount = result.midiControllerEventProfile.eventCount;
     result.midiProgramChangeEventProfile = summarizeProbeMidiProgramChangeEvents(midiEvents);

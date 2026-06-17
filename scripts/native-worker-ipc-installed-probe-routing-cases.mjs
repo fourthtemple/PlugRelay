@@ -4,7 +4,8 @@ import {
   midiControllerEventCount,
   midiEventsForBlock,
   summarizeProbeMidiControllerEvents,
-  summarizeProbeMidiProgramChangeEvents
+  summarizeProbeMidiProgramChangeEvents,
+  summarizeProbeMidiTiming
 } from "./installed-plugin-probe-midi.mjs";
 import {
   assertProbeRenderMatchesLayout,
@@ -332,6 +333,8 @@ function exerciseProbeMidiCoverage({ check }) {
   const vst3MidiEvents = midiEventsForBlock("vst3", 64, 64);
   const vst3MidiControllerProfile = summarizeProbeMidiControllerEvents(vst3MidiEvents);
   const vst3MidiProgramChangeProfile = summarizeProbeMidiProgramChangeEvents(vst3MidiEvents);
+  const vst3MidiTimingProfile = summarizeProbeMidiTiming(vst3MidiEvents, 64);
+  const invalidTimingProfile = summarizeProbeMidiTiming([{ type: "noteOn", time: -1 }, { type: "noteOff", time: 64 }], 64);
   const invalidControllerProfile = summarizeProbeMidiControllerEvents([
     { type: "controlChange", controller: 128, channel: 16, busIndex: 32 },
     { type: "pitchBend", value: 0, channel: -1 },
@@ -352,6 +355,13 @@ function exerciseProbeMidiCoverage({ check }) {
       vst3MidiEvents.some((event) => event.type === "pitchBend" && event.busIndex === 1) &&
       vst3MidiEvents.some((event) => event.type === "channelPressure" && event.busIndex === 1) &&
       vst3MidiEvents.some((event) => event.type === "programChange" && event.program === 7 && event.busIndex === 1) &&
+      vst3MidiEvents.some((event) => event.type === "noteOff" && event.time === 63) &&
+      vst3MidiTimingProfile.category === "block-boundary" &&
+      vst3MidiTimingProfile.flags.includes("block-start") &&
+      vst3MidiTimingProfile.flags.includes("block-end") &&
+      vst3MidiTimingProfile.maxTime === 63 &&
+      invalidTimingProfile.category === "invalid-time" &&
+      invalidTimingProfile.invalidTimeCount === 2 &&
       midiControllerEventCount(vst3MidiEvents) === 6 &&
       vst3MidiControllerProfile.eventCount === 6 &&
       vst3MidiControllerProfile.controllerFamilyCount === 3 &&
