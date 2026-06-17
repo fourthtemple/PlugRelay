@@ -28,6 +28,29 @@ export function exerciseInstalledProbeStateSupport({ check }) {
   const invalidComponentProfile = summarizeNativeStateProfile("vst3", nativeStateEnvelope({ format: "vst3", component: "bad" }));
   const invalidControllerProfile = summarizeNativeStateProfile("vst3", nativeStateEnvelope({ format: "vst3", controller: "bad" }));
   const formatMismatchProfile = summarizeNativeStateProfile("vst3", lv2ProbeState);
+  const statusOnlyStateSummary = summarizeProbeResults([
+    {
+      ok: true,
+      format: "vst3",
+      stateProfile: vst3StateProfile
+    },
+    {
+      ok: true,
+      format: "vst3",
+      stateProfile: vst3EmptyProfile
+    },
+    {
+      ok: true,
+      format: "vst3",
+      stateProfile: invalidComponentProfile
+    },
+    {
+      ok: false,
+      format: "vst3",
+      pluginId: "vst3:status-only-state-failed",
+      stateProfile: { category: "failed" }
+    }
+  ]);
   const failedStateSummary = summarizeProbeResults([
     {
       ok: false,
@@ -84,6 +107,15 @@ export function exerciseInstalledProbeStateSupport({ check }) {
       failedStateSummary.matrix[1].stateProfile === "failed" &&
       failedStateSummary.matrix[1].featureStatus.state === "failed",
     "installed plugin probe classifies bounded native state profiles and failures"
+  );
+  check(
+    statusOnlyStateSummary.matrix[0].featureStatus.state === "passed" &&
+      statusOnlyStateSummary.matrix[1].featureStatus.state === "passed" &&
+      statusOnlyStateSummary.matrix[2].stateProfile === "invalid" &&
+      statusOnlyStateSummary.matrix[2].featureStatus.state === "missing" &&
+      statusOnlyStateSummary.matrix[3].stateProfile === "failed" &&
+      statusOnlyStateSummary.matrix[3].featureStatus.state === "failed",
+    "installed plugin probe reports status-only state profile results"
   );
 }
 

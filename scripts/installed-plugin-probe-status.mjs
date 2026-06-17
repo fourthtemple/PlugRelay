@@ -9,7 +9,7 @@ export function summarizeFeatureStatus(result, options) {
     parameters: parameterFeatureStatus(result),
     presetSnapshots: safeMatrixText(listedPresetStatus(result), 64),
     vst3ProgramData: safeMatrixText(vst3ProgramDataStatus(result), 64),
-    state: phaseGroupStatus(result, ["getState", "setState"]),
+    state: stateFeatureStatus(result),
     fileGrants: fileGrantFeatureStatus(result),
     midiEvents: midiEventsFeatureStatus(result),
     automation: safeMatrixText(automationLaneStatus(result), 64),
@@ -245,6 +245,29 @@ function isPassedParameterProfile(category) {
     category === "read-only" ||
     category === "listed" ||
     category === "none";
+}
+
+function stateFeatureStatus(result) {
+  const profileCategory = result.stateProfile?.category;
+  if (hasFailedPhase(result, ["getState", "setState"]) || profileCategory === "failed") {
+    return "failed";
+  }
+  if (isPassedStateProfile(profileCategory)) {
+    return "passed";
+  }
+  if (hasOkPhase(result, "getState") && hasOkPhase(result, "setState")) {
+    return "passed";
+  }
+  return hasOkPhase(result, "getState") || hasOkPhase(result, "setState") ? "partial" : "missing";
+}
+
+function isPassedStateProfile(status) {
+  return status === "component-controller" ||
+    status === "component-only" ||
+    status === "controller-only" ||
+    status === "single-state" ||
+    status === "generic-state" ||
+    status === "empty";
 }
 
 function fileGrantFeatureStatus(result) {
