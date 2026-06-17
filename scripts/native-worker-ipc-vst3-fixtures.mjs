@@ -109,6 +109,7 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         noteExpressions[0].busIndex === 31 &&
         noteExpressions[0].channel === 15 &&
         !Object.hasOwn(noteExpressions[0], "unitId") &&
+        !Object.hasOwn(noteExpressions[0], "associatedParameterId") &&
         noteExpressions[0].bipolar === true &&
         noteExpressions[0].oneShot === true &&
         noteExpressions[0].absolute === true,
@@ -282,7 +283,7 @@ const responses = {
         busIndex: 99,
         channel: 99,
         unitId: 9999999999,
-        associatedParameterId: "",
+        associatedParameterId: 4294967295,
         bipolar: true,
         oneShot: true,
         absolute: true

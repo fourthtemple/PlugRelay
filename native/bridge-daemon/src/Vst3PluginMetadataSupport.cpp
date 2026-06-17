@@ -218,7 +218,8 @@ std::string noteExpressionInfoToJson(
   if ((info.flags & Steinberg::Vst::NoteExpressionTypeInfo::kIsAbsolute) != 0) {
     output << ",\"absolute\":true";
   }
-  if ((info.flags & Steinberg::Vst::NoteExpressionTypeInfo::kAssociatedParameterIDValid) != 0) {
+  if ((info.flags & Steinberg::Vst::NoteExpressionTypeInfo::kAssociatedParameterIDValid) != 0 &&
+      info.associatedParameterId != Steinberg::Vst::kNoParamId) {
     output << ",\"associatedParameterId\":\"" << info.associatedParameterId << "\"";
   }
   output << "}";

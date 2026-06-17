@@ -1,4 +1,5 @@
 export function createDaemonNormalizers(options = {}) {
+  const vst3NoParamId = "4294967295";
   const limits = {
     maxAudioChannels: positiveInteger(options.maxAudioChannels, 32),
     maxBlockSize: positiveInteger(options.maxBlockSize, 8192),
@@ -312,7 +313,7 @@ export function createDaemonNormalizers(options = {}) {
     };
     const shortName = truncateText(expression.shortName, limits.maxPluginParameterTextBytes);
     const unit = truncateText(expression.unit, 64);
-    const associatedParameterId = truncateText(expression.associatedParameterId, 64);
+    const associatedParameterId = normalizeVst3AssociatedParameterId(expression.associatedParameterId);
     if (shortName) normalized.shortName = shortName;
     if (unit) normalized.unit = unit;
     if (associatedParameterId) normalized.associatedParameterId = associatedParameterId;
@@ -326,6 +327,14 @@ export function createDaemonNormalizers(options = {}) {
     if (expression.oneShot === true) normalized.oneShot = true;
     if (expression.absolute === true) normalized.absolute = true;
     return normalized;
+  }
+
+  function normalizeVst3AssociatedParameterId(value) {
+    const id = truncateText(value, 64);
+    if (!id || id === vst3NoParamId || id === "-1") {
+      return undefined;
+    }
+    return id;
   }
 
   function normalizeNativeState(nativeState, format) {
