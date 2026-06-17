@@ -130,6 +130,11 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       outputBusLayouts: [{ index: 0, channels: 2, type: "main", active: true }]
     }
   );
+  const statusOnlyBusSummary = summarizeProbeResults([
+    { ok: true, format: "vst3", busProfile: sidechainProfile },
+    { ok: false, format: "vst3", pluginId: "vst3:bus-profile-failed", busProfile: { category: "failed" } },
+    { ok: true, format: "vst3", busProfile: { category: "missing" } }
+  ]);
   check(
     sidechainProfile.category === "sidechain" &&
       sidechainProfile.flags.includes("sidechain-input") &&
@@ -178,7 +183,12 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       mismatchedCountProfile.inputBusLayoutCount === 2 &&
       mismatchedCountProfile.outputBusLayoutCount === 1 &&
       mismatchedCountProfile.inputBusCountMismatch === true &&
-      mismatchedCountProfile.outputBusCountMismatch === true,
+      mismatchedCountProfile.outputBusCountMismatch === true &&
+      statusOnlyBusSummary.coverage.busLayouts.failed === 1 &&
+      statusOnlyBusSummary.coverage.busLayouts.missing === 1 &&
+      statusOnlyBusSummary.matrix[0].featureStatus.busLayouts === "passed" &&
+      statusOnlyBusSummary.matrix[1].featureStatus.busLayouts === "failed" &&
+      statusOnlyBusSummary.matrix[2].featureStatus.busLayouts === "missing",
     "installed plugin probe classifies bus-layout coverage"
   );
 

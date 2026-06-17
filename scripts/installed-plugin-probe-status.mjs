@@ -399,7 +399,20 @@ function busLayoutFeatureStatus(result) {
   if (hasFailedPhase(result, ["createInstance", "processAudioBlock"])) {
     return "failed";
   }
-  return result.busProfile?.category ? "passed" : "missing";
+  const category = String(result.busProfile?.category ?? "");
+  if (category === "failed") {
+    return "failed";
+  }
+  return isPassedBusLayoutProfile(category) ? "passed" : "missing";
+}
+
+function isPassedBusLayoutProfile(category) {
+  return category === "sidechain" ||
+    category === "multi-output" ||
+    category === "multi-output-instrument" ||
+    category === "instrument-main" ||
+    category === "effect-main" ||
+    category === "other-main";
 }
 
 function latencyTailFeatureStatus(result) {
