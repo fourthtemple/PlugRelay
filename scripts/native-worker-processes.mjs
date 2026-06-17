@@ -365,8 +365,14 @@ export function createNativeWorkerProcesses({
 
     async sendMidiEvents(events) {
       if (["au", "vst3", "lv2"].includes(this.nativeHost.format)) {
-        await this.request(`midi ${encodeMidiEvents(events, this.nativeHost.format)}`);
-        return;
+        const parsed = await this.request(`midi ${encodeMidiEvents(events, this.nativeHost.format)}`);
+        if (parsed.ok !== true || parsed.eventCount !== events.length) {
+          throw new Error("worker returned invalid MIDI acknowledgement");
+        }
+        return {
+          accepted: true,
+          eventCount: parsed.eventCount
+        };
       }
 
       for (const event of events) {

@@ -41,8 +41,15 @@ export async function exerciseVst3MidiControllerMappingNativeWorker({
       { type: "programChange", program: 0, channel: 0, time: 3, busIndex: 0 },
       { type: "programChange", program: 127, channel: 15, time: 4, busIndex: 31 }
     ]);
+    const badAckMessage = await rejectedMessage(() =>
+      midiWorker.sendMidiEvents([{ type: "controlChange", controller: 2, value: 0.5, channel: 0, time: 0 }])
+    );
     check(true, "native VST3 workers encode explicit-bus and main-bus MIDI-controller/program-change events");
     check(true, "native VST3 workers encode MIDI-controller/program-change boundary routes");
+    check(
+      badAckMessage === "worker returned invalid MIDI acknowledgement",
+      "native host workers reject mismatched MIDI acknowledgements"
+    );
   } finally {
     midiWorker.destroy();
   }
@@ -184,6 +191,9 @@ const expectedCommands = new Set([
   "midi cc:1:0.4:0:0;bend:0.1:0:1;pressure:0.3:0:2;program:2:0:3",
   "midi cc:0:0:0:0:bus=0;cc:127:1:15:7:bus=31;bend:-1:0:1:bus=0;bend:1:15:6:bus=31;pressure:0:0:2:bus=0;pressure:1:15:5:bus=31;program:0:0:3:bus=0;program:127:15:4:bus=31"
 ]);
+const mismatchedAckCommands = new Set([
+  "midi cc:2:0.5:0:0"
+]);
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
 process.stdin.setEncoding("utf8");
 let buffer = "";
@@ -202,7 +212,9 @@ process.stdin.on("data", (chunk) => {
     }
     process.stdout.write(JSON.stringify(
       expectedCommands.has(line)
-        ? { ok: true, eventCount: 4 }
+        ? { ok: true, eventCount: line.slice(5).split(";").length }
+        : mismatchedAckCommands.has(line)
+          ? { ok: true, eventCount: 0 }
         : { error: "bad_mapped_midi_controller_events" }
     ) + "\\n");
   }
@@ -333,4 +345,13 @@ function writeExecutable(tempDir, filename, source) {
   fs.writeFileSync(file, source, { mode: 0o755 });
   fs.chmodSync(file, 0o755);
   return file;
+}
+
+async function rejectedMessage(operation) {
+  try {
+    await operation();
+  } catch (error) {
+    return error.message;
+  }
+  return undefined;
 }
