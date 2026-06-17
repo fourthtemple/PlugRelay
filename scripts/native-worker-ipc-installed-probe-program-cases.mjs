@@ -197,6 +197,25 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
     format: "vst3",
     vst3ProgramDataProfile: saturatedProgramMetadataProfile
   }]).matrix[0];
+  const saturatedProgramListMetadataProfile = summarizeVst3ProgramDataProfile({
+    format: "vst3",
+    vst3ProgramLists: [
+      ...Array.from({ length: 256 }, (_, listIndex) => ({
+        id: listIndex,
+        programDataSupported: true,
+        programs: [{ index: 0, normalizedValue: 0 }]
+      })),
+      { id: "bad", programDataSupported: true, programs: [{ index: 0 }] },
+      { id: -1, programDataSupported: true, programs: [{ index: 0 }] },
+      { id: 42, unitId: "bad", programDataSupported: true, programs: [{ index: 0 }] },
+      { id: 300, name: "", programDataSupported: true, programs: [{ index: 0 }] }
+    ]
+  });
+  const saturatedProgramListMetadataMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    vst3ProgramDataProfile: saturatedProgramListMetadataProfile
+  }]).matrix[0];
   check(
     targetedProgramDataProfile.category === "targeted" &&
       targetedProgramDataProfile.flags.includes("program-data-unsupported") &&
@@ -296,7 +315,28 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       saturatedProgramMetadataMatrix.vst3ProgramDataInvalidProgramIndexes === 1 &&
       saturatedProgramMetadataMatrix.vst3ProgramDataDuplicateProgramIndexes === 3 &&
       saturatedProgramMetadataMatrix.vst3ProgramDataInvalidProgramValues === 1 &&
-      saturatedProgramMetadataMatrix.vst3ProgramDataMissingProgramValues === 1,
+      saturatedProgramMetadataMatrix.vst3ProgramDataMissingProgramValues === 1 &&
+      saturatedProgramListMetadataProfile.category === "targeted" &&
+      saturatedProgramListMetadataProfile.programListCount === 256 &&
+      saturatedProgramListMetadataProfile.candidateProgramCount === 256 &&
+      saturatedProgramListMetadataProfile.invalidProgramListCount === 2 &&
+      saturatedProgramListMetadataProfile.noProgramListSentinelCount === 1 &&
+      saturatedProgramListMetadataProfile.duplicateProgramListIdCount === 1 &&
+      saturatedProgramListMetadataProfile.invalidProgramListUnitCount === 1 &&
+      saturatedProgramListMetadataProfile.programListNameFallbackCount === 1 &&
+      saturatedProgramListMetadataProfile.flags.includes("program-list-metadata-at-limit") &&
+      saturatedProgramListMetadataProfile.flags.includes("invalid-program-list-id") &&
+      saturatedProgramListMetadataProfile.flags.includes("no-program-list-sentinel") &&
+      saturatedProgramListMetadataProfile.flags.includes("duplicate-program-list-id") &&
+      saturatedProgramListMetadataProfile.flags.includes("invalid-program-list-unit") &&
+      saturatedProgramListMetadataProfile.flags.includes("program-list-name-fallback") &&
+      saturatedProgramListMetadataMatrix.vst3ProgramDataProgramLists === 256 &&
+      saturatedProgramListMetadataMatrix.vst3ProgramDataCandidatePrograms === 256 &&
+      saturatedProgramListMetadataMatrix.vst3ProgramDataInvalidLists === 2 &&
+      saturatedProgramListMetadataMatrix.vst3ProgramDataNoProgramListSentinels === 1 &&
+      saturatedProgramListMetadataMatrix.vst3ProgramDataDuplicateProgramListIds === 1 &&
+      saturatedProgramListMetadataMatrix.vst3ProgramDataInvalidUnitLinkedLists === 1 &&
+      saturatedProgramListMetadataMatrix.vst3ProgramDataProgramListNameFallbacks === 1,
     "installed plugin probe classifies VST3 program-data target edge cases"
   );
 

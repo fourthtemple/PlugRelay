@@ -4,6 +4,7 @@ const MAX_PLUGIN_PARAMETERS = 1024;
 const MAX_PLUGIN_PROGRAMS = 256;
 const MAX_PLUGIN_PROGRAM_SCAN = MAX_PLUGIN_PROGRAMS * 2;
 const MAX_PLUGIN_PROGRAM_LISTS = 256;
+const MAX_PLUGIN_PROGRAM_LIST_SCAN = MAX_PLUGIN_PROGRAM_LISTS * 2;
 const MAX_PLUGIN_PROGRAM_DATA_BYTES = 384 * 1024;
 const VST3_NO_PROGRAM_LIST_ID = -1;
 
@@ -322,6 +323,30 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       candidateProgramCount += programIndexResolutions.targetIndexes.size;
     }
   }
+  for (const programList of sourceLists.slice(MAX_PLUGIN_PROGRAM_LISTS, MAX_PLUGIN_PROGRAM_LIST_SCAN)) {
+    const programListId = boundedProgramListId(programList?.id);
+    if (programListId === undefined) {
+      if (programList?.id === VST3_NO_PROGRAM_LIST_ID) {
+        noProgramListSentinelCount = cappedProgramListCount(noProgramListSentinelCount + 1);
+        flags.push("no-program-list-sentinel");
+      }
+      invalidProgramListCount = cappedProgramListCount(invalidProgramListCount + 1);
+      flags.push("invalid-program-list-id");
+      continue;
+    }
+    if (seenProgramListIds.has(programListId)) {
+      duplicateProgramListIdCount = cappedProgramListCount(duplicateProgramListIdCount + 1);
+    }
+    seenProgramListIds.add(programListId);
+    if (hasOwn(programList, "unitId") && boundedUnitId(programList.unitId) === undefined) {
+      invalidProgramListUnitCount = cappedProgramListCount(invalidProgramListUnitCount + 1);
+      flags.push("invalid-program-list-unit");
+    }
+    if (programList?.nameFallback === true || hasEmptyName(programList)) {
+      programListNameFallbackCount = cappedProgramListCount(programListNameFallbackCount + 1);
+      flags.push("program-list-name-fallback");
+    }
+  }
 
   if (programDataListCount === 0 && lists.length > 0) {
     flags.push("no-program-data-support");
@@ -408,6 +433,10 @@ function boundedProgramIndex(value) {
 
 function boundedProgramValue(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1 ? value : undefined;
+}
+
+function cappedProgramListCount(value) {
+  return Math.min(MAX_PLUGIN_PROGRAM_LISTS, value);
 }
 
 function boundedUnitId(value) {
