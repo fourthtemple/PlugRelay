@@ -5,6 +5,7 @@ import {
   safeMatrixIntegerArray,
   safeMatrixText
 } from "./installed-plugin-probe-reporting-safety.mjs";
+import { FILE_GRANT_OPERATION_NAMES } from "./daemon-file-grant-operations.mjs";
 import {
   automationLaneStatus,
   hasFailedPhase,
@@ -25,15 +26,7 @@ import {
 import { vst3EventMatrixFields } from "./installed-plugin-probe-vst3-events-matrix.mjs";
 
 const REPORT_MODES = new Set(["full", "summary", "json", "matrix"]);
-const KNOWN_FILE_GRANT_OPERATIONS = new Set([
-  "loadPreset",
-  "loadSample",
-  "openCacheDirectory",
-  "loadLicense",
-  "restoreState",
-  "saveStateDirectory",
-  "other"
-]);
+const KNOWN_FILE_GRANT_OPERATIONS = new Set(FILE_GRANT_OPERATION_NAMES);
 const MAX_PLUGIN_STATE_BYTES = 384 * 1024;
 const MAX_PLUGIN_PROGRAM_DATA_BYTES = 384 * 1024;
 

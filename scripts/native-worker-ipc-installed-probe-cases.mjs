@@ -470,6 +470,40 @@ export function exerciseInstalledProbeSupport({ check }) {
       summarizeProbeResults(coverageResults).matrix[0].nativeEditor === "not-requested",
     "installed plugin probe marks native editor coverage as not requested by default"
   );
+  const fileGrantStatusMatrix = summarizeProbeResults([
+    {
+      ok: true,
+      pluginId: "neutral:no-file-grants",
+      fileGrantStateRestore: "skipped",
+      fileGrantPresetLoad: "skipped",
+      fileGrantSampleLoad: "skipped-unadvertised",
+      fileGrantCacheDirectoryOpen: "skipped-unadvertised",
+      fileGrantLicenseLoad: "skipped-unadvertised",
+      fileGrantOtherPresetLoad: "skipped-unadvertised",
+      fileGrantOperations: []
+    },
+    {
+      ok: true,
+      pluginId: "neutral:unknown-file-grants",
+      fileGrantOperations: ["vendorPrivateGrant"]
+    },
+    {
+      ok: true,
+      pluginId: "neutral:advertised-file-grants",
+      fileGrantOperations: ["loadSample"]
+    },
+    {
+      ok: true,
+      pluginId: "neutral:state-skipped",
+      fileGrantStateRestore: "skipped",
+      fileGrantPresetLoad: "skipped",
+      fileGrantOperations: []
+    }
+  ]).matrix.map((entry) => entry.featureStatus.fileGrants);
+  check(
+    JSON.stringify(fileGrantStatusMatrix) === JSON.stringify(["unadvertised", "unknown", "advertised", "skipped"]),
+    "installed plugin probe classifies file grant readiness without treating unknown operations as advertised"
+  );
   check(
     summarizeProbeResults([{ ok: true, format: "vst3", vst3ProgramListCount: 0 }]).coverage.vst3ProgramLists.none === 1,
     "installed plugin probe summarizes VST3 plugins with no program lists"

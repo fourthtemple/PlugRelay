@@ -1,4 +1,7 @@
+import { FILE_GRANT_OPERATION_NAMES } from "./daemon-file-grant-operations.mjs";
 import { safeMatrixText } from "./installed-plugin-probe-reporting-safety.mjs";
+
+const KNOWN_FILE_GRANT_OPERATIONS = new Set(FILE_GRANT_OPERATION_NAMES);
 
 export function summarizeFeatureStatus(result, options) {
   return {
@@ -196,13 +199,33 @@ function fileGrantFeatureStatus(result) {
   if (workflowStatuses.some((status) => status === "applied")) {
     return "passed";
   }
-  if (workflowStatuses.length > 0 && workflowStatuses.every((status) => status === "skipped")) {
-    return "skipped";
+  const knownOperationCount = knownFileGrantOperations(result.fileGrantOperations).length;
+  if (workflowStatuses.length > 0) {
+    if (workflowStatuses.every((status) => status === "skipped")) {
+      return "skipped";
+    }
+    if (workflowStatuses.every(isSkippedFileGrantWorkflow)) {
+      return knownOperationCount > 0 ? "advertised" : "unadvertised";
+    }
   }
-  if (Array.isArray(result.fileGrantOperations) && result.fileGrantOperations.length > 0) {
+  if (knownOperationCount > 0) {
     return "advertised";
   }
+  if (Array.isArray(result.fileGrantOperations)) {
+    return result.fileGrantOperations.length > 0 ? "unknown" : "unadvertised";
+  }
   return "missing";
+}
+
+function isSkippedFileGrantWorkflow(status) {
+  return status === "skipped" || status === "skipped-unadvertised";
+}
+
+function knownFileGrantOperations(operations) {
+  if (!Array.isArray(operations)) {
+    return [];
+  }
+  return operations.filter((operation) => KNOWN_FILE_GRANT_OPERATIONS.has(String(operation)));
 }
 
 function renderingFeatureStatus(result) {
