@@ -171,8 +171,12 @@ export function createDaemonNormalizers(options = {}) {
     if (programs.length === 0) {
       return undefined;
     }
+    const id = normalizeProgramListId(programList.id);
+    if (id === undefined) {
+      return undefined;
+    }
     const normalized = {
-      id: normalizeInt(programList.id, -2147483648, 2147483647, 0),
+      id,
       name: truncateText(programList.name ?? "Programs", limits.maxPluginParameterTextBytes) || "Programs",
       programs
     };
@@ -183,6 +187,14 @@ export function createDaemonNormalizers(options = {}) {
       normalized.programDataSupported = true;
     }
     return normalized;
+  }
+
+  function normalizeProgramListId(value) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < -2147483648 || number > 2147483647) {
+      return undefined;
+    }
+    return number;
   }
 
   function normalizeProgramIndex(value, fallbackIndex) {

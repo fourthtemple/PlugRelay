@@ -456,7 +456,7 @@ const responses = {
         normalizedValue: 0.3,
         programChange: true,
         programList: {
-          id: "bad",
+          id: 9,
           name: "",
           programs: [
             { index: "bad", name: "broken", normalizedValue: 0.5 },
@@ -468,9 +468,9 @@ const responses = {
   },
   programLists: {
     vst3ProgramLists: [
-      null,
+      { id: "bad", programs: [{ index: 0 }] },
       {
-        id: 999999999999,
+        id: 2147483647,
         name: "",
         unitId: "bad",
         programDataSupported: true,

@@ -42,6 +42,7 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
     "daemon normalizers bound VST3 program-list metadata"
   );
   const [partialProgramList] = unitNormalizers.normalizeVst3ProgramLists([
+    { id: "bad", programs: [{ index: 0, name: "Broken", normalizedValue: 0.25 }] },
     {
       id: 8,
       programs: [
@@ -53,11 +54,12 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
     }
   ]);
   check(
-    partialProgramList?.programs.length === 2 &&
+    partialProgramList?.id === 8 &&
+      partialProgramList.programs.length === 2 &&
       partialProgramList.programs[0].index === 1 &&
       partialProgramList.programs[0].name === "Fallback" &&
       partialProgramList.programs[1].index === 255,
-    "daemon normalizers skip invalid VST3 program indexes"
+    "daemon normalizers skip invalid VST3 program-list metadata"
   );
 
   const programData = unitNormalizers.normalizeVst3ProgramData({
