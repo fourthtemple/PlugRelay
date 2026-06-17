@@ -228,7 +228,9 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
     outputBuses: [
       { index: 0, channels: [[0.1, 0.2], [0, 0]] },
       { index: 1, channels: [[0, 0]] },
-      { index: 2, channels: [[0.25, 0.5]] }
+      { index: 2, channels: [[0.25, 0.5]] },
+      { index: 4, channels: [[0.75, 0.5]] },
+      { index: 5, channels: [[0, 0]] }
     ]
   }, {
     outputChannels: 2,
@@ -269,13 +271,23 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
     ok: true,
     outputBusSignalProfile: missingOutputSignalProfile
   }]).matrix[0];
+  const extraOutputSignalMatrix = summarizeProbeResults([{
+    ok: true,
+    outputBusSignalProfile
+  }]).matrix[0];
   check(
     outputBusSignalProfile.category === "main-aux-signal" &&
       outputBusSignalProfile.signalOutputBusCount === 2 &&
       outputBusSignalProfile.silentOutputBusCount === 1 &&
       outputBusSignalProfile.missingOutputBusCount === 0 &&
+      outputBusSignalProfile.extraOutputBusCount === 2 &&
+      outputBusSignalProfile.extraSignalOutputBusCount === 1 &&
+      outputBusSignalProfile.flags.includes("extra-output-bus") &&
+      outputBusSignalProfile.flags.includes("extra-output-bus-signal") &&
       JSON.stringify(outputBusSignalProfile.signalOutputBusIndexes) === JSON.stringify([0, 2]) &&
       JSON.stringify(outputBusSignalProfile.silentOutputBusIndexes) === JSON.stringify([1]) &&
+      JSON.stringify(outputBusSignalProfile.extraOutputBusIndexes) === JSON.stringify([4, 5]) &&
+      JSON.stringify(outputBusSignalProfile.extraSignalOutputBusIndexes) === JSON.stringify([4]) &&
       inactiveOutputSignalProfile.category === "silent" &&
       inactiveOutputSignalProfile.outputBusCount === 1 &&
       inactiveOutputSignalProfile.signalOutputBusCount === 0 &&
@@ -288,6 +300,10 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       missingOutputSignalProfile.flags.includes("missing-output-bus") &&
       JSON.stringify(missingOutputSignalProfile.missingOutputBusIndexes) === JSON.stringify([3]) &&
       missingOutputSignalMatrix.outputBusMissingCount === 1 &&
+      extraOutputSignalMatrix.outputBusExtraCount === 2 &&
+      extraOutputSignalMatrix.outputBusExtraSignalCount === 1 &&
+      JSON.stringify(extraOutputSignalMatrix.outputBusExtraIndexes) === JSON.stringify([4, 5]) &&
+      JSON.stringify(extraOutputSignalMatrix.outputBusExtraSignalIndexes) === JSON.stringify([4]) &&
       JSON.stringify(missingOutputSignalMatrix.outputBusMissingIndexes) === JSON.stringify([3]),
     "installed plugin probe classifies output-bus render signal coverage"
   );

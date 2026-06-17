@@ -93,7 +93,7 @@ The summary report counts advertised `fileGrantOperations` such as `loadPreset`,
 
 Render-signal coverage is reported as `signal`, `silent`, or `missing`. A `silent` result means `processAudioBlock` completed and the response shape matched the negotiated layout, but the probe did not observe non-zero samples in the main channels or explicit output buses. Include it in reports when a plugin appears to load correctly but produces no audible output.
 
-Output-bus signal coverage is reported as `main-signal`, `aux-signal`, `main-aux-signal`, `silent`, `failed`, `unprofiled`, or `missing`. Matrix entries include bounded signal, silent, and missing output-bus counts and indexes, which helps separate "the plugin renders only on an aux output" from "all negotiated output buses were silent" or "a negotiated output bus was absent" without exposing audio samples.
+Output-bus signal coverage is reported as `main-signal`, `aux-signal`, `main-aux-signal`, `silent`, `failed`, `unprofiled`, or `missing`. Matrix entries include bounded signal, silent, missing, and extra output-bus counts and indexes, including which extra buses carried signal, which helps separate "the plugin renders only on an aux output" from "all negotiated output buses were silent," "a negotiated output bus was absent," or "the worker surfaced non-negotiated output buses" without exposing audio samples.
 
 Host-transport coverage is reported as `accepted` or `missing`. An `accepted` result means the render path accepted bounded host timing context such as play state, sample position, tempo, and time signature and returned the normalized context without leaking local data. Treat it separately from automation coverage: transport can work even when there is no writable parameter lane to apply.
 

@@ -58,13 +58,22 @@ export function summarizeProbeOutputBusSignal(rendered, layout) {
       signalOutputBusCount: 0,
       silentOutputBusCount: 0,
       missingOutputBusCount: activeBuses.length,
-      missingOutputBusIndexes: activeBuses.map((bus) => bus.index)
+      extraOutputBusCount: 0,
+      extraSignalOutputBusCount: 0,
+      missingOutputBusIndexes: activeBuses.map((bus) => bus.index),
+      extraOutputBusIndexes: [],
+      extraSignalOutputBusIndexes: []
     };
   }
   const outputBuses = indexedOutputBuses(rendered.outputBuses);
+  const activeBusIndexes = new Set(activeBuses.map((bus) => bus.index));
   const signalOutputBusIndexes = [];
   const silentOutputBusIndexes = [];
   const missingOutputBusIndexes = [];
+  const extraOutputBusIndexes = [...outputBuses.keys()]
+    .filter((index) => !activeBusIndexes.has(index))
+    .sort((left, right) => left - right);
+  const extraSignalOutputBusIndexes = extraOutputBusIndexes.filter((index) => hasSignal(outputBuses.get(index)?.channels));
   for (const layoutBus of activeBuses) {
     const bus = outputBuses.get(layoutBus.index);
     if (!bus) {
@@ -84,7 +93,9 @@ export function summarizeProbeOutputBusSignal(rendered, layout) {
     ...(auxSignal ? ["aux-signal"] : []),
     ...(signalOutputBusIndexes.length > 1 ? ["multi-output-signal"] : []),
     ...(silentOutputBusIndexes.length > 0 ? ["silent-output-bus"] : []),
-    ...(missingOutputBusIndexes.length > 0 ? ["missing-output-bus"] : [])
+    ...(missingOutputBusIndexes.length > 0 ? ["missing-output-bus"] : []),
+    ...(extraOutputBusIndexes.length > 0 ? ["extra-output-bus"] : []),
+    ...(extraSignalOutputBusIndexes.length > 0 ? ["extra-output-bus-signal"] : [])
   ];
   if (flags.length === 0) {
     flags.push("silent");
@@ -96,9 +107,13 @@ export function summarizeProbeOutputBusSignal(rendered, layout) {
     signalOutputBusCount: signalOutputBusIndexes.length,
     silentOutputBusCount: silentOutputBusIndexes.length,
     missingOutputBusCount: missingOutputBusIndexes.length,
+    extraOutputBusCount: extraOutputBusIndexes.length,
+    extraSignalOutputBusCount: extraSignalOutputBusIndexes.length,
     signalOutputBusIndexes,
     silentOutputBusIndexes,
-    missingOutputBusIndexes
+    missingOutputBusIndexes,
+    extraOutputBusIndexes,
+    extraSignalOutputBusIndexes
   };
 }
 
