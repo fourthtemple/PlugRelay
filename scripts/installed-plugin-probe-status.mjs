@@ -220,9 +220,10 @@ export function nativeEditorStatus(result, options) {
   if (hasFailedPhase(result, ["openNativeEditor", "closeNativeEditor"])) {
     return "failed";
   }
-  return result.nativeEditor?.transport || (hasOkPhase(result, "openNativeEditor") && hasOkPhase(result, "closeNativeEditor"))
-    ? "opened"
-    : "missing";
+  if (result.nativeEditor?.transport !== undefined) {
+    return result.nativeEditor.transport === "native-broker" ? "opened" : "missing";
+  }
+  return hasOkPhase(result, "openNativeEditor") && hasOkPhase(result, "closeNativeEditor") ? "opened" : "missing";
 }
 
 function parameterFeatureStatus(result) {
