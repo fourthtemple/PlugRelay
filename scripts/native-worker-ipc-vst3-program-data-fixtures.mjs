@@ -98,6 +98,25 @@ export async function exerciseVst3ProgramDataNativeWorker({
   } finally {
     programDataWorker.destroy();
   }
+
+  const oversizedExportWorker = new programDataWorkers.NativeHostWorker(
+    { format: "vst3", bundlePath: tempDir, renderEngine: "native-vst3" },
+    vst3ProgramDataInstance()
+  );
+
+  try {
+    await oversizedExportWorker.ready;
+    const oversizedExportMessage = await rejectedMessage(() =>
+      oversizedExportWorker.getVst3ProgramData(13, 0)
+    );
+    check(
+      oversizedExportMessage?.startsWith("worker_stdout_too_large:") &&
+        oversizedExportWorker.process?.killed === true,
+      "native VST3 workers reject oversized program-data export responses"
+    );
+  } finally {
+    oversizedExportWorker.destroy();
+  }
 }
 
 export function writeVst3ProgramDataNativeWorkerIpcFixtures({ tempDir }) {
@@ -159,6 +178,7 @@ const responses = new Map([
   ["getProgramData 8 0", { programData: { format: "vst3", programListId: 8, programIndex: 0, data: "not-base64" } }],
   ["getProgramData 9 0", { programData: { format: "vst3", programListId: 9, programIndex: 0 } }],
   ["getProgramData 10 0", { programData: { format: "au", programListId: 10, programIndex: 0, data: "YWI=" } }],
+  ["getProgramData 13 0", { programData: { format: "vst3", programListId: 13, programIndex: 0, data: "YWI=", padding: "x".repeat(4096) } }],
   ["setProgramData -2147483648 0 -", { ok: true, restored: "empty" }],
   ["setProgramData 7 2 YWI=", { ok: true, restored: "bytes" }],
   ["setProgramData 11 4 AAE=", { ok: true, restored: "binary-bytes" }],
