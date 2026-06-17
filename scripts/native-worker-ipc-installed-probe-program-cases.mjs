@@ -65,6 +65,19 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       { id: 11, programDataSupported: true, programs: [{ index: 2, normalizedValue: 0.5 }] }
     ]
   });
+  const mixedAmbiguousProgramTarget = firstVst3ProgramDataTarget({
+    vst3ProgramLists: [
+      {
+        id: 15,
+        programDataSupported: true,
+        programs: [
+          { index: 0, normalizedValue: 0.25 },
+          { index: 0, normalizedValue: 0.75 },
+          { index: 6, normalizedValue: 0.5 }
+        ]
+      }
+    ]
+  });
   const typedProgramTarget = firstVst3ProgramDataTarget({
     vst3ProgramLists: [
       { id: "12", programDataSupported: true, programs: [{ index: "4", normalizedValue: "0.5" }] }
@@ -81,6 +94,8 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       consistentDuplicateProgramTarget.programIndex === 5 &&
       fallbackAfterAmbiguousProgramTarget?.programListId === 11 &&
       fallbackAfterAmbiguousProgramTarget.programIndex === 2 &&
+      mixedAmbiguousProgramTarget?.programListId === 15 &&
+      mixedAmbiguousProgramTarget.programIndex === 6 &&
       typedProgramTarget?.programListId === 12 &&
       typedProgramTarget.programIndex === 4 &&
       firstVst3ProgramDataTarget({ vst3ProgramLists: [{ id: 4, programDataSupported: true, programs: [] }] }) === undefined &&
@@ -160,6 +175,25 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       { id: 8, programDataSupported: true, programs: [{ index: 0, normalizedValue: 0.25 }, { index: 0, normalizedValue: 0.75 }] }
     ]
   });
+  const mixedAmbiguousProgramDataProfile = summarizeVst3ProgramDataProfile({
+    format: "vst3",
+    vst3ProgramLists: [
+      {
+        id: 15,
+        programDataSupported: true,
+        programs: [
+          { index: 0, normalizedValue: 0.25 },
+          { index: 0, normalizedValue: 0.75 },
+          { index: 6, normalizedValue: 0.5 }
+        ]
+      }
+    ]
+  });
+  const mixedAmbiguousProgramDataMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    vst3ProgramDataProfile: mixedAmbiguousProgramDataProfile
+  }]).matrix[0];
   const consistentDuplicateProgramDataProfile = summarizeVst3ProgramDataProfile({
     format: "vst3",
     vst3ProgramLists: [
@@ -310,6 +344,14 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       ambiguousProgramDataProfile.flags.includes("duplicate-program-index") &&
       ambiguousProgramDataProfile.flags.includes("ambiguous-program-index") &&
       ambiguousProgramDataProfile.flags.includes("no-valid-program-data-programs") &&
+      mixedAmbiguousProgramDataProfile.category === "targeted" &&
+      mixedAmbiguousProgramDataProfile.candidateProgramCount === 1 &&
+      mixedAmbiguousProgramDataProfile.duplicateProgramIndexCount === 1 &&
+      mixedAmbiguousProgramDataProfile.ambiguousProgramIndexCount === 1 &&
+      mixedAmbiguousProgramDataProfile.flags.includes("bounded-target") &&
+      mixedAmbiguousProgramDataProfile.flags.includes("ambiguous-program-index") &&
+      mixedAmbiguousProgramDataMatrix.vst3ProgramDataCandidatePrograms === 1 &&
+      mixedAmbiguousProgramDataMatrix.vst3ProgramDataAmbiguousProgramIndexes === 1 &&
       consistentDuplicateProgramDataProfile.category === "targeted" &&
       consistentDuplicateProgramDataProfile.candidateProgramCount === 1 &&
       consistentDuplicateProgramDataProfile.duplicateProgramIndexCount === 1 &&
