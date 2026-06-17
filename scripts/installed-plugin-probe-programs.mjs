@@ -432,7 +432,14 @@ function boundedProgramIndex(value) {
 }
 
 function boundedProgramValue(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1 ? value : undefined;
+  if (typeof value !== "number" && typeof value !== "string") {
+    return undefined;
+  }
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 1 ? numeric : undefined;
 }
 
 function cappedProgramListCount(value) {
@@ -500,10 +507,17 @@ function boundedProgramIndexResolutions(programs) {
 }
 
 function boundedInt(value, min, max) {
-  if (!Number.isInteger(value) || value < min || value > max) {
+  if (typeof value !== "number" && typeof value !== "string") {
     return undefined;
   }
-  return value;
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined;
+  }
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < min || numeric > max) {
+    return undefined;
+  }
+  return numeric;
 }
 
 function hasOwn(object, key) {

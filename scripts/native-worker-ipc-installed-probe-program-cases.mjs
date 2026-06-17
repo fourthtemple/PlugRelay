@@ -65,6 +65,11 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       { id: 11, programDataSupported: true, programs: [{ index: 2, normalizedValue: 0.5 }] }
     ]
   });
+  const typedProgramTarget = firstVst3ProgramDataTarget({
+    vst3ProgramLists: [
+      { id: "12", programDataSupported: true, programs: [{ index: "4", normalizedValue: "0.5" }] }
+    ]
+  });
   check(
     sentinelProgramTarget?.programListId === 8 &&
       sentinelProgramTarget.programIndex === 1 &&
@@ -76,6 +81,8 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       consistentDuplicateProgramTarget.programIndex === 5 &&
       fallbackAfterAmbiguousProgramTarget?.programListId === 11 &&
       fallbackAfterAmbiguousProgramTarget.programIndex === 2 &&
+      typedProgramTarget?.programListId === 12 &&
+      typedProgramTarget.programIndex === 4 &&
       firstVst3ProgramDataTarget({ vst3ProgramLists: [{ id: 4, programDataSupported: true, programs: [] }] }) === undefined &&
       firstVst3ProgramDataTarget({
         vst3ProgramLists: [{ id: "bad", programDataSupported: true, programs: [{ index: 0 }] }]
@@ -85,6 +92,12 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       }) === undefined &&
       firstVst3ProgramDataTarget({
         vst3ProgramLists: [{ id: 6, programDataSupported: true, programs: [{ index: 0 }, { index: 0 }] }]
+      }) === undefined &&
+      firstVst3ProgramDataTarget({
+        vst3ProgramLists: [{ id: true, programDataSupported: true, programs: [{ index: 0 }] }]
+      }) === undefined &&
+      firstVst3ProgramDataTarget({
+        vst3ProgramLists: [{ id: 8, programDataSupported: true, programs: [{ index: false }, { index: "" }] }]
       }) === undefined &&
       firstVst3ProgramDataTarget({
         vst3ProgramLists: [
@@ -121,6 +134,14 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       { id: 4, programDataSupported: true, programs: [] },
       { id: 4, programDataSupported: true, programs: [] },
       { id: 5, unitId: "bad", programDataSupported: true, programs: [{ index: 256, normalizedValue: -0.25 }] }
+    ]
+  });
+  const typedProgramDataProfile = summarizeVst3ProgramDataProfile({
+    format: "vst3",
+    vst3ProgramLists: [
+      { id: "13", unitId: "2", programDataSupported: true, programs: [{ index: "4", normalizedValue: "0.25" }] },
+      { id: true, programDataSupported: true, programs: [{ index: 0, normalizedValue: 0.5 }] },
+      { id: 14, unitId: false, programDataSupported: true, programs: [{ index: false, normalizedValue: false }, { index: "", normalizedValue: "" }] }
     ]
   });
   const targetedProgramDataMatrix = summarizeProbeResults([{
@@ -266,6 +287,20 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       weirdProgramDataProfile.flags.includes("invalid-program-value") &&
       weirdProgramDataMatrix.vst3ProgramDataInvalidUnitLinkedLists === 1 &&
       weirdProgramDataMatrix.vst3ProgramDataInvalidProgramValues === 1 &&
+      typedProgramDataProfile.category === "targeted" &&
+      typedProgramDataProfile.programListCount === 3 &&
+      typedProgramDataProfile.programDataListCount === 2 &&
+      typedProgramDataProfile.candidateProgramCount === 1 &&
+      typedProgramDataProfile.unitLinkedProgramListCount === 1 &&
+      typedProgramDataProfile.invalidProgramListCount === 1 &&
+      typedProgramDataProfile.invalidProgramListUnitCount === 1 &&
+      typedProgramDataProfile.invalidProgramIndexCount === 2 &&
+      typedProgramDataProfile.invalidProgramValueCount === 2 &&
+      typedProgramDataProfile.flags.includes("bounded-target") &&
+      typedProgramDataProfile.flags.includes("invalid-program-list-id") &&
+      typedProgramDataProfile.flags.includes("invalid-program-list-unit") &&
+      typedProgramDataProfile.flags.includes("invalid-program-index") &&
+      typedProgramDataProfile.flags.includes("invalid-program-value") &&
       ambiguousProgramDataProfile.category === "no-valid-programs" &&
       ambiguousProgramDataProfile.candidateProgramCount === 0 &&
       ambiguousProgramDataProfile.duplicateProgramIndexCount === 1 &&
