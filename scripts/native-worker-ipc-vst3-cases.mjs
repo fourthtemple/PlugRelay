@@ -85,7 +85,7 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
       nameFallback: true,
       unitId: "2",
       programDataSupported: true,
-      programs: [{ index: "0", name: "1234567890", normalizedValue: 0.5, nameFallback: true }]
+      programs: [{ index: "0", name: "1234567890", normalizedValue: "0.5", nameFallback: true }]
     }
   ]);
   check(
@@ -96,6 +96,7 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
       unitProgramList.nameFallback === true &&
       unitProgramList.programs?.[0]?.index === 0 &&
       unitProgramList.programs?.[0]?.name === "12345678" &&
+      unitProgramList.programs?.[0]?.normalizedValue === 0.5 &&
       unitProgramList.programs?.[0]?.nameFallback === true,
     "daemon normalizers bound VST3 program-list metadata"
   );
@@ -115,7 +116,7 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
       unitId: "bad",
       programs: [
         { index: "bad", name: "Broken", normalizedValue: 0.25 },
-        { name: "Fallback", normalizedValue: 0.5 },
+        { name: "Fallback", normalizedValue: "" },
         { index: false, name: "Boolean", normalizedValue: 0.25 },
         { index: 255, name: "Boundary", normalizedValue: 1 },
         { index: 256, name: "Out of Range", normalizedValue: 0.75 }
@@ -128,6 +129,7 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
       partialProgramList.programs.length === 2 &&
       partialProgramList.programs[0].index === 1 &&
       partialProgramList.programs[0].name === "Fallback" &&
+      !Object.hasOwn(partialProgramList.programs[0], "normalizedValue") &&
       partialProgramList.programs[1].index === 255,
     "daemon normalizers skip invalid VST3 program-list metadata"
   );
@@ -375,6 +377,20 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
       (await rejectedCode(() => programDataSupport.setVst3ProgramData("inst-test", programEnvelope(), {}))) ===
         "program_data_not_supported",
     "daemon VST3 program-data helper rejects unresolved duplicate program-index targets"
+  );
+  fakeInstance.vst3ProgramLists = unitNormalizers.normalizeVst3ProgramLists([{
+    id: 7,
+    programDataSupported: true,
+    programs: [
+      { index: 0, normalizedValue: "" },
+      { index: 0, normalizedValue: false }
+    ]
+  }]);
+  check(
+    (await rejectedCode(() => programDataSupport.getVst3ProgramData("inst-test", 7, 0, {}))) === "program_data_not_supported" &&
+      (await rejectedCode(() => programDataSupport.setVst3ProgramData("inst-test", programEnvelope(), {}))) ===
+        "program_data_not_supported",
+    "daemon VST3 program-data helper rejects normalized unresolved duplicate targets"
   );
   fakeInstance.vst3ProgramLists = [{ id: 7, programDataSupported: false, programs: [{ index: 0 }] }];
   check(

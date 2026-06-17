@@ -168,9 +168,9 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         programLists[0].programs?.[0]?.index === 0 &&
         programLists[0].programs?.[0]?.name === "Program 1" &&
         programLists[0].programs?.[0]?.nameFallback === true &&
-        programLists[0].programs?.[0]?.normalizedValue === 1 &&
+        !Object.hasOwn(programLists[0].programs?.[0] ?? {}, "normalizedValue") &&
         programLists[0].programs?.[1]?.index === 255 &&
-        programLists[0].programs?.[1]?.normalizedValue === 0,
+        !Object.hasOwn(programLists[0].programs?.[1] ?? {}, "normalizedValue"),
       "native VST3 workers normalize partial/weird program-list metadata"
     );
 

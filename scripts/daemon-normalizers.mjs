@@ -147,11 +147,14 @@ export function createDaemonNormalizers(options = {}) {
           return undefined;
         }
         const name = truncateText(program.name, limits.maxPluginParameterTextBytes);
+        const normalizedValue = normalizeProgramValue(program.normalizedValue);
         const normalized = {
           index,
-          name: name || `Program ${index + 1}`,
-          normalizedValue: clamp01(Number(program.normalizedValue))
+          name: name || `Program ${index + 1}`
         };
+        if (normalizedValue !== undefined) {
+          normalized.normalizedValue = normalizedValue;
+        }
         if (program.nameFallback === true || !name) {
           normalized.nameFallback = true;
         }
@@ -217,6 +220,20 @@ export function createDaemonNormalizers(options = {}) {
     }
     const number = Number(value);
     if (!Number.isInteger(number) || number < 0 || number >= limits.maxPluginPrograms) {
+      return undefined;
+    }
+    return number;
+  }
+
+  function normalizeProgramValue(value) {
+    if (typeof value !== "number" && typeof value !== "string") {
+      return undefined;
+    }
+    if (typeof value === "string" && value.trim() === "") {
+      return undefined;
+    }
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0 || number > 1) {
       return undefined;
     }
     return number;
