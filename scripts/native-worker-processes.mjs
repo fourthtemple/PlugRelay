@@ -682,6 +682,9 @@ export function createNativeWorkerProcesses({
         continue;
       }
       const index = normalizeInt(bus.index, 0, limits.maxPluginBuses - 1, 0);
+      if (byIndex.has(index)) {
+        continue;
+      }
       const layoutChannels = layout?.outputBusLayouts?.find((candidate) => candidate.index === index)?.channels ??
         limits.maxAudioChannels;
       byIndex.set(index, {

@@ -14,10 +14,13 @@ import {
 } from "./native-worker-ipc-fixtures.mjs";
 import {
   exerciseVst3MidiControllerMappingNativeWorker,
-  exerciseVst3MultiBusNativeWorker,
   exerciseVst3WeirdMetadataNativeWorker,
   writeVst3NativeWorkerIpcFixtures
 } from "./native-worker-ipc-vst3-fixtures.mjs";
+import {
+  exerciseVst3MultiBusNativeWorker,
+  writeVst3MultiBusNativeWorkerIpcFixtures
+} from "./native-worker-ipc-vst3-multibus-fixtures.mjs";
 import {
   exerciseVst3NoteExpressionNativeWorker,
   writeVst3NoteExpressionNativeWorkerIpcFixtures
@@ -99,9 +102,9 @@ try {
   } = writeNativeWorkerIpcFixtures({ tempDir, fixtureGrantPath });
   const {
     midiControllerMappingNativeWorkerPath,
-    multiBusNativeWorkerPath,
     weirdMetadataNativeWorkerPath
   } = writeVst3NativeWorkerIpcFixtures({ tempDir });
+  const { multiBusNativeWorkerPath } = writeVst3MultiBusNativeWorkerIpcFixtures({ tempDir });
   const { noteExpressionNativeWorkerPath } = writeVst3NoteExpressionNativeWorkerIpcFixtures({ tempDir });
   const { programDataNativeWorkerPath } = writeVst3ProgramDataNativeWorkerIpcFixtures({ tempDir });
 
