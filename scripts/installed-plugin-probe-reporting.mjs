@@ -123,6 +123,8 @@ function summarizeCompatibilityMatrix(results, options) {
       busFlags: safeMatrixArray(result.busProfile?.flags, 64),
       busInputCount: safeMatrixInteger(result.busProfile?.inputBuses, 0, 32),
       busOutputCount: safeMatrixInteger(result.busProfile?.outputBuses, 0, 32),
+      busInputLayoutCount: safeMatrixInteger(result.busProfile?.inputBusLayoutCount, 0, 32),
+      busOutputLayoutCount: safeMatrixInteger(result.busProfile?.outputBusLayoutCount, 0, 32),
       busActiveInputCount: safeMatrixInteger(result.busProfile?.activeInputBuses, 0, 32),
       busActiveOutputCount: safeMatrixInteger(result.busProfile?.activeOutputBuses, 0, 32),
       busInputChannels: safeMatrixInteger(result.busProfile?.inputChannels, 0, 32),
@@ -146,6 +148,12 @@ function summarizeCompatibilityMatrix(results, options) {
         : undefined,
       busOutputMetadataAtLimit: typeof result.busProfile?.outputBusMetadataAtLimit === "boolean"
         ? result.busProfile.outputBusMetadataAtLimit
+        : undefined,
+      busInputCountMismatch: typeof result.busProfile?.inputBusCountMismatch === "boolean"
+        ? result.busProfile.inputBusCountMismatch
+        : undefined,
+      busOutputCountMismatch: typeof result.busProfile?.outputBusCountMismatch === "boolean"
+        ? result.busProfile.outputBusCountMismatch
         : undefined,
       vst3EventCategory: safeMatrixText(
         result.vst3EventProfile?.category ??

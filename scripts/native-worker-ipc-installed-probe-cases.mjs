@@ -509,6 +509,10 @@ export function exerciseInstalledProbeSupport({ check }) {
     busProfile: {
       category: "sidechain",
       flags: ["nonsequential-bus-indexes", "duplicate-bus-indexes", "active-empty-bus", "unknown-bus-type"],
+      inputBusLayoutCount: 2,
+      outputBusLayoutCount: 1,
+      inputBusCountMismatch: true,
+      outputBusCountMismatch: false,
       nonsequentialInputBuses: 2,
       nonsequentialOutputBuses: 1,
       duplicateInputBusIndexes: 1,
@@ -521,6 +525,10 @@ export function exerciseInstalledProbeSupport({ check }) {
   }]).matrix[0];
   check(
     weirdBusMatrix.busNonsequentialInputCount === 2 &&
+      weirdBusMatrix.busInputLayoutCount === 2 &&
+      weirdBusMatrix.busOutputLayoutCount === 1 &&
+      weirdBusMatrix.busInputCountMismatch === true &&
+      weirdBusMatrix.busOutputCountMismatch === false &&
       weirdBusMatrix.busNonsequentialOutputCount === 1 &&
       weirdBusMatrix.busDuplicateInputIndexCount === 1 &&
       weirdBusMatrix.busDuplicateOutputIndexCount === 1 &&

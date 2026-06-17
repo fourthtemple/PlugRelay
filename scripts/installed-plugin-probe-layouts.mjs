@@ -18,6 +18,10 @@ export function summarizeProbeBusLayout(plugin, layout) {
   const nonsequentialOutputBuses = countNonSequentialIndexes(outputBuses);
   const duplicateInputBusIndexes = countDuplicateIndexes(inputBuses);
   const duplicateOutputBusIndexes = countDuplicateIndexes(outputBuses);
+  const inputBusLayoutCount = uniqueBusIndexCount(inputBuses);
+  const outputBusLayoutCount = uniqueBusIndexCount(outputBuses);
+  const inputBusCountMismatch = inputBusLayoutCount > 0 && inputBusCount !== inputBusLayoutCount;
+  const outputBusCountMismatch = outputBusLayoutCount > 0 && outputBusCount !== outputBusLayoutCount;
   const activeEmptyInputBuses = activeInputs.filter((bus) => bus.channels === 0).length;
   const activeEmptyOutputBuses = activeOutputs.filter((bus) => bus.channels === 0).length;
   const unknownInputBusTypes = inputBuses.filter((bus) => bus.type === "unknown").length;
@@ -43,6 +47,9 @@ export function summarizeProbeBusLayout(plugin, layout) {
   }
   if (duplicateInputBusIndexes > 0 || duplicateOutputBusIndexes > 0) {
     flags.push("duplicate-bus-indexes");
+  }
+  if (inputBusCountMismatch || outputBusCountMismatch) {
+    flags.push("bus-count-mismatch");
   }
   if (activeEmptyInputBuses > 0 || activeEmptyOutputBuses > 0) {
     flags.push("active-empty-bus");
@@ -75,6 +82,10 @@ export function summarizeProbeBusLayout(plugin, layout) {
     outputBuses: outputBusCount,
     activeInputBuses: activeInputs.length,
     activeOutputBuses: activeOutputs.length,
+    inputBusLayoutCount,
+    outputBusLayoutCount,
+    inputBusCountMismatch,
+    outputBusCountMismatch,
     inactiveInputBuses: inactiveInputs.length,
     inactiveOutputBuses: inactiveOutputs.length,
     activeInputBusIndexes: boundedBusIndexes(activeInputs),
@@ -149,6 +160,10 @@ function countDuplicateIndexes(buses) {
     }
   }
   return duplicates.size;
+}
+
+function uniqueBusIndexCount(buses) {
+  return new Set(buses.map((bus) => bus.index)).size;
 }
 
 function boundedBusIndexes(buses) {

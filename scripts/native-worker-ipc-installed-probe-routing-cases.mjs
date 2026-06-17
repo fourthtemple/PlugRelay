@@ -92,6 +92,20 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       outputBusLayouts: [{ index: 0, channels: 1, type: "sdk-custom", active: true }]
     }
   );
+  const mismatchedCountProfile = summarizeProbeBusLayout(
+    { kind: "effect" },
+    {
+      inputChannels: 2,
+      outputChannels: 2,
+      inputBuses: 1,
+      outputBuses: 3,
+      inputBusLayouts: [
+        { index: 0, channels: 2, type: "main", active: true },
+        { index: 2, channels: 1, type: "aux", active: true }
+      ],
+      outputBusLayouts: [{ index: 0, channels: 2, type: "main", active: true }]
+    }
+  );
   check(
     sidechainProfile.category === "sidechain" &&
       sidechainProfile.flags.includes("sidechain-input") &&
@@ -117,7 +131,12 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       weirdBusProfile.flags.includes("active-empty-bus") &&
       weirdBusProfile.flags.includes("unknown-bus-type") &&
       weirdBusProfile.activeEmptyInputBuses === 1 &&
-      weirdBusProfile.unknownOutputBusTypes === 1,
+      weirdBusProfile.unknownOutputBusTypes === 1 &&
+      mismatchedCountProfile.flags.includes("bus-count-mismatch") &&
+      mismatchedCountProfile.inputBusLayoutCount === 2 &&
+      mismatchedCountProfile.outputBusLayoutCount === 1 &&
+      mismatchedCountProfile.inputBusCountMismatch === true &&
+      mismatchedCountProfile.outputBusCountMismatch === true,
     "installed plugin probe classifies bus-layout coverage"
   );
 
