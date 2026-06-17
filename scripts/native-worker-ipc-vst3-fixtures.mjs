@@ -459,8 +459,8 @@ const responses = {
           id: "bad",
           name: "",
           programs: [
-            null,
-            { index: "bad", name: "", normalizedValue: 2 }
+            { index: "bad", name: "broken", normalizedValue: 0.5 },
+            { name: "", normalizedValue: 2 }
           ]
         }
       }
@@ -475,9 +475,9 @@ const responses = {
         unitId: "bad",
         programDataSupported: true,
         programs: [
-          null,
-          { index: -5, name: "", normalizedValue: 2 },
-          { index: 999, name: null, normalizedValue: -1 }
+          { name: "", normalizedValue: 2 },
+          { index: -5, name: "broken", normalizedValue: 0.5 },
+          { index: 255, name: null, normalizedValue: -1 }
         ]
       },
       { id: 2, name: "Empty", programs: [] }

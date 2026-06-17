@@ -156,7 +156,10 @@ export function createDaemonNormalizers(options = {}) {
         if (!program || typeof program !== "object") {
           return undefined;
         }
-        const index = normalizeInt(program.index, 0, limits.maxPluginPrograms - 1, fallbackIndex);
+        const index = normalizeProgramIndex(program.index, fallbackIndex);
+        if (index === undefined) {
+          return undefined;
+        }
         const name = truncateText(program.name ?? `Program ${index + 1}`, limits.maxPluginParameterTextBytes) || `Program ${index + 1}`;
         return {
           index,
@@ -180,6 +183,20 @@ export function createDaemonNormalizers(options = {}) {
       normalized.programDataSupported = true;
     }
     return normalized;
+  }
+
+  function normalizeProgramIndex(value, fallbackIndex) {
+    if (value == null) {
+      return normalizeInt(fallbackIndex, 0, limits.maxPluginPrograms - 1, 0);
+    }
+    if (typeof value === "string" && value.trim() === "") {
+      return undefined;
+    }
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 0 || number >= limits.maxPluginPrograms) {
+      return undefined;
+    }
+    return number;
   }
 
   function normalizeVst3ProgramLists(programLists) {
