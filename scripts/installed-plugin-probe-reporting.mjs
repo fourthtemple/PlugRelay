@@ -5,6 +5,23 @@ import {
   safeMatrixIntegerArray,
   safeMatrixText
 } from "./installed-plugin-probe-reporting-safety.mjs";
+import {
+  automationLaneStatus,
+  hasFailedPhase,
+  hasOkPhase,
+  latencyTailStatus,
+  midiTimingStatus,
+  nativeEditorStatus,
+  outputBusSignalStatus,
+  parameterMetadataStatus,
+  parameterProfileStatus,
+  stateProfileStatus,
+  summarizeFeatureStatus,
+  vst3MidiControllerEventStatus,
+  vst3MidiProgramChangeEventStatus,
+  vst3ProgramDataProfileStatus,
+  vst3ProgramListStatus
+} from "./installed-plugin-probe-status.mjs";
 import { vst3EventMatrixFields } from "./installed-plugin-probe-vst3-events-matrix.mjs";
 
 const REPORT_MODES = new Set(["full", "summary", "json", "matrix"]);
@@ -291,137 +308,6 @@ function summarizeCompatibilityMatrix(results, options) {
   });
 }
 
-function summarizeFeatureStatus(result, options) {
-  return {
-    instantiation: phaseGroupStatus(result, ["createInstance"]),
-    parameters: parameterFeatureStatus(result),
-    presetSnapshots: safeMatrixText(result.listedPreset ?? "missing", 64),
-    vst3ProgramData: safeMatrixText(result.vst3ProgramData ?? "missing", 64),
-    state: phaseGroupStatus(result, ["getState", "setState"]),
-    fileGrants: fileGrantFeatureStatus(result),
-    midiEvents: phaseGroupStatus(result, ["sendMidiEvents", "sendMidiNoteOff"]),
-    automation: safeMatrixText(automationLaneStatus(result), 64),
-    transport: hostTransportFeatureStatus(result),
-    rendering: renderingFeatureStatus(result),
-    busLayouts: busLayoutFeatureStatus(result),
-    latencyTail: phaseGroupStatus(result, ["getLatency", "getTailTime"]),
-    editor: nativeEditorStatus(result, options)
-  };
-}
-
-function parameterFeatureStatus(result) {
-  if (hasFailedPhase(result, ["getParameters", "setParameter", "setParameterDisplayValue"])) {
-    return "failed";
-  }
-  return hasOkPhase(result, "getParameters") || Number.isInteger(result.parameterCount) ? "passed" : "missing";
-}
-
-function fileGrantFeatureStatus(result) {
-  if (hasFailedPhase(result, [
-    "createPresetFileGrant",
-    "attachPresetFileGrant",
-    "useFileGrantLoadPreset",
-    "createStateFileGrant",
-    "attachStateFileGrant",
-    "useFileGrantRestoreState",
-    "createStateDirectoryGrant",
-    "attachStateDirectoryGrant",
-    "useFileGrantSaveStateDirectory",
-    "createSavedStateFileGrant",
-    "attachSavedStateFileGrant",
-    "useFileGrantRestoreSavedState",
-    "createSampleFileGrant",
-    "attachSampleFileGrant",
-    "useFileGrantLoadSample",
-    "createCacheDirectoryGrant",
-    "attachCacheDirectoryGrant",
-    "useFileGrantOpenCacheDirectory",
-    "createLicenseFileGrant",
-    "attachLicenseFileGrant",
-    "useFileGrantLoadLicense",
-    "createOtherPresetFileGrant",
-    "attachOtherPresetFileGrant",
-    "useFileGrantOtherPreset"
-  ])) {
-    return "failed";
-  }
-
-  const workflowStatuses = [
-    result.fileGrantStateRestore,
-    result.fileGrantPresetLoad,
-    result.fileGrantStateSave,
-    result.fileGrantSavedStateRestore,
-    result.fileGrantSampleLoad,
-    result.fileGrantCacheDirectoryOpen,
-    result.fileGrantLicenseLoad,
-    result.fileGrantOtherPresetLoad
-  ].filter(Boolean).map(String);
-  if (workflowStatuses.some((status) => status === "applied")) {
-    return "passed";
-  }
-  if (workflowStatuses.length > 0 && workflowStatuses.every((status) => status === "skipped")) {
-    return "skipped";
-  }
-  if (Array.isArray(result.fileGrantOperations) && result.fileGrantOperations.length > 0) {
-    return "advertised";
-  }
-  return "missing";
-}
-
-function renderingFeatureStatus(result) {
-  if (hasFailedPhase(result, ["processAudioBlock"])) {
-    return "failed";
-  }
-  return result.renderSignal === "signal" || result.renderSignal === "silent" || hasOkPhase(result, "processAudioBlock")
-    ? "passed"
-    : "missing";
-}
-
-function hostTransportFeatureStatus(result) {
-  if (hasFailedPhase(result, ["processAudioBlock"])) {
-    return "failed";
-  }
-  return safeMatrixText(result.hostTransport ?? "missing", 64);
-}
-
-function busLayoutFeatureStatus(result) {
-  if (hasFailedPhase(result, ["createInstance", "processAudioBlock"])) {
-    return "failed";
-  }
-  return result.busProfile?.category ? "passed" : "missing";
-}
-
-function nativeEditorStatus(result, options) {
-  if (!options.nativeEditorBroker) {
-    return "not-requested";
-  }
-  if (hasFailedPhase(result, ["openNativeEditor", "closeNativeEditor"])) {
-    return "failed";
-  }
-  return result.nativeEditor?.transport || (hasOkPhase(result, "openNativeEditor") && hasOkPhase(result, "closeNativeEditor"))
-    ? "opened"
-    : "missing";
-}
-
-function phaseGroupStatus(result, names) {
-  if (hasFailedPhase(result, names)) {
-    return "failed";
-  }
-  if (names.every((name) => hasOkPhase(result, name))) {
-    return "passed";
-  }
-  return names.some((name) => hasOkPhase(result, name)) ? "partial" : "missing";
-}
-
-function hasFailedPhase(result, names) {
-  const phaseNames = new Set(names);
-  return (result.phases ?? []).some((phaseResult) => phaseNames.has(phaseResult.name) && phaseResult.ok === false);
-}
-
-function hasOkPhase(result, name) {
-  return (result.phases ?? []).some((phaseResult) => phaseResult.name === name && phaseResult.ok === true);
-}
-
 function summarizeFeatureCoverage(results, options) {
   return {
     listedPresets: countStatuses(results, "listedPreset"),
@@ -498,113 +384,6 @@ function countVst3ProgramLists(results) {
     counts[status] = (counts[status] ?? 0) + 1;
   }
   return counts;
-}
-
-function automationLaneStatus(result) {
-  return Number.isInteger(result.automationLanePointCount)
-    ? "applied"
-    : result.automationLaneSkipped
-      ? `skipped-${result.automationLaneSkipped}`
-      : "missing";
-}
-
-function parameterMetadataStatus(result) {
-  return result.parameterMetadataAtLimit === true
-    ? "at-limit"
-    : Number.isInteger(result.parameterCount)
-      ? result.parameterCount > 0 ? "listed" : "none"
-      : "missing";
-}
-
-function parameterProfileStatus(result) {
-  if (result.parameterProfile?.category) {
-    return result.parameterProfile.category;
-  }
-  return Number.isInteger(result.parameterCount)
-    ? result.parameterCount > 0 ? "listed" : "none"
-    : "missing";
-}
-
-function stateProfileStatus(result) {
-  if (result.stateProfile?.category) {
-    return result.stateProfile.category;
-  }
-  if (hasFailedPhase(result, ["getState"])) {
-    return "failed";
-  }
-  return hasOkPhase(result, "getState") ? "unprofiled" : "missing";
-}
-
-function vst3MidiControllerEventStatus(result) {
-  if (result.vst3MidiControllerEvents !== undefined) {
-    return result.vst3MidiControllerEvents;
-  }
-  return String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format";
-}
-
-function vst3MidiProgramChangeEventStatus(result) {
-  if (result.vst3MidiProgramChangeEvents !== undefined) {
-    return result.vst3MidiProgramChangeEvents;
-  }
-  return String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format";
-}
-
-function midiTimingStatus(result) {
-  if (result.midiTimingProfile?.category) {
-    return result.midiTimingProfile.category;
-  }
-  return Number.isInteger(result.midiEventCount) ? "unprofiled" : "missing";
-}
-
-function vst3ProgramDataProfileStatus(result) {
-  if (result.vst3ProgramDataProfile?.category) {
-    return result.vst3ProgramDataProfile.category;
-  }
-  return String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format";
-}
-
-function vst3ProgramListStatus(result) {
-  return String(result.format ?? "").toLowerCase() !== "vst3"
-    ? "skipped-format"
-    : Number.isInteger(result.vst3ProgramListCount)
-      ? result.vst3ProgramListCount > 0 ? "listed" : "none"
-      : "missing";
-}
-
-function latencyTailStatus(result) {
-  if (hasFailedPhase(result, ["getLatency", "getTailTime"])) {
-    return "failed";
-  }
-  const hasLatency = Number.isInteger(result.pluginLatencySamples) &&
-    Number.isInteger(result.transportLatencySamples) &&
-    Number.isInteger(result.reportedLatencySamples);
-  const hasTail = Number.isInteger(result.tailSamples) && typeof result.infiniteTail === "boolean";
-  if (hasLatency && hasTail) {
-    if (result.infiniteTail) {
-      return "infinite-tail";
-    }
-    if (result.pluginLatencySamples > 0 && result.tailSamples > 0) {
-      return "latency-tail";
-    }
-    if (result.pluginLatencySamples > 0) {
-      return "latency";
-    }
-    if (result.tailSamples > 0) {
-      return "tail";
-    }
-    return "zero";
-  }
-  if (hasLatency || hasTail || hasOkPhase(result, "getLatency") || hasOkPhase(result, "getTailTime")) {
-    return "partial";
-  }
-  return "missing";
-}
-
-function outputBusSignalStatus(result) {
-  if (hasFailedPhase(result, ["processAudioBlock"])) {
-    return "failed";
-  }
-  return result.outputBusSignalProfile?.category ?? (hasOkPhase(result, "processAudioBlock") ? "unprofiled" : "missing");
 }
 
 function countBusLayouts(results) {
