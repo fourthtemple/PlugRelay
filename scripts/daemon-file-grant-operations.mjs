@@ -7,6 +7,9 @@ const FILE_GRANT_OPERATION_DEFINITIONS = Object.freeze([
   ["saveStateDirectory", { access: "readWrite", kind: "directory", purpose: "state" }],
   ["other", {}]
 ]);
+const ACCESS_MODES = new Set(["read", "write", "readWrite"]);
+const GRANT_KINDS = new Set(["file", "directory"]);
+const GRANT_PURPOSES = new Set(["preset", "sample", "cache", "license", "state", "other"]);
 
 export const FILE_GRANT_OPERATION_NAMES = Object.freeze(
   FILE_GRANT_OPERATION_DEFINITIONS.map(([operation]) => operation)
@@ -70,17 +73,25 @@ export function createDaemonFileGrantOperations({
     }
     const defaults = FILE_GRANT_OPERATIONS.get(operation) ?? {};
     const constraints = { ...defaults };
-    for (const field of ["access", "kind", "purpose"]) {
+    for (const [field, allowed] of [["access", ACCESS_MODES], ["kind", GRANT_KINDS], ["purpose", GRANT_PURPOSES]]) {
       if (payload[field] == null) {
         continue;
       }
-      const requested = String(payload[field]);
+      const requested = requireGrantConstraint(payload[field], allowed, field);
       if (defaults[field] && requested !== defaults[field]) {
         throw makeProtocolError("invalid_argument", `${field} does not match the requested file grant operation.`);
       }
       constraints[field] = requested;
     }
     return constraints;
+  }
+
+  function requireGrantConstraint(value, allowed, field) {
+    const requested = String(value ?? "");
+    if (!allowed.has(requested)) {
+      throw makeProtocolError("invalid_argument", `${field} is not supported.`);
+    }
+    return requested;
   }
 
   function requireOtherOperationConstraints(payload) {

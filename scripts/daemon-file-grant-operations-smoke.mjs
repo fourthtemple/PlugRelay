@@ -263,6 +263,29 @@ export async function exerciseDaemonFileGrantOperation({ absolutePath, check, pr
   }
   check(unconstrainedOtherCode === "invalid_argument", "daemon file grant operations require explicit constraints for other operations");
 
+  const invalidOtherConstraintCodes = [];
+  for (const payload of [
+    { purpose: "private", access: "read", kind: "file" },
+    { purpose: "sample", access: "execute", kind: "file" },
+    { purpose: "sample", access: "read", kind: "socket" }
+  ]) {
+    try {
+      await operations.useFileGrant({
+        instanceId: instance.instanceId,
+        grantId: sampleGrant.grantId,
+        operation: "other",
+        ...payload
+      }, session);
+    } catch (error) {
+      invalidOtherConstraintCodes.push(error.code);
+    }
+  }
+  check(
+    invalidOtherConstraintCodes.length === 3 &&
+      invalidOtherConstraintCodes.every((code) => code === "invalid_argument"),
+    "daemon file grant operations reject invalid explicit other constraints"
+  );
+
   const otherResponse = await operations.useFileGrant({
     instanceId: instance.instanceId,
     grantId: sampleGrant.grantId,
