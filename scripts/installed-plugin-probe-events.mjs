@@ -1,4 +1,5 @@
 const MAX_VST3_NOTE_EXPRESSIONS = 256;
+const VST3_NO_PARAM_ID = "4294967295";
 const TEXT_NOTE_EXPRESSION_TYPE_ID = 6;
 
 export function summarizeProbeVst3Events(plugin) {
@@ -8,8 +9,10 @@ export function summarizeProbeVst3Events(plugin) {
 
   const {
     expressions,
+    invalidAssociatedParameterCount,
     invalidExpressionCount,
     invalidRouteExpressionCount,
+    invalidUnitLinkCount,
     metadataAtLimit
   } = boundedNoteExpressionProfile(plugin?.vst3NoteExpressions);
   const eventBuses = uniqueSorted(expressions.map((expression) => expression.busIndex));
@@ -19,8 +22,10 @@ export function summarizeProbeVst3Events(plugin) {
   const textExpressionCount = expressions.filter(isTextExpression).length;
   const flags = expressionFlags(expressions, eventBuses, channels, {
     duplicateTypeIdCount,
+    invalidAssociatedParameterCount,
     invalidExpressionCount,
     invalidRouteExpressionCount,
+    invalidUnitLinkCount,
     metadataAtLimit
   });
 
@@ -30,8 +35,10 @@ export function summarizeProbeVst3Events(plugin) {
     noteExpressionCount: expressions.length,
     valueExpressionCount: expressions.length - textExpressionCount,
     textExpressionCount,
+    invalidAssociatedParameterCount,
     invalidNoteExpressionCount: invalidExpressionCount,
     invalidNoteExpressionRouteCount: invalidRouteExpressionCount,
+    invalidNoteExpressionUnitLinkCount: invalidUnitLinkCount,
     duplicateNoteExpressionTypeIdCount: duplicateTypeIdCount,
     associatedParameterCount: expressions.filter((expression) => expression.hasAssociatedParameter).length,
     unitLinkedExpressionCount: expressions.filter((expression) => expression.hasUnitLink).length,
@@ -49,7 +56,14 @@ function expressionFlags(
   expressions,
   eventBuses,
   channels,
-  { duplicateTypeIdCount, invalidExpressionCount, invalidRouteExpressionCount, metadataAtLimit }
+  {
+    duplicateTypeIdCount,
+    invalidAssociatedParameterCount,
+    invalidExpressionCount,
+    invalidRouteExpressionCount,
+    invalidUnitLinkCount,
+    metadataAtLimit
+  }
 ) {
   if (expressions.length === 0) {
     const flags = invalidExpressionCount > 0 || invalidRouteExpressionCount > 0
@@ -70,6 +84,12 @@ function expressionFlags(
   }
   if (invalidRouteExpressionCount > 0) {
     flags.push("invalid-note-expression-route");
+  }
+  if (invalidAssociatedParameterCount > 0) {
+    flags.push("invalid-associated-parameter");
+  }
+  if (invalidUnitLinkCount > 0) {
+    flags.push("invalid-unit-link");
   }
   if (duplicateTypeIdCount > 0) {
     flags.push("duplicate-note-expression-type-id");
@@ -132,11 +152,20 @@ function expressionCategory(expressions, eventBuses, channels, invalidExpression
 
 function boundedNoteExpressionProfile(value) {
   if (!Array.isArray(value)) {
-    return { expressions: [], invalidExpressionCount: 0, invalidRouteExpressionCount: 0, metadataAtLimit: false };
+    return {
+      expressions: [],
+      invalidAssociatedParameterCount: 0,
+      invalidExpressionCount: 0,
+      invalidRouteExpressionCount: 0,
+      invalidUnitLinkCount: 0,
+      metadataAtLimit: false
+    };
   }
   const expressions = [];
+  let invalidAssociatedParameterCount = 0;
   let invalidExpressionCount = 0;
   let invalidRouteExpressionCount = 0;
+  let invalidUnitLinkCount = 0;
   for (const expression of value.slice(0, MAX_VST3_NOTE_EXPRESSIONS)) {
     const normalized = normalizeNoteExpression(expression);
     if (normalized) {
@@ -144,14 +173,22 @@ function boundedNoteExpressionProfile(value) {
       if (normalized.invalidRouteMetadata) {
         invalidRouteExpressionCount += 1;
       }
+      if (normalized.invalidAssociatedParameterMetadata) {
+        invalidAssociatedParameterCount += 1;
+      }
+      if (normalized.invalidUnitLinkMetadata) {
+        invalidUnitLinkCount += 1;
+      }
     } else {
       invalidExpressionCount += 1;
     }
   }
   return {
     expressions,
+    invalidAssociatedParameterCount,
     invalidExpressionCount,
     invalidRouteExpressionCount,
+    invalidUnitLinkCount,
     metadataAtLimit: value.length >= MAX_VST3_NOTE_EXPRESSIONS
   };
 }
@@ -167,6 +204,7 @@ function normalizeNoteExpression(expression) {
   const busIndex = boundedInt(expression.busIndex, 0, 31);
   const channel = boundedInt(expression.channel, 0, 15);
   const unitId = boundedInt(expression.unitId, -2_147_483_648, 2_147_483_647);
+  const associatedParameterId = normalizeAssociatedParameterId(expression.associatedParameterId);
   return {
     typeId,
     busIndex: busIndex ?? 0,
@@ -174,12 +212,21 @@ function normalizeNoteExpression(expression) {
     invalidRouteMetadata:
       (hasOwn(expression, "busIndex") && busIndex === undefined) ||
       (hasOwn(expression, "channel") && channel === undefined),
-    hasAssociatedParameter: typeof expression.associatedParameterId === "string" && expression.associatedParameterId.length > 0,
+    invalidAssociatedParameterMetadata: hasOwn(expression, "associatedParameterId") && associatedParameterId === undefined,
+    invalidUnitLinkMetadata: hasOwn(expression, "unitId") && unitId === undefined,
+    hasAssociatedParameter: associatedParameterId !== undefined,
     hasUnitLink: unitId !== undefined,
     bipolar: expression.bipolar === true,
     oneShot: expression.oneShot === true,
     absolute: expression.absolute === true
   };
+}
+
+function normalizeAssociatedParameterId(value) {
+  if (typeof value !== "string" || value.length === 0 || value === VST3_NO_PARAM_ID || value === "-1") {
+    return undefined;
+  }
+  return value;
 }
 
 function hasOwn(object, key) {
