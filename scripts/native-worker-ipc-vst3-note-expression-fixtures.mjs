@@ -25,11 +25,11 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       { type: "noteExpressionText", typeId: 6, text: "bow", noteId: 42, channel: 1, time: 4, busIndex: 2 }
     ]);
     const bounded = await noteExpressionWorker.sendMidiEvents([
-      { type: "noteOn", note: 64, velocity: 0.5, channel: 15, time: 0, noteId: 2147483647 },
-      { type: "noteExpression", typeId: 4294967295, value: 1, noteId: 2147483647, channel: 15, time: 1 },
-      { type: "noteExpressionText", typeId: 6, text: "\u00b5-tilt", noteId: 2147483647, channel: 15, time: 2 },
-      { type: "noteExpressionText", typeId: 6, text: "\u00b5".repeat(128), noteId: 2147483647, channel: 15, time: 6 },
-      { type: "noteExpressionText", typeId: 6, text: "x".repeat(256), noteId: 2147483647, channel: 15, time: 7 }
+      { type: "noteOn", note: 64, velocity: 0.5, channel: 15, time: 0, noteId: 2147483647, busIndex: 31 },
+      { type: "noteExpression", typeId: 4294967295, value: 1, noteId: 2147483647, channel: 15, time: 1, busIndex: 31 },
+      { type: "noteExpressionText", typeId: 6, text: "\u00b5-tilt", noteId: 2147483647, channel: 15, time: 2, busIndex: 31 },
+      { type: "noteExpressionText", typeId: 6, text: "\u00b5".repeat(128), noteId: 2147483647, channel: 15, time: 6, busIndex: 31 },
+      { type: "noteExpressionText", typeId: 6, text: "x".repeat(256), noteId: 2147483647, channel: 15, time: 7, busIndex: 31 }
     ]);
     const minimum = await noteExpressionWorker.sendMidiEvents([
       { type: "noteOn", note: 0, velocity: 0.1, channel: 0, time: 0, noteId: 0 },
@@ -87,6 +87,9 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       ])),
       rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
         { type: "noteExpressionText", typeId: 6, text: "z", noteId: -1, channel: 0, time: 0 }
+      ])),
+      rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
+        { type: "noteExpressionText", typeId: 6, text: "z", noteId: 1, channel: 0, time: 0, busIndex: 32 }
       ]))
     ]);
     check(
@@ -95,9 +98,10 @@ export async function exerciseVst3NoteExpressionNativeWorker({
         "VST3 note-expression noteId must be an integer in 0..2147483647.",
         "VST3 note-expression value must be a number in 0..1.",
         "VST3 note-expression typeId must be an integer in 0..4294967295.",
-        "VST3 note-expression noteId must be an integer in 0..2147483647."
+        "VST3 note-expression noteId must be an integer in 0..2147483647.",
+        "MIDI busIndex must be an integer in 0..31."
       ]),
-      "native VST3 workers reject malformed note-expression value metadata before IPC"
+      "native VST3 workers reject malformed note-expression value and route metadata before IPC"
     );
     const invalidNoteMessages = await Promise.all([
       rejectedMessage(() => noteExpressionWorker.sendMidiEvents([
@@ -181,11 +185,11 @@ const delimiterText = "expr:bus=2;line\\nrobot\\u{1f916}";
 const expectedCommands = new Set([
   "midi on:60:0.8:1:0:42:bus=2;expr:0:0.5:42:1:2:bus=2;exprText:6:Ym93:42:1:4:bus=2",
   [
-    "midi on:64:0.5:15:0:2147483647",
-    "expr:4294967295:1:2147483647:15:1",
-    \`exprText:6:\${Buffer.from(utf8Text, "utf8").toString("base64")}:2147483647:15:2\`,
-    \`exprText:6:\${Buffer.from(maxUtf8Text, "utf8").toString("base64")}:2147483647:15:6\`,
-    \`exprText:6:\${Buffer.from(maxText, "utf8").toString("base64")}:2147483647:15:7\`
+    "midi on:64:0.5:15:0:2147483647:bus=31",
+    "expr:4294967295:1:2147483647:15:1:bus=31",
+    \`exprText:6:\${Buffer.from(utf8Text, "utf8").toString("base64")}:2147483647:15:2:bus=31\`,
+    \`exprText:6:\${Buffer.from(maxUtf8Text, "utf8").toString("base64")}:2147483647:15:6:bus=31\`,
+    \`exprText:6:\${Buffer.from(maxText, "utf8").toString("base64")}:2147483647:15:7:bus=31\`
   ].join(";"),
   "midi on:0:0.1:0:0:0;expr:1:0:0:0:0;exprText:6:eg==:0:0:1",
   [
