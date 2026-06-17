@@ -92,6 +92,16 @@ export function midiTimingStatus(result) {
   return Number.isInteger(result.midiEventCount) ? "unprofiled" : "missing";
 }
 
+export function vst3EventProfileStatus(result) {
+  if (result.vst3EventProfile?.category) {
+    return String(result.vst3EventProfile.category);
+  }
+  if (String(result.format ?? "").toLowerCase() !== "vst3") {
+    return "skipped-format";
+  }
+  return hasFailedPhase(result, ["createInstance"]) ? "failed" : "missing";
+}
+
 export function vst3ProgramDataProfileStatus(result) {
   if (result.vst3ProgramDataProfile?.category) {
     return result.vst3ProgramDataProfile.category;

@@ -4,12 +4,12 @@ import {
   safeMatrixIntegerArray,
   safeMatrixText
 } from "./installed-plugin-probe-reporting-safety.mjs";
+import { vst3EventProfileStatus } from "./installed-plugin-probe-status.mjs";
 
 export function vst3EventMatrixFields(result) {
   const profile = result.vst3EventProfile;
-  const defaultCategory = String(result.format ?? "").toLowerCase() === "vst3" ? "missing" : "skipped-format";
   return {
-    vst3EventCategory: safeMatrixText(profile?.category ?? defaultCategory, 64),
+    vst3EventCategory: safeMatrixText(vst3EventProfileStatus(result), 64),
     vst3EventFlags: safeMatrixArray(profile?.flags, 64),
     vst3NoteExpressionCount: safeMatrixInteger(profile?.noteExpressionCount, 0, 256),
     vst3ValueNoteExpressionCount: safeMatrixInteger(profile?.valueExpressionCount, 0, 256),

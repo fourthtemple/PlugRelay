@@ -176,6 +176,12 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
     format: "vst3",
     vst3EventProfile
   }]).matrix[0];
+  const failedVst3EventSummary = summarizeProbeResults([{
+    ok: false,
+    format: "vst3",
+    pluginId: "vst3:event-metadata-failed",
+    phases: [{ name: "createInstance", ok: false, error: { code: "native_worker_failed" } }]
+  }]);
   check(
     vst3EventProfile.category === "non-main-event-bus" &&
       vst3EventProfile.noteExpressionCount === 6 &&
@@ -225,6 +231,8 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       vst3EventMatrix.vst3InvalidUnitLinkedNoteExpressionCount === 1 &&
       vst3EventMatrix.vst3FixedNoteExpressionValueRangeCount === 1 &&
       vst3EventMatrix.vst3SteppedNoteExpressionCount === 1 &&
+      failedVst3EventSummary.coverage.vst3EventProfiles.failed === 1 &&
+      failedVst3EventSummary.matrix[0].vst3EventCategory === "failed" &&
       invalidVst3EventProfile.category === "invalid-metadata" &&
       invalidVst3EventProfile.invalidNoteExpressionCount === 1 &&
       invalidVst3EventProfile.flags.includes("no-valid-note-expressions") &&

@@ -18,6 +18,7 @@ import {
   parameterProfileStatus,
   stateProfileStatus,
   summarizeFeatureStatus,
+  vst3EventProfileStatus,
   vst3MidiControllerEventStatus,
   vst3MidiProgramChangeEventStatus,
   vst3ProgramDataStatus,
@@ -432,11 +433,7 @@ function uniqueKnownFileGrantOperations(operations) {
 function countVst3EventProfiles(results) {
   const counts = {};
   for (const result of results) {
-    const category = result.vst3EventProfile?.category
-      ? String(result.vst3EventProfile.category)
-      : String(result.format ?? "").toLowerCase() === "vst3"
-        ? "missing"
-        : "skipped-format";
+    const category = vst3EventProfileStatus(result);
     counts[category] = (counts[category] ?? 0) + 1;
     for (const flag of result.vst3EventProfile?.flags ?? []) {
       if (flag === "no-note-expressions") {
