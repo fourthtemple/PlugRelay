@@ -127,6 +127,7 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       { typeId: 0, busIndex: 0, channel: 0 },
       { typeId: 6, busIndex: 2, channel: 3, associatedParameterId: "param-1" },
       { typeId: 6, busIndex: 2, channel: 3 },
+      { typeId: 7, busIndex: 99, channel: 99 },
       { typeId: "bad", busIndex: 0, channel: 0 }
     ]
   });
@@ -140,18 +141,20 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
   });
   check(
     vst3EventProfile.category === "non-main-event-bus" &&
-      vst3EventProfile.noteExpressionCount === 3 &&
-      vst3EventProfile.valueExpressionCount === 1 &&
+      vst3EventProfile.noteExpressionCount === 4 &&
+      vst3EventProfile.valueExpressionCount === 2 &&
       vst3EventProfile.textExpressionCount === 2 &&
       vst3EventProfile.invalidNoteExpressionCount === 1 &&
+      vst3EventProfile.invalidNoteExpressionRouteCount === 1 &&
       vst3EventProfile.duplicateNoteExpressionTypeIdCount === 1 &&
       vst3EventProfile.associatedParameterCount === 1 &&
-      JSON.stringify(vst3EventProfile.typeIds) === JSON.stringify([0, 6]) &&
+      JSON.stringify(vst3EventProfile.typeIds) === JSON.stringify([0, 6, 7]) &&
       JSON.stringify(vst3EventProfile.eventBuses) === JSON.stringify([0, 2]) &&
       vst3EventProfile.flags.includes("text-expression") &&
       vst3EventProfile.flags.includes("value-expression") &&
       vst3EventProfile.flags.includes("associated-parameter") &&
       vst3EventProfile.flags.includes("invalid-note-expression") &&
+      vst3EventProfile.flags.includes("invalid-note-expression-route") &&
       vst3EventProfile.flags.includes("duplicate-note-expression-type-id") &&
       invalidVst3EventProfile.category === "invalid-metadata" &&
       invalidVst3EventProfile.invalidNoteExpressionCount === 1 &&

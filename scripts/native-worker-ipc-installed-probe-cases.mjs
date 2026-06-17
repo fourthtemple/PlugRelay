@@ -159,17 +159,19 @@ export function exerciseInstalledProbeSupport({ check }) {
           "text-expression",
           "value-expression",
           "invalid-note-expression",
+          "invalid-note-expression-route",
           "duplicate-note-expression-type-id"
         ],
-        noteExpressionCount: 3,
-        valueExpressionCount: 1,
+        noteExpressionCount: 4,
+        valueExpressionCount: 2,
         textExpressionCount: 2,
         invalidNoteExpressionCount: 1,
+        invalidNoteExpressionRouteCount: 1,
         duplicateNoteExpressionTypeIdCount: 1,
         associatedParameterCount: 1,
         eventBuses: [0, 2],
         channels: [0, 3],
-        typeIds: [0, 6]
+        typeIds: [0, 6, 7]
       },
       automationLanePointCount: 2,
       midiEventCount: 16,
@@ -284,6 +286,7 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.vst3EventProfiles["flag:text-expression"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:value-expression"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:invalid-note-expression"] === 1 &&
+      coverageSummary.coverage.vst3EventProfiles["flag:invalid-note-expression-route"] === 1 &&
       coverageSummary.coverage.vst3EventProfiles["flag:duplicate-note-expression-type-id"] === 1 &&
       coverageSummary.coverage.vst3MidiControllerEvents.accepted === 1 &&
       coverageSummary.coverage.vst3MidiControllerEvents["skipped-format"] === 1 &&
@@ -354,13 +357,14 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].busInactiveOutputIndexes) === JSON.stringify([1]) &&
       coverageSummary.matrix[0].busInputMetadataAtLimit === true &&
       coverageSummary.matrix[0].busOutputMetadataAtLimit === true &&
-      coverageSummary.matrix[0].vst3NoteExpressionCount === 3 &&
-      coverageSummary.matrix[0].vst3ValueNoteExpressionCount === 1 &&
+      coverageSummary.matrix[0].vst3NoteExpressionCount === 4 &&
+      coverageSummary.matrix[0].vst3ValueNoteExpressionCount === 2 &&
       coverageSummary.matrix[0].vst3TextNoteExpressionCount === 2 &&
       coverageSummary.matrix[0].vst3InvalidNoteExpressionCount === 1 &&
+      coverageSummary.matrix[0].vst3InvalidNoteExpressionRouteCount === 1 &&
       coverageSummary.matrix[0].vst3DuplicateNoteExpressionTypeIdCount === 1 &&
       coverageSummary.matrix[0].vst3AssociatedNoteExpressionCount === 1 &&
-      JSON.stringify(coverageSummary.matrix[0].vst3NoteExpressionTypeIds) === JSON.stringify([0, 6]) &&
+      JSON.stringify(coverageSummary.matrix[0].vst3NoteExpressionTypeIds) === JSON.stringify([0, 6, 7]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventBuses) === JSON.stringify([0, 2]) &&
       JSON.stringify(coverageSummary.matrix[0].vst3EventChannels) === JSON.stringify([0, 3]) &&
       coverageSummary.matrix[0].midiEventCount === 16 &&

@@ -9,6 +9,7 @@ export function summarizeProbeVst3Events(plugin) {
   const {
     expressions,
     invalidExpressionCount,
+    invalidRouteExpressionCount,
     metadataAtLimit
   } = boundedNoteExpressionProfile(plugin?.vst3NoteExpressions);
   const eventBuses = uniqueSorted(expressions.map((expression) => expression.busIndex));
@@ -19,6 +20,7 @@ export function summarizeProbeVst3Events(plugin) {
   const flags = expressionFlags(expressions, eventBuses, channels, {
     duplicateTypeIdCount,
     invalidExpressionCount,
+    invalidRouteExpressionCount,
     metadataAtLimit
   });
 
@@ -29,6 +31,7 @@ export function summarizeProbeVst3Events(plugin) {
     valueExpressionCount: expressions.length - textExpressionCount,
     textExpressionCount,
     invalidNoteExpressionCount: invalidExpressionCount,
+    invalidNoteExpressionRouteCount: invalidRouteExpressionCount,
     duplicateNoteExpressionTypeIdCount: duplicateTypeIdCount,
     associatedParameterCount: expressions.filter((expression) => expression.hasAssociatedParameter).length,
     metadataAtLimit,
@@ -38,11 +41,19 @@ export function summarizeProbeVst3Events(plugin) {
   };
 }
 
-function expressionFlags(expressions, eventBuses, channels, { duplicateTypeIdCount, invalidExpressionCount, metadataAtLimit }) {
+function expressionFlags(
+  expressions,
+  eventBuses,
+  channels,
+  { duplicateTypeIdCount, invalidExpressionCount, invalidRouteExpressionCount, metadataAtLimit }
+) {
   if (expressions.length === 0) {
-    const flags = invalidExpressionCount > 0
+    const flags = invalidExpressionCount > 0 || invalidRouteExpressionCount > 0
       ? ["invalid-note-expression", "no-valid-note-expressions"]
       : ["no-note-expressions"];
+    if (invalidRouteExpressionCount > 0) {
+      flags.push("invalid-note-expression-route");
+    }
     if (metadataAtLimit) {
       flags.push("metadata-at-limit");
     }
@@ -52,6 +63,9 @@ function expressionFlags(expressions, eventBuses, channels, { duplicateTypeIdCou
   const flags = ["note-expressions"];
   if (invalidExpressionCount > 0) {
     flags.push("invalid-note-expression");
+  }
+  if (invalidRouteExpressionCount > 0) {
+    flags.push("invalid-note-expression-route");
   }
   if (duplicateTypeIdCount > 0) {
     flags.push("duplicate-note-expression-type-id");
@@ -102,14 +116,18 @@ function expressionCategory(expressions, eventBuses, channels, invalidExpression
 
 function boundedNoteExpressionProfile(value) {
   if (!Array.isArray(value)) {
-    return { expressions: [], invalidExpressionCount: 0, metadataAtLimit: false };
+    return { expressions: [], invalidExpressionCount: 0, invalidRouteExpressionCount: 0, metadataAtLimit: false };
   }
   const expressions = [];
   let invalidExpressionCount = 0;
+  let invalidRouteExpressionCount = 0;
   for (const expression of value.slice(0, MAX_VST3_NOTE_EXPRESSIONS)) {
     const normalized = normalizeNoteExpression(expression);
     if (normalized) {
       expressions.push(normalized);
+      if (normalized.invalidRouteMetadata) {
+        invalidRouteExpressionCount += 1;
+      }
     } else {
       invalidExpressionCount += 1;
     }
@@ -117,6 +135,7 @@ function boundedNoteExpressionProfile(value) {
   return {
     expressions,
     invalidExpressionCount,
+    invalidRouteExpressionCount,
     metadataAtLimit: value.length >= MAX_VST3_NOTE_EXPRESSIONS
   };
 }
@@ -129,12 +148,21 @@ function normalizeNoteExpression(expression) {
   if (typeId === undefined) {
     return undefined;
   }
+  const busIndex = boundedInt(expression.busIndex, 0, 31);
+  const channel = boundedInt(expression.channel, 0, 15);
   return {
     typeId,
-    busIndex: boundedInt(expression.busIndex, 0, 31) ?? 0,
-    channel: boundedInt(expression.channel, 0, 15) ?? 0,
+    busIndex: busIndex ?? 0,
+    channel: channel ?? 0,
+    invalidRouteMetadata:
+      (hasOwn(expression, "busIndex") && busIndex === undefined) ||
+      (hasOwn(expression, "channel") && channel === undefined),
     hasAssociatedParameter: typeof expression.associatedParameterId === "string" && expression.associatedParameterId.length > 0
   };
+}
+
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
 }
 
 function uniqueSorted(values) {
