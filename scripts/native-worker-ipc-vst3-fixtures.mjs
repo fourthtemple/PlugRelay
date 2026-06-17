@@ -107,7 +107,7 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
     await metadataWorker.ready;
     const parameters = await metadataWorker.getParameters();
     check(
-      parameters.length === 3 &&
+      parameters.length === 4 &&
         parameters[0].id === "cutoff" &&
         parameters[0].name === "cutoff" &&
         parameters[0].nameFallback === true &&
@@ -126,7 +126,13 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         parameters[1].programList?.programs?.[0]?.nameFallback === true &&
         parameters[2].id === "program-empty-list" &&
         parameters[2].programChange === true &&
-        !Object.hasOwn(parameters[2], "programList"),
+        !Object.hasOwn(parameters[2], "programList") &&
+        parameters[3].id === "unit-sentinel" &&
+        parameters[3].vst3Unit?.id === 4 &&
+        parameters[3].vst3Unit.parentUnitId === 2 &&
+        parameters[3].vst3Unit.name === "Unit 4" &&
+        parameters[3].vst3Unit.nameFallback === true &&
+        !Object.hasOwn(parameters[3].vst3Unit, "programListId"),
       "native VST3 workers normalize partial/weird parameter metadata"
     );
 
@@ -324,6 +330,12 @@ const responses = {
           programDataSupported: true,
           programs: []
         }
+      },
+      {
+        id: "unit-sentinel",
+        name: "Unit Sentinel",
+        normalizedValue: 0.2,
+        vst3Unit: { id: 4, parentUnitId: 2, name: "", nameFallback: true, programListId: -1 }
       }
     ]
   },
