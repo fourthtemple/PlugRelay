@@ -239,6 +239,20 @@ export async function exerciseVst3MultiBusNativeWorker({
         JSON.stringify(emptyOutputBusesRendered.outputBuses[0].channels) === JSON.stringify(emptyOutputBusesRendered.channels),
       "native VST3 workers synthesize main output buses for empty bus responses"
     );
+    const malformedMainBusRendered = await busWorker.render({
+      frames: 2,
+      sampleRate: 48000,
+      channels: [[0.2, 0.6], [0.4, 0.8]],
+      transport: { samplePosition: 192 }
+    });
+    const malformedMainBuses = new Map((malformedMainBusRendered.outputBuses ?? []).map((bus) => [bus.index, bus.channels]));
+    check(
+      malformedMainBusRendered.outputBuses?.length === 2 &&
+        JSON.stringify(malformedMainBusRendered.channels) === JSON.stringify([[0.2, 0.6], [0.4, 0.8]]) &&
+        JSON.stringify(malformedMainBuses.get(0)) === JSON.stringify(malformedMainBusRendered.channels) &&
+        JSON.stringify(malformedMainBuses.get(1)) === JSON.stringify([[0.9, -0.9]]),
+      "native VST3 workers keep legacy main output authoritative over malformed bus 0"
+    );
   } finally {
     busWorker.destroy();
   }
@@ -639,6 +653,22 @@ process.stdin.on("data", (chunk) => {
       JSON.stringify(channels) === JSON.stringify([[0.1, 0.3], [0.5, 0.7]]);
     if (emptyOutputBusRequestMatched) {
       process.stdout.write(JSON.stringify({ channels, outputBuses: [] }) + "\\n");
+      continue;
+    }
+
+    const malformedMainOutputBusRequestMatched = frames === 2 &&
+      Number(parts[2]) === 48000 &&
+      parts[4] === "-" &&
+      parts[5] === "sample=192" &&
+      JSON.stringify(channels) === JSON.stringify([[0.2, 0.6], [0.4, 0.8]]);
+    if (malformedMainOutputBusRequestMatched) {
+      process.stdout.write(JSON.stringify({
+        channels,
+        outputBuses: [
+          { index: 0, channels: [["bad", 9], [0.5, 0.5]] },
+          { index: 1, channels: [[0.9, -0.9]] }
+        ]
+      }) + "\\n");
       continue;
     }
 
