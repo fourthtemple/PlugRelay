@@ -63,6 +63,7 @@ export async function exerciseVst3ProgramDataNativeWorker({
     const restoredBytes = await programDataWorker.setVst3ProgramData(7, 2, "YWI=");
     const restoredBinaryBytes = await programDataWorker.setVst3ProgramData(11, 4, "AAE=");
     const restoredPaddedBytes = await programDataWorker.setVst3ProgramData(2147483647, 255, "+/8=");
+    const restoredDoublePaddedBytes = await programDataWorker.setVst3ProgramData(12, 1, "Zg==");
     const sentinelRestoreMessage = await rejectedMessage(() =>
       programDataWorker.setVst3ProgramData(-1, 0, "YWI=")
     );
@@ -76,7 +77,8 @@ export async function exerciseVst3ProgramDataNativeWorker({
       restoredEmpty?.restored === "empty" &&
         restoredBytes?.restored === "bytes" &&
         restoredBinaryBytes?.restored === "binary-bytes" &&
-        restoredPaddedBytes?.restored === "padded-bytes",
+        restoredPaddedBytes?.restored === "padded-bytes" &&
+        restoredDoublePaddedBytes?.restored === "double-padded-bytes",
       "native VST3 workers encode signed, empty, binary, and padded program-data restore commands"
     );
     check(
@@ -153,7 +155,8 @@ const responses = new Map([
   ["setProgramData 7 2 YWI=", { ok: true, restored: "bytes" }],
   ["setProgramData 11 4 AAE=", { ok: true, restored: "binary-bytes" }],
   ["setProgramData 7 3 YWI=", { ok: false }],
-  ["setProgramData 2147483647 255 +/8=", { ok: true, restored: "padded-bytes" }]
+  ["setProgramData 2147483647 255 +/8=", { ok: true, restored: "padded-bytes" }],
+  ["setProgramData 12 1 Zg==", { ok: true, restored: "double-padded-bytes" }]
 ]);
 
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
