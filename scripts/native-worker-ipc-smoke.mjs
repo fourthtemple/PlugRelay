@@ -8,6 +8,7 @@ import { createDaemonInstrumentRendering } from "./daemon-instrument-rendering.m
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { applyNativeParameterSnapshot, parameterSnapshotResponse } from "./daemon-parameter-snapshots.mjs";
 import { exerciseInstalledProbeSupport } from "./native-worker-ipc-installed-probe-cases.mjs";
+import { exerciseInstalledProbeEventSupport } from "./native-worker-ipc-installed-probe-event-cases.mjs";
 import { exerciseInstalledProbeFileGrantSupport } from "./native-worker-ipc-installed-probe-file-grant-cases.mjs";
 import { exerciseInstalledProbeMidiSupport } from "./native-worker-ipc-installed-probe-midi-cases.mjs";
 import { exerciseInstalledProbeParameterSupport } from "./native-worker-ipc-installed-probe-parameter-cases.mjs";
@@ -57,6 +58,7 @@ function protocolError(code, message, details) {
 
 try {
   await exerciseInstalledProbeSupport({ check });
+  exerciseInstalledProbeEventSupport({ check });
   await exerciseInstalledProbeFileGrantSupport({ check });
   exerciseInstalledProbeMidiSupport({ check });
   exerciseInstalledProbeParameterSupport({ check });
