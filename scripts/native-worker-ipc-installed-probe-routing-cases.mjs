@@ -279,6 +279,21 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       { index: 3, channels: 1, active: true }
     ]
   });
+  const auxOnlyOutputSignalProfile = summarizeProbeOutputBusSignal({
+    channels: [[0, 0], [0, 0]],
+    outputBuses: [
+      { index: 0, channels: [[0, 0], [0, 0]] },
+      { index: 1, channels: [[0.4, 0.6]] },
+      { index: 2, channels: [[0, 0]] }
+    ]
+  }, {
+    outputChannels: 2,
+    outputBusLayouts: [
+      { index: 0, channels: 2, active: true },
+      { index: 1, channels: 1, active: true },
+      { index: 2, channels: 1, active: true }
+    ]
+  });
   const missingOutputSignalMatrix = summarizeProbeResults([{
     ok: true,
     outputBusSignalProfile: missingOutputSignalProfile
@@ -286,6 +301,10 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
   const extraOutputSignalMatrix = summarizeProbeResults([{
     ok: true,
     outputBusSignalProfile
+  }]).matrix[0];
+  const auxOnlyOutputSignalMatrix = summarizeProbeResults([{
+    ok: true,
+    outputBusSignalProfile: auxOnlyOutputSignalProfile
   }]).matrix[0];
   check(
     outputBusSignalProfile.category === "main-aux-signal" &&
@@ -305,6 +324,16 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       inactiveOutputSignalProfile.signalOutputBusCount === 0 &&
       inactiveOutputSignalProfile.silentOutputBusCount === 1 &&
       !inactiveOutputSignalProfile.flags.includes("aux-signal") &&
+      auxOnlyOutputSignalProfile.category === "aux-signal" &&
+      auxOnlyOutputSignalProfile.signalOutputBusCount === 1 &&
+      auxOnlyOutputSignalProfile.silentOutputBusCount === 2 &&
+      !auxOnlyOutputSignalProfile.flags.includes("main-signal") &&
+      auxOnlyOutputSignalProfile.flags.includes("aux-signal") &&
+      JSON.stringify(auxOnlyOutputSignalProfile.signalOutputBusIndexes) === JSON.stringify([1]) &&
+      auxOnlyOutputSignalMatrix.outputBusSignal === "aux-signal" &&
+      auxOnlyOutputSignalMatrix.outputBusSignalCount === 1 &&
+      auxOnlyOutputSignalMatrix.outputBusSilentCount === 2 &&
+      JSON.stringify(auxOnlyOutputSignalMatrix.outputBusSignalIndexes) === JSON.stringify([1]) &&
       missingOutputSignalProfile.category === "main-signal" &&
       missingOutputSignalProfile.signalOutputBusCount === 1 &&
       missingOutputSignalProfile.silentOutputBusCount === 1 &&
