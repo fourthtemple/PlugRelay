@@ -215,17 +215,31 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
     id: 2147483647,
     programDataSupported: true,
     programs: [{ index: 255 }]
+  }, {
+    id: -2147483648,
+    programDataSupported: true,
+    programs: [{ index: 0 }]
   }];
   const restoredBoundaryProgramData = await programDataSupport.setVst3ProgramData(
     "inst-test",
     programEnvelope({ programListId: 2147483647, programIndex: 255, data: "+/8=" }),
     {}
   );
+  const restoredUpperBoundaryData = fakeInstance.restoredProgramData?.data;
+  const restoredSignedBoundaryProgramData = await programDataSupport.setVst3ProgramData(
+    "inst-test",
+    programEnvelope({ programListId: -2147483648, programIndex: 0, data: "" }),
+    {}
+  );
   check(
     restoredBoundaryProgramData.restored === true &&
       restoredBoundaryProgramData.programListId === 2147483647 &&
       restoredBoundaryProgramData.programIndex === 255 &&
-      fakeInstance.restoredProgramData?.data === "+/8=",
+      restoredUpperBoundaryData === "+/8=" &&
+      restoredSignedBoundaryProgramData.restored === true &&
+      restoredSignedBoundaryProgramData.programListId === -2147483648 &&
+      restoredSignedBoundaryProgramData.programIndex === 0 &&
+      fakeInstance.restoredProgramData?.data === "",
     "daemon VST3 program-data helper restores boundary-listed envelopes"
   );
   fakeInstance.vst3ProgramLists = originalBoundaryProgramLists;
