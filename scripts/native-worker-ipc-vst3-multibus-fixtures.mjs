@@ -97,7 +97,7 @@ export async function exerciseVst3MultiBusNativeWorker({
         JSON.stringify(sparseAuxBuses.get(0)) === JSON.stringify(sparseAuxRendered.channels) &&
         JSON.stringify(sparseAuxBuses.get(1)) === JSON.stringify([[0.9, 0.7]]) &&
         JSON.stringify(sparseAuxBuses.get(4)) === JSON.stringify([[-0.9, -0.7]]),
-      "native VST3 workers route sparse aux input buses by explicit index"
+      "native VST3 workers sort sparse aux input buses by explicit index"
     );
     const inactiveOutputRendered = await busWorker.render({
       frames: 2,
@@ -388,8 +388,8 @@ process.stdin.on("data", (chunk) => {
 
     const sparseAuxLegacyChannels = [[0, 0], [0, 0]];
     const sparseAuxInputBuses = [
-      { index: 3, channels: [[0.9, 0.7]] },
-      { index: 0, channels: [[0.05, 0.15], [0.25, 0.35]] }
+      { index: 0, channels: [[0.05, 0.15], [0.25, 0.35]] },
+      { index: 3, channels: [[0.9, 0.7]] }
     ];
     const sparseAuxRequestMatched = frames === 2 &&
       Number(parts[2]) === 48000 &&

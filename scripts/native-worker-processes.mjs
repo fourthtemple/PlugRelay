@@ -677,7 +677,12 @@ export function createNativeWorkerProcesses({
     }
     const encoded = buses
       .slice(0, limits.maxPluginBuses)
-      .map((bus) => `${normalizeInt(bus?.index, 0, limits.maxPluginBuses - 1, 0)}=${encodeAudioChannels(bus?.channels, frames)}`)
+      .map((bus) => ({
+        index: normalizeInt(bus?.index, 0, limits.maxPluginBuses - 1, 0),
+        channels: encodeAudioChannels(bus?.channels, frames)
+      }))
+      .sort((left, right) => left.index - right.index)
+      .map((bus) => `${bus.index}=${bus.channels}`)
       .join(";");
     return encoded || "-";
   }
