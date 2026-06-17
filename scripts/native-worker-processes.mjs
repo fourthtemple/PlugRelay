@@ -680,7 +680,8 @@ export function createNativeWorkerProcesses({
       if (!bus || typeof bus !== "object" || Array.isArray(bus)) {
         continue;
       }
-      const index = normalizeInt(bus.index, 0, limits.maxPluginBuses - 1, 0);
+      const index = normalizeBusIndex(bus.index);
+      if (index === undefined) continue;
       if (!byIndex.has(index)) {
         byIndex.set(index, encodeAudioChannels(bus.channels, frames));
       }
@@ -701,7 +702,8 @@ export function createNativeWorkerProcesses({
       if (!bus || typeof bus !== "object" || Array.isArray(bus)) {
         continue;
       }
-      const index = normalizeInt(bus.index, 0, limits.maxPluginBuses - 1, 0);
+      const index = normalizeBusIndex(bus.index);
+      if (index === undefined) continue;
       if (byIndex.has(index)) {
         continue;
       }
@@ -726,6 +728,12 @@ export function createNativeWorkerProcesses({
         return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
       })
     );
+  }
+
+  function normalizeBusIndex(value) {
+    if (typeof value !== "number" && typeof value !== "string") return undefined;
+    if (typeof value === "string" && value.trim().length === 0) return undefined;
+    return normalizeInt(value, 0, limits.maxPluginBuses - 1, 0);
   }
 
   return {

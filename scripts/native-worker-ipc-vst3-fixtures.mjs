@@ -196,7 +196,8 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
 
     const layout = await metadataWorker.getLayout();
     check(
-      layout.requestedOutputChannels === 32 &&
+      layout.requestedInputChannels === 0 &&
+        layout.requestedOutputChannels === 32 &&
         layout.outputChannels === 1 &&
         layout.outputBuses === 2 &&
         layout.outputBusLayouts?.[0]?.index === 31 &&
@@ -408,6 +409,7 @@ const responses = {
     ]
   },
   layout: {
+    requestedInputChannels: true,
     requestedOutputChannels: 99,
     outputChannels: "bad",
     outputBuses: 2,

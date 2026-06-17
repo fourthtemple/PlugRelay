@@ -139,6 +139,8 @@ export async function exerciseVst3MultiBusNativeWorker({
       inputBuses: [
         null,
         ["bad"],
+        { index: true, channels: [[0.8, 0.8]] },
+        { index: "", channels: [[0.7, 0.7]] },
         { index: 1, channels: [[0.2, 0.2]] },
         { index: "1", channels: [[0.9, 0.9]] },
         { index: 99, channels: [[0.4, 0.5]] },

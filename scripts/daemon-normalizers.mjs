@@ -580,6 +580,11 @@ export function createDaemonNormalizers(options = {}) {
   }
 
   function normalizeInt(value, min, max, fallback) {
+    if (typeof value !== "number" && typeof value !== "string") {
+      value = fallback;
+    } else if (typeof value === "string" && value.trim().length === 0) {
+      value = fallback;
+    }
     const fallbackNumber = Math.floor(Number(fallback));
     const number = Math.floor(Number(value));
     const candidate = Number.isFinite(number) ? number : fallbackNumber;
