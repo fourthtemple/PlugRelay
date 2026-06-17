@@ -99,6 +99,19 @@ export async function exerciseVst3MultiBusNativeWorker({
         JSON.stringify(sparseAuxBuses.get(4)) === JSON.stringify([[-0.9, -0.7]]),
       "native VST3 workers route sparse aux input buses by explicit index"
     );
+    const inactiveOutputRendered = await busWorker.render({
+      frames: 2,
+      sampleRate: 48000,
+      channels: [[0.25, 0.5], [0.75, 1]],
+      transport: { samplePosition: 152 }
+    });
+    const inactiveOutputBuses = new Map((inactiveOutputRendered.outputBuses ?? []).map((bus) => [bus.index, bus.channels]));
+    check(
+      inactiveOutputRendered.outputBuses?.length === 2 &&
+        JSON.stringify(inactiveOutputBuses.get(0)) === JSON.stringify(inactiveOutputRendered.channels) &&
+        JSON.stringify(inactiveOutputBuses.get(3)) === JSON.stringify([[1, -1]]),
+      "native VST3 workers bound inactive output buses without disturbing the main output"
+    );
     const weirdRendered = await busWorker.render({
       frames: 2,
       sampleRate: 48000,
@@ -223,6 +236,15 @@ function vst3MultiBusInstance() {
           type: "aux",
           channels: 1,
           active: true
+        },
+        {
+          index: 3,
+          direction: "output",
+          mediaType: "audio",
+          name: "Inactive Aux Output",
+          type: "aux",
+          channels: 1,
+          active: false
         },
         {
           index: 4,
@@ -382,6 +404,22 @@ process.stdin.on("data", (chunk) => {
           { index: 4, channels: [[-0.9, -0.7]] },
           { index: 1, channels: [[0.9, 0.7]] },
           { index: 0, channels: sparseAuxMainOutput }
+        ]
+      }) + "\\n");
+      continue;
+    }
+
+    const inactiveOutputBusRequestMatched = frames === 2 &&
+      Number(parts[2]) === 48000 &&
+      parts[4] === "-" &&
+      parts[5] === "sample=152";
+    if (inactiveOutputBusRequestMatched) {
+      const inactiveMainOutput = [[0.25, 0.5], [0.75, 1]];
+      process.stdout.write(JSON.stringify({
+        channels: inactiveMainOutput,
+        outputBuses: [
+          { index: 3, channels: [[1.5, -1.5], [0.5, 0.5]] },
+          { index: 0, channels: [[-0.25, -0.5], [-0.75, -1]] }
         ]
       }) + "\\n");
       continue;

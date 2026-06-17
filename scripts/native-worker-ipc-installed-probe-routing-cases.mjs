@@ -214,12 +214,30 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       { index: 2, channels: 1, active: true }
     ]
   });
+  const inactiveOutputSignalProfile = summarizeProbeOutputBusSignal({
+    channels: [[0, 0]],
+    outputBuses: [
+      { index: 0, channels: [[0, 0]] },
+      { index: 1, channels: [[0.6, 0.7]] }
+    ]
+  }, {
+    outputChannels: 1,
+    outputBusLayouts: [
+      { index: 0, channels: 1, active: true },
+      { index: 1, channels: 1, active: false }
+    ]
+  });
   check(
     outputBusSignalProfile.category === "main-aux-signal" &&
       outputBusSignalProfile.signalOutputBusCount === 2 &&
       outputBusSignalProfile.silentOutputBusCount === 1 &&
       JSON.stringify(outputBusSignalProfile.signalOutputBusIndexes) === JSON.stringify([0, 2]) &&
-      JSON.stringify(outputBusSignalProfile.silentOutputBusIndexes) === JSON.stringify([1]),
+      JSON.stringify(outputBusSignalProfile.silentOutputBusIndexes) === JSON.stringify([1]) &&
+      inactiveOutputSignalProfile.category === "silent" &&
+      inactiveOutputSignalProfile.outputBusCount === 1 &&
+      inactiveOutputSignalProfile.signalOutputBusCount === 0 &&
+      inactiveOutputSignalProfile.silentOutputBusCount === 1 &&
+      !inactiveOutputSignalProfile.flags.includes("aux-signal"),
     "installed plugin probe classifies output-bus render signal coverage"
   );
 
