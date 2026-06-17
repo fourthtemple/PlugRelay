@@ -99,7 +99,7 @@ export function createSecurityFileGrantCases({
         SOUNDBRIDGE_PAIRING_TOKEN: token,
         SOUNDBRIDGE_FILE_GRANT_ROOTS: root,
         SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: process.execPath,
-        SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: JSON.stringify([approvalFixturePath, "ok", samplePath])
+        SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: JSON.stringify([approvalFixturePath, "control-display-name", samplePath])
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -127,11 +127,12 @@ export function createSecurityFileGrantCases({
       check(
         /^filegrant-[0-9a-f-]{36}$/.test(grant.grantId) &&
           grant.displayName === "Approved Fixture" &&
+          !/[\u0000-\u001f\u007f]/u.test(grant.displayName) &&
           grant.purpose === "sample" &&
           grant.access === "read" &&
           grant.kind === "file" &&
           publicGrantIsPathFree(grant),
-        "native approval broker grants stay path-free in browser responses"
+        "native approval broker grants stay path-free with bounded display names"
       );
       await request(approved, "revokeFileGrant", { grantId: grant.grantId }, true, approvedPair.sessionToken);
       approved.socket?.destroy();

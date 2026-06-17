@@ -50,7 +50,7 @@ process.stdin.on("data", (chunk) => {
         `${JSON.stringify({
           ok: true,
           path: approvedPath,
-          displayName: "Approved Fixture"
+          displayName: mode === "control-display-name" ? "Approved\u0000 Fixture\n\t" : "Approved Fixture"
         })}\n`
       );
     } else if (message.command === "quit") {

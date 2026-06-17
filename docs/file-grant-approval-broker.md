@@ -42,7 +42,7 @@ The broker returns one JSON line:
 }
 ```
 
-The daemon validates `path` against configured roots and returns only a path-free grant to the browser. `displayName` is optional and bounded; it is display text, not authority.
+The daemon validates `path` against configured roots and returns only a path-free grant to the browser. `displayName` is optional bounded display text; control characters are stripped, and it is not authority.
 
 To deny the request:
 

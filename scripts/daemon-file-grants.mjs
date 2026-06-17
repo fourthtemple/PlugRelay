@@ -306,6 +306,10 @@ function ensureSessionGrantSet(session) {
 function boundedText(value, maxBytes) {
   let output = "";
   for (const char of String(value ?? "")) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) {
+      continue;
+    }
     if (Buffer.byteLength(output + char, "utf8") > maxBytes) {
       break;
     }

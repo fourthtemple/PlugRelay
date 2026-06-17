@@ -25,7 +25,7 @@ The reference daemon only accepts browser-supplied paths when `SOUNDBRIDGE_FILE_
 }
 ```
 
-In both modes, the browser-facing response is path-free:
+In both modes, the browser-facing response is path-free. `displayName` is bounded display text with control characters stripped:
 
 ```json
 {
