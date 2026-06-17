@@ -112,6 +112,18 @@ export function exerciseInstalledProbeEventSupport({ check }) {
       stepCount: false
     }]
   });
+  const invalidFloodVst3EventProfile = summarizeProbeVst3Events({
+    format: "vst3",
+    vst3NoteExpressions: [
+      ...Array.from({ length: 256 }, () => ({ typeId: "bad" })),
+      { typeId: "6" }
+    ]
+  });
+  const invalidFloodVst3EventMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    vst3EventProfile: invalidFloodVst3EventProfile
+  }]).matrix[0];
   const invalidRouteOnlyVst3EventSummary = summarizeProbeResults([{
     ok: true,
     format: "vst3",
@@ -210,6 +222,19 @@ export function exerciseInstalledProbeEventSupport({ check }) {
       typedValueVst3EventProfile.noteExpressionCount === 1 &&
       typedValueVst3EventProfile.invalidNoteExpressionValueMetadataCount === 1 &&
       typedValueVst3EventProfile.flags.includes("invalid-value-metadata") &&
+      invalidFloodVst3EventProfile.category === "main-event-bus" &&
+      invalidFloodVst3EventProfile.noteExpressionCount === 1 &&
+      invalidFloodVst3EventProfile.textExpressionCount === 1 &&
+      invalidFloodVst3EventProfile.invalidNoteExpressionCount === 256 &&
+      invalidFloodVst3EventProfile.metadataAtLimit === true &&
+      invalidFloodVst3EventProfile.flags.includes("invalid-note-expression") &&
+      invalidFloodVst3EventProfile.flags.includes("text-expression") &&
+      invalidFloodVst3EventProfile.flags.includes("metadata-at-limit") &&
+      invalidFloodVst3EventMatrix.vst3EventCategory === "main-event-bus" &&
+      invalidFloodVst3EventMatrix.vst3InvalidNoteExpressionCount === 256 &&
+      invalidFloodVst3EventMatrix.vst3TextNoteExpressionCount === 1 &&
+      invalidFloodVst3EventMatrix.vst3NoteExpressionMetadataAtLimit === true &&
+      JSON.stringify(invalidFloodVst3EventMatrix.vst3NoteExpressionTypeIds) === JSON.stringify([6]) &&
       invalidRouteOnlyVst3EventProfile.category === "invalid-route-metadata" &&
       invalidRouteOnlyVst3EventProfile.invalidNoteExpressionRouteCount === 1 &&
       invalidRouteOnlyVst3EventProfile.eventBuses.length === 1 &&
