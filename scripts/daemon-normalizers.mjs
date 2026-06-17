@@ -316,8 +316,11 @@ export function createDaemonNormalizers(options = {}) {
     if (shortName) normalized.shortName = shortName;
     if (unit) normalized.unit = unit;
     if (associatedParameterId) normalized.associatedParameterId = associatedParameterId;
-    if (Number.isInteger(Number(expression.unitId))) {
-      normalized.unitId = normalizeInt(expression.unitId, -2147483648, 2147483647, -1);
+    if (expression.unitId !== undefined) {
+      const unitId = normalizeSignedInt32(expression.unitId);
+      if (unitId !== undefined) {
+        normalized.unitId = unitId;
+      }
     }
     if (expression.bipolar === true) normalized.bipolar = true;
     if (expression.oneShot === true) normalized.oneShot = true;

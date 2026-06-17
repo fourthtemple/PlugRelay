@@ -317,9 +317,22 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
   check(
     unitExpression?.name === "12345678" &&
       unitExpression.associatedParameterId === "1234567890" &&
+      unitExpression.unitId === 2 &&
       unitExpression.channel === 1 &&
       unitExpression.bipolar === true,
     "daemon normalizers bound VST3 note-expression metadata"
+  );
+  const [invalidUnitExpression] = unitNormalizers.normalizeVst3NoteExpressions([
+    {
+      typeId: 1,
+      name: "Expression",
+      unitId: 9999999999
+    }
+  ]);
+  check(
+    invalidUnitExpression?.typeId === 1 &&
+      !Object.hasOwn(invalidUnitExpression, "unitId"),
+    "daemon normalizers omit invalid VST3 note-expression unit links"
   );
   check(
     unitNormalizers.encodeMidiEvents(
