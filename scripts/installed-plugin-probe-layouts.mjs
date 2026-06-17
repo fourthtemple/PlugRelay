@@ -119,12 +119,18 @@ function busLayouts(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function hasEmptyName(value) {
+  return value != null &&
+    Object.prototype.hasOwnProperty.call(value, "name") &&
+    String(value.name ?? "").length === 0;
+}
+
 function boundedBusLayouts(value) {
   return value.slice(0, 32).map((bus, fallbackIndex) => ({
     index: clampInt(bus?.index, 0, 31, fallbackIndex),
     channels: clampInt(bus?.channels, 0, 32, 0),
     active: bus?.active === true,
-    nameFallback: bus?.nameFallback === true,
+    nameFallback: bus?.nameFallback === true || hasEmptyName(bus),
     type: bus?.type === "main" || bus?.type === "aux" || bus?.type === "unknown" ? bus.type : "unknown"
   }));
 }

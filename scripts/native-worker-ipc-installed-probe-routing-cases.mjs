@@ -90,8 +90,8 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       outputChannels: 1,
       inputBuses: 1,
       outputBuses: 1,
-      inputBusLayouts: [{ index: 0, channels: 0, type: "main", active: true, nameFallback: true }],
-      outputBusLayouts: [{ index: 0, channels: 1, type: "sdk-custom", active: true, nameFallback: true }]
+      inputBusLayouts: [{ index: 0, name: "", channels: 0, type: "main", active: true }],
+      outputBusLayouts: [{ index: 0, name: "", channels: 1, type: "sdk-custom", active: true }]
     }
   );
   const weirdBusMatrix = summarizeProbeResults([{
