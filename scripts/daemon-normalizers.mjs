@@ -166,11 +166,15 @@ export function createDaemonNormalizers(options = {}) {
           return undefined;
         }
         const name = truncateText(program.name ?? `Program ${index + 1}`, limits.maxPluginParameterTextBytes) || `Program ${index + 1}`;
-        return {
+        const normalized = {
           index,
           name,
           normalizedValue: clamp01(Number(program.normalizedValue))
         };
+        if (program.nameFallback === true) {
+          normalized.nameFallback = true;
+        }
+        return normalized;
       })
       .filter(Boolean);
     if (programs.length === 0) {

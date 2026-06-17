@@ -179,6 +179,7 @@ export interface PluginProgram {
   index: number;
   name: string;
   normalizedValue: number;
+  nameFallback?: boolean;
 }
 
 export interface PluginProgramList {

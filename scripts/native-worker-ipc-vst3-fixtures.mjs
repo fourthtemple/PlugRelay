@@ -89,6 +89,7 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         parameters[1].programList?.programDataSupported === false &&
         parameters[1].programList?.programs?.[0]?.index === 1 &&
         parameters[1].programList?.programs?.[0]?.name === "Program 2" &&
+        parameters[1].programList?.programs?.[0]?.nameFallback === true &&
         parameters[2].id === "program-empty-list" &&
         parameters[2].programChange === true &&
         !Object.hasOwn(parameters[2], "programList"),
@@ -104,6 +105,7 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         programLists[0].programDataSupported === true &&
         programLists[0].programs?.[0]?.index === 0 &&
         programLists[0].programs?.[0]?.name === "Program 1" &&
+        programLists[0].programs?.[0]?.nameFallback === true &&
         programLists[0].programs?.[0]?.normalizedValue === 1 &&
         programLists[0].programs?.[1]?.index === 255 &&
         programLists[0].programs?.[1]?.normalizedValue === 0,
@@ -262,7 +264,7 @@ const responses = {
           programDataSupported: false,
           programs: [
             { index: "bad", name: "broken", normalizedValue: 0.5 },
-            { name: "", normalizedValue: 2 }
+            { name: "", normalizedValue: 2, nameFallback: true }
           ]
         }
       },
@@ -290,7 +292,7 @@ const responses = {
         unitId: "bad",
         programDataSupported: true,
         programs: [
-          { name: "", normalizedValue: 2 },
+          { name: "", normalizedValue: 2, nameFallback: true },
           { index: -5, name: "broken", normalizedValue: 0.5 },
           { index: 255, name: null, normalizedValue: -1 }
         ]

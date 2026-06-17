@@ -49,7 +49,8 @@
       "properties": {
         "index": { "type": "integer", "minimum": 0, "maximum": 255 },
         "name": { "type": "string", "maxLength": 160 },
-        "normalizedValue": { "type": "number", "minimum": 0, "maximum": 1 }
+        "normalizedValue": { "type": "number", "minimum": 0, "maximum": 1 },
+        "nameFallback": { "type": "boolean" }
       }
     },
     "pluginProgramList": {

@@ -165,6 +165,7 @@ std::string programListInfoToJson(
     if (unitInfo != nullptr && unitInfo->getProgramName(programList.id, programIndex, programName) == Steinberg::kResultOk) {
       name = cappedString(VST3::StringConvert::convert(programName));
     }
+    const bool nameFallback = name.empty();
     if (name.empty()) {
       name = "Program " + std::to_string(programIndex + 1);
     }
@@ -173,8 +174,11 @@ std::string programListInfoToJson(
         : static_cast<double>(programIndex) / static_cast<double>(programCount - 1);
     output << "{\"index\":" << programIndex
            << ",\"name\":\"" << jsonEscape(name) << "\""
-           << ",\"normalizedValue\":" << std::clamp(normalizedValue, 0.0, 1.0)
-           << "}";
+           << ",\"normalizedValue\":" << std::clamp(normalizedValue, 0.0, 1.0);
+    if (nameFallback) {
+      output << ",\"nameFallback\":true";
+    }
+    output << "}";
   }
   output << "]}";
   return output.str();

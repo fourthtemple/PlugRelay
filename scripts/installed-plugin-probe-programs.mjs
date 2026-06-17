@@ -163,6 +163,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       candidateProgramCount: 0,
       unitLinkedProgramListCount: 0,
       invalidProgramListUnitCount: 0,
+      programNameFallbackCount: 0,
       missingProgramValueCount: 0,
       invalidProgramValueCount: 0,
       minProgramValueCount: 0,
@@ -190,6 +191,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   let noProgramListSentinelCount = 0;
   let unitLinkedProgramListCount = 0;
   let invalidProgramListUnitCount = 0;
+  let programNameFallbackCount = 0;
   let missingProgramValueCount = 0;
   let invalidProgramValueCount = 0;
   let minProgramValueCount = 0;
@@ -227,6 +229,14 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     } else if (hasOwn(programList, "unitId")) {
       invalidProgramListUnitCount += 1;
       flags.push("invalid-program-list-unit");
+    }
+    if (Array.isArray(programList.programs)) {
+      for (const program of programList.programs.slice(0, MAX_PLUGIN_PROGRAMS)) {
+        if (program?.nameFallback === true) {
+          programNameFallbackCount += 1;
+          flags.push("program-name-fallback");
+        }
+      }
     }
 
     if (programList?.programDataSupported !== true) {
@@ -324,6 +334,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     noProgramListSentinelCount,
     unitLinkedProgramListCount,
     invalidProgramListUnitCount,
+    programNameFallbackCount,
     missingProgramValueCount,
     invalidProgramValueCount,
     minProgramValueCount,
