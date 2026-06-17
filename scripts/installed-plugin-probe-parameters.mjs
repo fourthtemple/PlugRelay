@@ -55,6 +55,7 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
       automatableCount: 0,
       writableCount: 0,
       readOnlyCount: 0,
+      nameFallbackCount: 0,
       displayValueCount: 0,
       unitCount: 0,
       programChangeCount: 0,
@@ -83,6 +84,7 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     automatableCount: 0,
     writableCount: 0,
     readOnlyCount: 0,
+    nameFallbackCount: 0,
     displayValueCount: 0,
     unitCount: 0,
     programChangeCount: 0,
@@ -121,6 +123,9 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     }
     if (parameter?.automatable !== false && parameter?.readOnly !== true) {
       profile.writableCount += 1;
+    }
+    if (parameter?.nameFallback === true) {
+      profile.nameFallbackCount += 1;
     }
     if (typeof parameter?.displayValue === "string" && parameter.displayValue.length > 0) {
       profile.displayValueCount += 1;
@@ -203,6 +208,9 @@ function parameterProfileFlags(profile, { atLimit, isVst3 }) {
   }
   if (profile.readOnlyCount > 0) {
     flags.push("read-only");
+  }
+  if (profile.nameFallbackCount > 0) {
+    flags.push("parameter-name-fallback");
   }
   flags.push(profile.displayValueCount > 0 ? "display-values" : "no-display-values");
   if (profile.unitCount > 0) {

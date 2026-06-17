@@ -212,6 +212,7 @@ function summarizeCompatibilityMatrix(results, options) {
       parameterWritableCount: safeMatrixInteger(result.parameterProfile?.writableCount, 0, 1024),
       parameterAutomatableCount: safeMatrixInteger(result.parameterProfile?.automatableCount, 0, 1024),
       parameterReadOnlyCount: safeMatrixInteger(result.parameterProfile?.readOnlyCount, 0, 1024),
+      parameterNameFallbackCount: safeMatrixInteger(result.parameterProfile?.nameFallbackCount, 0, 1024),
       parameterDisplayValueCount: safeMatrixInteger(result.parameterProfile?.displayValueCount ?? result.displayValueCount, 0, 1024),
       parameterUnitCount: safeMatrixInteger(result.parameterProfile?.unitCount, 0, 1024),
       parameterProgramChangeCount: safeMatrixInteger(result.parameterProfile?.programChangeCount, 0, 1024),

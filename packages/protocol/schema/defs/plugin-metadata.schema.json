@@ -16,6 +16,7 @@
       "properties": {
         "id": { "type": "string", "minLength": 1, "maxLength": 64 },
         "name": { "type": "string", "maxLength": 160 },
+        "nameFallback": { "type": "boolean" },
         "normalizedValue": { "type": "number", "minimum": 0, "maximum": 1 },
         "defaultNormalizedValue": { "type": "number", "minimum": 0, "maximum": 1 },
         "displayValue": { "type": "string", "maxLength": 160 },

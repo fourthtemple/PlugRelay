@@ -153,6 +153,7 @@ export interface ProtocolError {
 export interface PluginParameter {
   id: string;
   name: string;
+  nameFallback?: boolean;
   normalizedValue: number;
   defaultNormalizedValue: number;
   displayValue?: string;

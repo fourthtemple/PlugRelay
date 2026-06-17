@@ -114,6 +114,9 @@ export function createDaemonNormalizers(options = {}) {
       stepCount: Math.max(0, Math.min(1_000_000, Math.floor(Number(parameter.stepCount ?? 0)))),
       readOnly: Boolean(parameter.readOnly)
     };
+    if (parameter.nameFallback === true) {
+      normalized.nameFallback = true;
+    }
     const vst3Unit = normalizeVst3Unit(parameter.vst3Unit);
     if (vst3Unit) {
       normalized.vst3Unit = vst3Unit;

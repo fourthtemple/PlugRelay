@@ -400,6 +400,7 @@ std::string parameterInfoToJson(
   const auto name = cappedString(VST3::StringConvert::convert(info.title));
   const auto shortName = cappedString(VST3::StringConvert::convert(info.shortTitle));
   const auto unit = cappedString(VST3::StringConvert::convert(info.units), 64);
+  const bool nameFallback = name.empty();
   const auto plainValue = controller->normalizedParamToPlain(info.id, normalizedValue);
   const auto minPlain = controller->normalizedParamToPlain(info.id, 0.0);
   const auto maxPlain = controller->normalizedParamToPlain(info.id, 1.0);
@@ -415,6 +416,9 @@ std::string parameterInfoToJson(
          << ",\"minPlain\":" << (std::isfinite(minPlain) ? minPlain : 0.0)
          << ",\"maxPlain\":" << (std::isfinite(maxPlain) ? maxPlain : 1.0)
          << ",\"automatable\":" << (parameterIsAutomatable(info) ? "true" : "false");
+  if (nameFallback) {
+    output << ",\"nameFallback\":true";
+  }
   if (!displayValue.empty()) {
     output << ",\"displayValue\":\"" << jsonEscape(displayValue) << "\"";
   }

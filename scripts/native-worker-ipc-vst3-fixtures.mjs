@@ -81,6 +81,7 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
       parameters.length === 3 &&
         parameters[0].id === "cutoff" &&
         parameters[0].name === "cutoff" &&
+        parameters[0].nameFallback === true &&
         parameters[0].normalizedValue === 0 &&
         parameters[0].defaultNormalizedValue === 1 &&
         parameters[0].readOnly === true &&
@@ -252,6 +253,7 @@ const responses = {
       {
         id: "cutoff",
         name: "",
+        nameFallback: true,
         normalizedValue: "not-a-number",
         defaultNormalizedValue: 3,
         displayValue: longText,
