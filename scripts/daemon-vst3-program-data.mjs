@@ -82,9 +82,24 @@ export function createDaemonVst3ProgramData({
     const matchingPrograms = Array.isArray(programList?.programs)
       ? programList.programs.filter((program) => program?.index === programIndex)
       : [];
-    if (!programList?.programDataSupported || matchingPrograms.length !== 1) {
+    if (!programList?.programDataSupported || !hasBoundedProgramDataTarget(matchingPrograms)) {
       throw protocolError("program_data_not_supported", "The requested VST3 program does not expose bounded program data.");
     }
+  }
+
+  function hasBoundedProgramDataTarget(programs) {
+    if (programs.length === 1) {
+      return true;
+    }
+    if (programs.length < 1) {
+      return false;
+    }
+    const values = programs.map((program) => program?.normalizedValue);
+    return values.every(isBoundedProgramValue) && values.every((value) => value === values[0]);
+  }
+
+  function isBoundedProgramValue(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
   }
 
   function encodeProgramDataEnvelope(pluginId, programData) {

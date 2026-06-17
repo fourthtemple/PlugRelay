@@ -314,12 +314,44 @@ export async function exerciseVst3ProgramDataSupport({ check, protocolError }) {
         "program_data_not_supported",
     "daemon VST3 program-data helper rejects duplicate program-list restore targets"
   );
+  fakeInstance.vst3ProgramLists = [{
+    id: 7,
+    programDataSupported: true,
+    programs: [
+      { index: 0, normalizedValue: 0.25 },
+      { index: 0, normalizedValue: 0.25 }
+    ]
+  }];
+  const exportedConsistentDuplicateProgramData = await programDataSupport.getVst3ProgramData("inst-test", 7, 0, {});
+  const restoredConsistentDuplicateProgramData = await programDataSupport.setVst3ProgramData("inst-test", programEnvelope(), {});
+  check(
+    exportedConsistentDuplicateProgramData.programListId === 7 &&
+      exportedConsistentDuplicateProgramData.programIndex === 0 &&
+      restoredConsistentDuplicateProgramData.restored === true &&
+      fakeInstance.restoredProgramData?.programListId === 7 &&
+      fakeInstance.restoredProgramData?.programIndex === 0,
+    "daemon VST3 program-data helper restores consistent duplicate program-index targets"
+  );
+  fakeInstance.vst3ProgramLists = [{
+    id: 7,
+    programDataSupported: true,
+    programs: [
+      { index: 0, normalizedValue: 0.25 },
+      { index: 0, normalizedValue: 0.75 }
+    ]
+  }];
+  check(
+    (await rejectedCode(() => programDataSupport.getVst3ProgramData("inst-test", 7, 0, {}))) === "program_data_not_supported" &&
+      (await rejectedCode(() => programDataSupport.setVst3ProgramData("inst-test", programEnvelope(), {}))) ===
+        "program_data_not_supported",
+    "daemon VST3 program-data helper rejects conflicting duplicate program-index targets"
+  );
   fakeInstance.vst3ProgramLists = [{ id: 7, programDataSupported: true, programs: [{ index: 0 }, { index: 0 }] }];
   check(
     (await rejectedCode(() => programDataSupport.getVst3ProgramData("inst-test", 7, 0, {}))) === "program_data_not_supported" &&
       (await rejectedCode(() => programDataSupport.setVst3ProgramData("inst-test", programEnvelope(), {}))) ===
         "program_data_not_supported",
-    "daemon VST3 program-data helper rejects duplicate program-index restore targets"
+    "daemon VST3 program-data helper rejects unresolved duplicate program-index targets"
   );
   fakeInstance.vst3ProgramLists = [{ id: 7, programDataSupported: false, programs: [{ index: 0 }] }];
   check(
