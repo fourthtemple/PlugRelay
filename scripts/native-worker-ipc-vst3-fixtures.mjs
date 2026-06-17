@@ -125,7 +125,7 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         parameters[0].defaultNormalizedValue === 1 &&
         parameters[0].readOnly === true &&
         !parameters[0].vst3Unit &&
-        parameters[0].vst3MidiMappings?.length === 5 &&
+        parameters[0].vst3MidiMappings?.length === 6 &&
         parameters[0].vst3MidiMappings[0].busIndex === 0 &&
         parameters[0].vst3MidiMappings[0].channel === 0 &&
         parameters[0].vst3MidiMappings[0].controller === 1 &&
@@ -137,6 +137,9 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         parameters[0].vst3MidiMappings[4].busIndex === 31 &&
         parameters[0].vst3MidiMappings[4].channel === 15 &&
         parameters[0].vst3MidiMappings[4].controller === 127 &&
+        parameters[0].vst3MidiMappings[5].busIndex === 2 &&
+        parameters[0].vst3MidiMappings[5].channel === 3 &&
+        parameters[0].vst3MidiMappings[5].controller === 74 &&
         parameters[1].programChange === true &&
         parameters[1].programList?.programDataSupported === false &&
         parameters[1].programList?.programs?.[0]?.index === 1 &&
@@ -321,6 +324,8 @@ const responses = {
           { busIndex: 1, channel: 0, controller: 129 },
           { busIndex: 31, channel: 15, controller: 0 },
           { busIndex: 31, channel: 15, controller: 127 },
+          { busIndex: "2", channel: "3", controller: "74" },
+          { busIndex: false, channel: 0, controller: 1 },
           { busIndex: 99, channel: 0, controller: 1 },
           { busIndex: 0, channel: 99, controller: 1 },
           { busIndex: 0, channel: 0, controller: 999 }

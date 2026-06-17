@@ -345,7 +345,7 @@ function boundedVst3MidiMappings(
       if (valid.length >= validLimit) {
         continue;
       }
-      valid.push(mapping);
+      valid.push(normalizeVst3MidiMapping(mapping));
       continue;
     }
     if (invalidCount >= invalidLimit) {
@@ -364,19 +364,32 @@ function validVst3MidiMapping(mapping) {
 }
 
 function vst3MidiMappingIssues(mapping) {
+  const busIndex = boundedVst3MidiMappingInteger(mapping?.busIndex, 0, 31);
+  const channel = boundedVst3MidiMappingInteger(mapping?.channel, 0, 15);
+  const controller = boundedVst3MidiMappingInteger(mapping?.controller, 0, 129);
   return {
-    invalidRoute:
-      !Number.isInteger(mapping?.busIndex) ||
-      mapping.busIndex < 0 ||
-      mapping.busIndex > 31 ||
-      !Number.isInteger(mapping?.channel) ||
-      mapping.channel < 0 ||
-      mapping.channel > 15,
-    invalidController:
-      !Number.isInteger(mapping?.controller) ||
-      mapping.controller < 0 ||
-      mapping.controller > 129
+    invalidRoute: busIndex === undefined || channel === undefined,
+    invalidController: controller === undefined
   };
+}
+
+function normalizeVst3MidiMapping(mapping) {
+  return {
+    busIndex: boundedVst3MidiMappingInteger(mapping.busIndex, 0, 31),
+    channel: boundedVst3MidiMappingInteger(mapping.channel, 0, 15),
+    controller: boundedVst3MidiMappingInteger(mapping.controller, 0, 129)
+  };
+}
+
+function boundedVst3MidiMappingInteger(value, min, max) {
+  if (typeof value !== "number" && typeof value !== "string") {
+    return undefined;
+  }
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined;
+  }
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= min && numeric <= max ? numeric : undefined;
 }
 
 function sortedIntegers(values) {

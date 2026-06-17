@@ -16,6 +16,7 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
         { busIndex: 0, channel: 0, controller: 1 },
         { busIndex: 1, channel: 2, controller: 74 },
         { busIndex: 1, channel: 2, controller: 74 },
+        { busIndex: "2", channel: "3", controller: "74" },
         { busIndex: 99, channel: 0, controller: 1 }
       ]
     },
@@ -47,6 +48,7 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       readOnly: true,
       vst3MidiMappings: [
         { busIndex: 1, channel: 99, controller: 74 },
+        { busIndex: false, channel: 0, controller: 1 },
         { busIndex: 0, channel: 0, controller: 130 },
         { busIndex: 99, channel: 99, controller: 130 }
       ]
@@ -170,15 +172,15 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.vst3UnitProgramListLinkCount === 1 &&
       parameterProfile.invalidVst3UnitProgramListLinkCount === 1 &&
       parameterProfile.vst3MidiMappedParameterCount === 3 &&
-      parameterProfile.vst3MidiMappingCount === 7 &&
+      parameterProfile.vst3MidiMappingCount === 8 &&
       parameterProfile.vst3MidiMappingControllerCount === 6 &&
-      parameterProfile.vst3MidiMappingBusCount === 3 &&
-      parameterProfile.vst3MidiMappingChannelCount === 3 &&
+      parameterProfile.vst3MidiMappingBusCount === 4 &&
+      parameterProfile.vst3MidiMappingChannelCount === 4 &&
       parameterProfile.vst3MidiDuplicateMappingCount === 1 &&
-      parameterProfile.invalidVst3MidiMappingCount === 4 &&
-      parameterProfile.invalidVst3MidiMappingRouteCount === 3 &&
+      parameterProfile.invalidVst3MidiMappingCount === 5 &&
+      parameterProfile.invalidVst3MidiMappingRouteCount === 4 &&
       parameterProfile.invalidVst3MidiMappingControllerCount === 2 &&
-      parameterProfile.vst3MidiCcMappingCount === 5 &&
+      parameterProfile.vst3MidiCcMappingCount === 6 &&
       parameterProfile.vst3MidiAftertouchMappingCount === 1 &&
       parameterProfile.vst3MidiPitchBendMappingCount === 1 &&
       parameterProfile.flags.includes("program-change") &&
@@ -205,17 +207,17 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       matrix.parameterVst3UnitProgramListLinkCount === 1 &&
       matrix.parameterInvalidVst3UnitProgramListLinkCount === 1 &&
       matrix.parameterVst3MidiMappedParameterCount === 3 &&
-      matrix.parameterVst3MidiMappingCount === 7 &&
+      matrix.parameterVst3MidiMappingCount === 8 &&
       matrix.parameterVst3MidiDuplicateMappingCount === 1 &&
-      matrix.parameterInvalidVst3MidiMappingCount === 4 &&
-      matrix.parameterInvalidVst3MidiMappingRouteCount === 3 &&
+      matrix.parameterInvalidVst3MidiMappingCount === 5 &&
+      matrix.parameterInvalidVst3MidiMappingRouteCount === 4 &&
       matrix.parameterInvalidVst3MidiMappingControllerCount === 2 &&
-      matrix.parameterVst3MidiCcMappingCount === 5 &&
+      matrix.parameterVst3MidiCcMappingCount === 6 &&
       matrix.parameterVst3MidiAftertouchMappingCount === 1 &&
       matrix.parameterVst3MidiPitchBendMappingCount === 1 &&
       JSON.stringify(matrix.parameterVst3MidiMappingControllers) === JSON.stringify([0, 1, 74, 127, 128, 129]) &&
-      JSON.stringify(matrix.parameterVst3MidiMappingBuses) === JSON.stringify([0, 1, 31]) &&
-      JSON.stringify(matrix.parameterVst3MidiMappingChannels) === JSON.stringify([0, 2, 15]) &&
+      JSON.stringify(matrix.parameterVst3MidiMappingBuses) === JSON.stringify([0, 1, 2, 31]) &&
+      JSON.stringify(matrix.parameterVst3MidiMappingChannels) === JSON.stringify([0, 2, 3, 15]) &&
       matrix.parameterFlags.includes("program-change-without-list") &&
       cappedMappingProfile.vst3MidiMappingCount === 256 &&
       cappedMappingProfile.vst3MidiDuplicateMappingCount === 128 &&

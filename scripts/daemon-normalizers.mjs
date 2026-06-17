@@ -94,9 +94,9 @@ export function createDaemonNormalizers(options = {}) {
         if (!mapping || typeof mapping !== "object") {
           return undefined;
         }
-        const busIndex = boundedInteger(mapping.busIndex, 0, limits.maxPluginBuses - 1);
-        const channel = boundedInteger(mapping.channel, 0, 15);
-        const controller = boundedInteger(mapping.controller, 0, 129);
+        const busIndex = boundedVst3MidiMappingInteger(mapping.busIndex, 0, limits.maxPluginBuses - 1);
+        const channel = boundedVst3MidiMappingInteger(mapping.channel, 0, 15);
+        const controller = boundedVst3MidiMappingInteger(mapping.controller, 0, 129);
         return busIndex === undefined || channel === undefined || controller === undefined
           ? undefined
           : { busIndex, channel, controller };
@@ -570,6 +570,16 @@ export function createDaemonNormalizers(options = {}) {
   function boundedInteger(value, min, max) {
     const number = Number(value);
     return Number.isInteger(number) && number >= min && number <= max ? number : undefined;
+  }
+
+  function boundedVst3MidiMappingInteger(value, min, max) {
+    if (typeof value !== "number" && typeof value !== "string") {
+      return undefined;
+    }
+    if (typeof value === "string" && value.trim().length === 0) {
+      return undefined;
+    }
+    return boundedInteger(value, min, max);
   }
 
   function truncateText(value, maxBytes) {
