@@ -1,10 +1,13 @@
+const MAX_BUS_LAYOUTS = 32;
+const MAX_BUS_LAYOUT_SCAN = MAX_BUS_LAYOUTS * 2;
+
 export function summarizeProbeBusLayout(plugin, layout) {
   const sourceInputBuses = busLayouts(layout?.inputBusLayouts);
   const sourceOutputBuses = busLayouts(layout?.outputBusLayouts);
   const inputBuses = boundedBusLayouts(sourceInputBuses);
   const outputBuses = boundedBusLayouts(sourceOutputBuses);
-  const inputBusMetadataAtLimit = sourceInputBuses.length >= 32;
-  const outputBusMetadataAtLimit = sourceOutputBuses.length >= 32;
+  const inputBusMetadataAtLimit = sourceInputBuses.length >= MAX_BUS_LAYOUTS;
+  const outputBusMetadataAtLimit = sourceOutputBuses.length >= MAX_BUS_LAYOUTS;
   const inputBusCount = clampInt(layout?.inputBuses, 0, 32, inputBuses.length);
   const outputBusCount = clampInt(layout?.outputBuses, 1, 32, outputBuses.length || 1);
   const inputChannels = clampInt(layout?.inputChannels, 0, 32, 0);
@@ -14,20 +17,22 @@ export function summarizeProbeBusLayout(plugin, layout) {
   const activeOutputs = outputBuses.filter(activeAudioBus);
   const inactiveInputs = inputBuses.filter(inactiveAudioBus);
   const inactiveOutputs = outputBuses.filter(inactiveAudioBus);
+  const overflowInputMetadata = overflowBusMetadata(sourceInputBuses, inputBuses);
+  const overflowOutputMetadata = overflowBusMetadata(sourceOutputBuses, outputBuses);
   const nonsequentialInputBuses = countNonSequentialIndexes(inputBuses);
   const nonsequentialOutputBuses = countNonSequentialIndexes(outputBuses);
-  const duplicateInputBusIndexes = countDuplicateIndexes(inputBuses);
-  const duplicateOutputBusIndexes = countDuplicateIndexes(outputBuses);
+  const duplicateInputBusIndexes = cappedBusCount(countDuplicateIndexes(inputBuses) + overflowInputMetadata.duplicateBusIndexes);
+  const duplicateOutputBusIndexes = cappedBusCount(countDuplicateIndexes(outputBuses) + overflowOutputMetadata.duplicateBusIndexes);
   const inputBusLayoutCount = uniqueBusIndexCount(inputBuses);
   const outputBusLayoutCount = uniqueBusIndexCount(outputBuses);
   const inputBusCountMismatch = inputBusLayoutCount > 0 && inputBusCount !== inputBusLayoutCount;
   const outputBusCountMismatch = outputBusLayoutCount > 0 && outputBusCount !== outputBusLayoutCount;
-  const activeEmptyInputBuses = activeInputs.filter((bus) => bus.channels === 0).length;
-  const activeEmptyOutputBuses = activeOutputs.filter((bus) => bus.channels === 0).length;
-  const unknownInputBusTypes = inputBuses.filter((bus) => bus.type === "unknown").length;
-  const unknownOutputBusTypes = outputBuses.filter((bus) => bus.type === "unknown").length;
-  const inputBusNameFallbacks = inputBuses.filter((bus) => bus.nameFallback).length;
-  const outputBusNameFallbacks = outputBuses.filter((bus) => bus.nameFallback).length;
+  const activeEmptyInputBuses = cappedBusCount(activeInputs.filter((bus) => bus.channels === 0).length + overflowInputMetadata.activeEmptyBuses);
+  const activeEmptyOutputBuses = cappedBusCount(activeOutputs.filter((bus) => bus.channels === 0).length + overflowOutputMetadata.activeEmptyBuses);
+  const unknownInputBusTypes = cappedBusCount(inputBuses.filter((bus) => bus.type === "unknown").length + overflowInputMetadata.unknownTypes);
+  const unknownOutputBusTypes = cappedBusCount(outputBuses.filter((bus) => bus.type === "unknown").length + overflowOutputMetadata.unknownTypes);
+  const inputBusNameFallbacks = cappedBusCount(inputBuses.filter((bus) => bus.nameFallback).length + overflowInputMetadata.nameFallbacks);
+  const outputBusNameFallbacks = cappedBusCount(outputBuses.filter((bus) => bus.nameFallback).length + overflowOutputMetadata.nameFallbacks);
   const sidechain = activeInputs.some((bus) => bus.index > 0 || bus.type === "aux");
   const multiOutput = outputBusCount > 1 || activeOutputs.some((bus) => bus.index > 0);
   const flags = [];
@@ -126,13 +131,42 @@ function hasEmptyName(value) {
 }
 
 function boundedBusLayouts(value) {
-  return value.slice(0, 32).map((bus, fallbackIndex) => ({
+  return value.slice(0, MAX_BUS_LAYOUTS).map((bus, fallbackIndex) => normalizeBusLayout(bus, fallbackIndex));
+}
+
+function normalizeBusLayout(bus, fallbackIndex) {
+  return {
     index: clampInt(bus?.index, 0, 31, fallbackIndex),
     channels: clampInt(bus?.channels, 0, 32, 0),
     active: bus?.active === true,
     nameFallback: bus?.nameFallback === true || hasEmptyName(bus),
     type: bus?.type === "main" || bus?.type === "aux" || bus?.type === "unknown" ? bus.type : "unknown"
-  }));
+  };
+}
+
+function overflowBusMetadata(sourceBuses, boundedBuses) {
+  const seenIndexes = new Set(boundedBuses.map((bus) => bus.index));
+  const duplicateIndexes = new Set();
+  let activeEmptyBuses = 0;
+  let unknownTypes = 0;
+  let nameFallbacks = 0;
+  for (let index = MAX_BUS_LAYOUTS; index < Math.min(sourceBuses.length, MAX_BUS_LAYOUT_SCAN); index += 1) {
+    const bus = normalizeBusLayout(sourceBuses[index], 31);
+    if (seenIndexes.has(bus.index)) {
+      duplicateIndexes.add(bus.index);
+    }
+    seenIndexes.add(bus.index);
+    if (bus.active && bus.channels === 0) {
+      activeEmptyBuses = cappedBusCount(activeEmptyBuses + 1);
+    }
+    if (bus.type === "unknown") {
+      unknownTypes = cappedBusCount(unknownTypes + 1);
+    }
+    if (bus.nameFallback) {
+      nameFallbacks = cappedBusCount(nameFallbacks + 1);
+    }
+  }
+  return { duplicateBusIndexes: duplicateIndexes.size, activeEmptyBuses, unknownTypes, nameFallbacks };
 }
 
 function activeAudioBus(bus) {
@@ -185,6 +219,10 @@ function uniqueBusIndexCount(buses) {
 
 function boundedBusIndexes(buses) {
   return [...new Set(buses.map((bus) => bus.index))].sort((left, right) => left - right);
+}
+
+function cappedBusCount(value) {
+  return Math.min(MAX_BUS_LAYOUTS, value);
 }
 
 function knownKind(value) {

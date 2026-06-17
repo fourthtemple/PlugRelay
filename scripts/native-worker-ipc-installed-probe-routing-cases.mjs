@@ -83,6 +83,24 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       }))
     }
   );
+  const saturatedBusProfile = summarizeProbeBusLayout(
+    { kind: "effect" },
+    {
+      inputChannels: 2,
+      outputChannels: 2,
+      inputBuses: 32,
+      outputBuses: 32,
+      inputBusLayouts: [
+        ...Array.from({ length: 32 }, (_, index) => ({ index, channels: index === 0 ? 2 : 1, type: index === 0 ? "main" : "aux", active: index === 0 })),
+        { index: 0, name: "", channels: 0, type: "sdk-custom", active: true }
+      ],
+      outputBusLayouts: [
+        ...Array.from({ length: 32 }, (_, index) => ({ index, channels: index === 0 ? 2 : 1, type: index === 0 ? "main" : "aux", active: index === 0 })),
+        { index: 0, name: "", channels: 0, type: "sdk-custom", active: true }
+      ]
+    }
+  );
+  const saturatedBusMatrix = summarizeProbeResults([{ ok: true, format: "vst3", busProfile: saturatedBusProfile }]).matrix[0];
   const weirdBusProfile = summarizeProbeBusLayout(
     { kind: "effect" },
     {
@@ -135,6 +153,20 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       cappedBusProfile.outputBusMetadataAtLimit === true &&
       cappedBusProfile.flags.includes("input-bus-metadata-at-limit") &&
       cappedBusProfile.flags.includes("output-bus-metadata-at-limit") &&
+      saturatedBusProfile.inputBusLayoutCount === 32 &&
+      saturatedBusProfile.outputBusLayoutCount === 32 &&
+      saturatedBusProfile.duplicateInputBusIndexes === 1 &&
+      saturatedBusProfile.duplicateOutputBusIndexes === 1 &&
+      saturatedBusProfile.activeEmptyInputBuses === 1 &&
+      saturatedBusProfile.activeEmptyOutputBuses === 1 &&
+      saturatedBusProfile.unknownInputBusTypes === 1 &&
+      saturatedBusProfile.unknownOutputBusTypes === 1 &&
+      saturatedBusProfile.inputBusNameFallbacks === 1 &&
+      saturatedBusProfile.outputBusNameFallbacks === 1 &&
+      saturatedBusMatrix.busDuplicateInputIndexCount === 1 &&
+      saturatedBusMatrix.busDuplicateOutputIndexCount === 1 &&
+      saturatedBusMatrix.busActiveEmptyInputCount === 1 &&
+      saturatedBusMatrix.busUnknownOutputTypeCount === 1 &&
       weirdBusProfile.flags.includes("active-empty-bus") &&
       weirdBusProfile.flags.includes("unknown-bus-type") &&
       weirdBusProfile.flags.includes("input-bus-name-fallback") &&
