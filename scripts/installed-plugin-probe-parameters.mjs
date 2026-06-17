@@ -1,5 +1,7 @@
 const MAX_PLUGIN_PARAMETERS = 1024;
 const MAX_VST3_MIDI_MAPPINGS = 256;
+const VST3_MIDI_AFTERTOUCH_CONTROLLER = 128;
+const VST3_MIDI_PITCH_BEND_CONTROLLER = 129;
 
 export function assertParameterDisplayMetadata({ assertProbe, parameters, plugin }) {
   if (!Array.isArray(parameters)) {
@@ -70,6 +72,9 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
       vst3MidiMappingBusCount: 0,
       vst3MidiMappingChannelCount: 0,
       vst3MidiDuplicateMappingCount: 0,
+      vst3MidiCcMappingCount: 0,
+      vst3MidiAftertouchMappingCount: 0,
+      vst3MidiPitchBendMappingCount: 0,
       vst3MidiMappingControllers: [],
       vst3MidiMappingBuses: [],
       vst3MidiMappingChannels: [],
@@ -101,6 +106,9 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     vst3MidiMappingBusCount: 0,
     vst3MidiMappingChannelCount: 0,
     vst3MidiDuplicateMappingCount: 0,
+    vst3MidiCcMappingCount: 0,
+    vst3MidiAftertouchMappingCount: 0,
+    vst3MidiPitchBendMappingCount: 0,
     vst3MidiMappingControllers: [],
     vst3MidiMappingBuses: [],
     vst3MidiMappingChannels: [],
@@ -167,6 +175,13 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
         midiMappingControllers.add(mapping.controller);
         midiMappingBuses.add(mapping.busIndex);
         midiMappingChannels.add(mapping.channel);
+        if (mapping.controller === VST3_MIDI_PITCH_BEND_CONTROLLER) {
+          profile.vst3MidiPitchBendMappingCount += 1;
+        } else if (mapping.controller === VST3_MIDI_AFTERTOUCH_CONTROLLER) {
+          profile.vst3MidiAftertouchMappingCount += 1;
+        } else {
+          profile.vst3MidiCcMappingCount += 1;
+        }
         const mappingKey = `${mapping.busIndex}:${mapping.channel}:${mapping.controller}`;
         if (midiMappingKeys.has(mappingKey)) {
           profile.vst3MidiDuplicateMappingCount += 1;
@@ -263,6 +278,15 @@ function parameterProfileFlags(profile, { atLimit, isVst3 }) {
     }
     if (profile.vst3MidiDuplicateMappingCount > 0) {
       flags.push("vst3-midi-mapping-duplicate");
+    }
+    if (profile.vst3MidiCcMappingCount > 0) {
+      flags.push("vst3-midi-mapping-cc");
+    }
+    if (profile.vst3MidiAftertouchMappingCount > 0) {
+      flags.push("vst3-midi-mapping-aftertouch");
+    }
+    if (profile.vst3MidiPitchBendMappingCount > 0) {
+      flags.push("vst3-midi-mapping-pitch-bend");
     }
   }
   if (profile.duplicateParameterIdCount > 0) {

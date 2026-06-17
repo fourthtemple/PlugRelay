@@ -22,7 +22,11 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       id: "program-without-list",
       programChange: true,
       nameFallback: true,
-      vst3Unit: { id: 3, programListId: -1 }
+      vst3Unit: { id: 3, programListId: -1 },
+      vst3MidiMappings: [
+        { busIndex: 0, channel: 0, controller: 128 },
+        { busIndex: 0, channel: 0, controller: 129 }
+      ]
     },
     {
       id: "read-only",
@@ -47,12 +51,15 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.vst3UnitNameFallbackCount === 1 &&
       parameterProfile.vst3UnitProgramListLinkCount === 1 &&
       parameterProfile.invalidVst3UnitProgramListLinkCount === 1 &&
-      parameterProfile.vst3MidiMappedParameterCount === 1 &&
-      parameterProfile.vst3MidiMappingCount === 3 &&
-      parameterProfile.vst3MidiMappingControllerCount === 2 &&
+      parameterProfile.vst3MidiMappedParameterCount === 2 &&
+      parameterProfile.vst3MidiMappingCount === 5 &&
+      parameterProfile.vst3MidiMappingControllerCount === 4 &&
       parameterProfile.vst3MidiMappingBusCount === 2 &&
       parameterProfile.vst3MidiMappingChannelCount === 2 &&
       parameterProfile.vst3MidiDuplicateMappingCount === 1 &&
+      parameterProfile.vst3MidiCcMappingCount === 3 &&
+      parameterProfile.vst3MidiAftertouchMappingCount === 1 &&
+      parameterProfile.vst3MidiPitchBendMappingCount === 1 &&
       parameterProfile.flags.includes("program-change") &&
       parameterProfile.flags.includes("parameter-name-fallback") &&
       parameterProfile.flags.includes("program-change-without-list") &&
@@ -64,16 +71,22 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.flags.includes("vst3-midi-mapping-non-main-event-bus") &&
       parameterProfile.flags.includes("vst3-midi-mapping-non-main-channel") &&
       parameterProfile.flags.includes("vst3-midi-mapping-duplicate") &&
+      parameterProfile.flags.includes("vst3-midi-mapping-cc") &&
+      parameterProfile.flags.includes("vst3-midi-mapping-aftertouch") &&
+      parameterProfile.flags.includes("vst3-midi-mapping-pitch-bend") &&
       matrix.parameterProgramChangeCount === 2 &&
       matrix.parameterNameFallbackCount === 1 &&
       matrix.parameterVst3UnitNameFallbackCount === 1 &&
       matrix.parameterProgramChangeWithoutListCount === 1 &&
       matrix.parameterVst3UnitProgramListLinkCount === 1 &&
       matrix.parameterInvalidVst3UnitProgramListLinkCount === 1 &&
-      matrix.parameterVst3MidiMappedParameterCount === 1 &&
-      matrix.parameterVst3MidiMappingCount === 3 &&
+      matrix.parameterVst3MidiMappedParameterCount === 2 &&
+      matrix.parameterVst3MidiMappingCount === 5 &&
       matrix.parameterVst3MidiDuplicateMappingCount === 1 &&
-      JSON.stringify(matrix.parameterVst3MidiMappingControllers) === JSON.stringify([1, 74]) &&
+      matrix.parameterVst3MidiCcMappingCount === 3 &&
+      matrix.parameterVst3MidiAftertouchMappingCount === 1 &&
+      matrix.parameterVst3MidiPitchBendMappingCount === 1 &&
+      JSON.stringify(matrix.parameterVst3MidiMappingControllers) === JSON.stringify([1, 74, 128, 129]) &&
       JSON.stringify(matrix.parameterVst3MidiMappingBuses) === JSON.stringify([0, 1]) &&
       JSON.stringify(matrix.parameterVst3MidiMappingChannels) === JSON.stringify([0, 2]) &&
       matrix.parameterFlags.includes("program-change-without-list"),
