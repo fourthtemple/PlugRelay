@@ -208,6 +208,22 @@ export async function exerciseDaemonFileGrantOperation({ absolutePath, check, pr
     "daemon file grant operations allow explicitly constrained other operations"
   );
 
+  const otherPresetResponse = await operations.useFileGrant({
+    instanceId: instance.instanceId,
+    grantId: presetGrant.grantId,
+    operation: "other",
+    purpose: "preset",
+    access: "read",
+    kind: "file"
+  }, session);
+  check(
+    otherPresetResponse.accepted === true &&
+      otherPresetResponse.operation === "other" &&
+      otherPresetResponse.grant.purpose === "preset" &&
+      observedOperations.at(-1)?.grant.absolutePath === presetGrant.absolutePath,
+    "daemon file grant operations route explicit other preset grants"
+  );
+
   let invalidOperationCode;
   try {
     await operations.useFileGrant({
