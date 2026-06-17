@@ -26,6 +26,8 @@ export function summarizeProbeBusLayout(plugin, layout) {
   const activeEmptyOutputBuses = activeOutputs.filter((bus) => bus.channels === 0).length;
   const unknownInputBusTypes = inputBuses.filter((bus) => bus.type === "unknown").length;
   const unknownOutputBusTypes = outputBuses.filter((bus) => bus.type === "unknown").length;
+  const inputBusNameFallbacks = inputBuses.filter((bus) => bus.nameFallback).length;
+  const outputBusNameFallbacks = outputBuses.filter((bus) => bus.nameFallback).length;
   const sidechain = activeInputs.some((bus) => bus.index > 0 || bus.type === "aux");
   const multiOutput = outputBusCount > 1 || activeOutputs.some((bus) => bus.index > 0);
   const flags = [];
@@ -62,6 +64,12 @@ export function summarizeProbeBusLayout(plugin, layout) {
   }
   if (unknownInputBusTypes > 0 || unknownOutputBusTypes > 0) {
     flags.push("unknown-bus-type");
+  }
+  if (inputBusNameFallbacks > 0) {
+    flags.push("input-bus-name-fallback");
+  }
+  if (outputBusNameFallbacks > 0) {
+    flags.push("output-bus-name-fallback");
   }
   if (inputBusMetadataAtLimit) {
     flags.push("input-bus-metadata-at-limit");
@@ -100,6 +108,8 @@ export function summarizeProbeBusLayout(plugin, layout) {
     activeEmptyOutputBuses,
     unknownInputBusTypes,
     unknownOutputBusTypes,
+    inputBusNameFallbacks,
+    outputBusNameFallbacks,
     inputBusMetadataAtLimit,
     outputBusMetadataAtLimit
   };
@@ -114,6 +124,7 @@ function boundedBusLayouts(value) {
     index: clampInt(bus?.index, 0, 31, fallbackIndex),
     channels: clampInt(bus?.channels, 0, 32, 0),
     active: bus?.active === true,
+    nameFallback: bus?.nameFallback === true,
     type: bus?.type === "main" || bus?.type === "aux" || bus?.type === "unknown" ? bus.type : "unknown"
   }));
 }

@@ -571,11 +571,14 @@ export function createDaemonNormalizers(options = {}) {
   function normalizeBusLayout(bus, direction, fallbackIndex) {
     const type = bus?.type === "main" || bus?.type === "aux" ? bus.type : "unknown";
     const fallbackName = `${direction === "input" ? "Input" : "Output"} ${fallbackIndex + 1}`;
+    const name = truncateText(bus?.name, limits.maxPluginParameterTextBytes);
+    const nameFallback = bus?.nameFallback === true || !name;
     return {
       index: normalizeInt(bus?.index, 0, limits.maxPluginBuses - 1, fallbackIndex),
       direction,
       mediaType: "audio",
-      name: truncateText(bus?.name ?? fallbackName, limits.maxPluginParameterTextBytes) || fallbackName,
+      name: name || fallbackName,
+      ...(nameFallback ? { nameFallback: true } : {}),
       type,
       channels: normalizeInt(bus?.channels, 0, limits.maxAudioChannels, 0),
       active: Boolean(bus?.active)

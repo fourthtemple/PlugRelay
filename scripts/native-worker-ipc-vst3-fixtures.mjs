@@ -145,9 +145,11 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         layout.outputBuses === 2 &&
         layout.outputBusLayouts?.[0]?.index === 31 &&
         layout.outputBusLayouts?.[0]?.name === "Output 1" &&
+        layout.outputBusLayouts?.[0]?.nameFallback === true &&
         layout.outputBusLayouts?.[0]?.type === "unknown" &&
         layout.outputBusLayouts?.[0]?.channels === 32 &&
         layout.outputBusLayouts?.[1]?.name === "Output 2" &&
+        layout.outputBusLayouts?.[1]?.nameFallback === true &&
         layout.sampleRate === 8000 &&
         layout.maxBlockSize === 8192,
       "native VST3 workers normalize partial/weird bus layout metadata"

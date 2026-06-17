@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <string>
 
 namespace soundbridge::vst3_worker {
 
@@ -149,14 +150,20 @@ std::string busLayoutsToJson(
             0,
             static_cast<Steinberg::int32>(kMaxWorkerChannels)));
     const auto name = cappedString(VST3::StringConvert::convert(info.name));
+    const bool nameFallback = name.empty();
+    const auto fallbackName = std::string(direction == Steinberg::Vst::kInput ? "Input " : "Output ") +
+        std::to_string(index + 1);
     output << "{\"index\":" << index
            << ",\"direction\":\"" << (direction == Steinberg::Vst::kInput ? "input" : "output") << "\""
            << ",\"mediaType\":\"audio\""
-           << ",\"name\":\"" << jsonEscape(name.empty() ? (direction == Steinberg::Vst::kInput ? "Input" : "Output") : name) << "\""
+           << ",\"name\":\"" << jsonEscape(nameFallback ? fallbackName : name) << "\""
            << ",\"type\":\"" << (info.busType == Steinberg::Vst::kMain ? "main" : info.busType == Steinberg::Vst::kAux ? "aux" : "unknown") << "\""
            << ",\"channels\":" << std::min<std::uint32_t>(channels, kMaxWorkerChannels)
-           << ",\"active\":" << (active ? "true" : "false")
-           << "}";
+           << ",\"active\":" << (active ? "true" : "false");
+    if (nameFallback) {
+      output << ",\"nameFallback\":true";
+    }
+    output << "}";
   }
   output << "]";
   return output.str();

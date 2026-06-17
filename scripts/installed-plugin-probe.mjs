@@ -610,7 +610,8 @@ function boundedLayoutSummary(layout) {
         index: clampInt(bus?.index, 0, 31, 0),
         channels: clampInt(bus?.channels, 0, 32, 0),
         type: bus?.type === "main" || bus?.type === "aux" || bus?.type === "unknown" ? bus.type : "unknown",
-        active: bus?.active === true
+        active: bus?.active === true,
+        nameFallback: bus?.nameFallback === true
       }))
     : [];
   return {

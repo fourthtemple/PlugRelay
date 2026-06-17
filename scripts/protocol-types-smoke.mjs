@@ -40,6 +40,10 @@ assert(
     messages.includes("vst3MidiMappings?: PluginVst3MidiMapping[];"),
   "protocol messages type optional VST3 parameter fallback and MIDI-controller mappings"
 );
+assert(
+  /interface PluginBusLayout\s*{[\s\S]*nameFallback\?: boolean;[\s\S]*active: boolean;[\s\S]*}/.test(messages),
+  "protocol messages type optional plugin bus-layout name fallbacks"
+);
 
 console.log("Protocol type smoke checks passed.");
 

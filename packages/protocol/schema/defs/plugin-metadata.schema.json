@@ -240,6 +240,7 @@
         "direction": { "type": "string", "enum": ["input", "output"] },
         "mediaType": { "type": "string", "enum": ["audio"] },
         "name": { "type": "string", "maxLength": 160 },
+        "nameFallback": { "type": "boolean" },
         "type": { "type": "string", "enum": ["main", "aux", "unknown"] },
         "channels": { "type": "integer", "minimum": 0, "maximum": 32 },
         "active": { "type": "boolean" }

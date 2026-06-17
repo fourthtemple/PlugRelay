@@ -236,6 +236,7 @@ export interface PluginBusLayout {
   direction: "input" | "output";
   mediaType: "audio";
   name: string;
+  nameFallback?: boolean;
   type: "main" | "aux" | "unknown";
   channels: number;
   active: boolean;

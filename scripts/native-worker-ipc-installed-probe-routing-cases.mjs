@@ -90,10 +90,15 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       outputChannels: 1,
       inputBuses: 1,
       outputBuses: 1,
-      inputBusLayouts: [{ index: 0, channels: 0, type: "main", active: true }],
-      outputBusLayouts: [{ index: 0, channels: 1, type: "sdk-custom", active: true }]
+      inputBusLayouts: [{ index: 0, channels: 0, type: "main", active: true, nameFallback: true }],
+      outputBusLayouts: [{ index: 0, channels: 1, type: "sdk-custom", active: true, nameFallback: true }]
     }
   );
+  const weirdBusMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    busProfile: weirdBusProfile
+  }]).matrix[0];
   const mismatchedCountProfile = summarizeProbeBusLayout(
     { kind: "effect" },
     {
@@ -132,8 +137,12 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       cappedBusProfile.flags.includes("output-bus-metadata-at-limit") &&
       weirdBusProfile.flags.includes("active-empty-bus") &&
       weirdBusProfile.flags.includes("unknown-bus-type") &&
+      weirdBusProfile.flags.includes("input-bus-name-fallback") &&
+      weirdBusProfile.flags.includes("output-bus-name-fallback") &&
       weirdBusProfile.activeEmptyInputBuses === 1 &&
       weirdBusProfile.unknownOutputBusTypes === 1 &&
+      weirdBusMatrix.busInputNameFallbackCount === 1 &&
+      weirdBusMatrix.busOutputNameFallbackCount === 1 &&
       mismatchedCountProfile.flags.includes("bus-count-mismatch") &&
       mismatchedCountProfile.inputBusLayoutCount === 2 &&
       mismatchedCountProfile.outputBusLayoutCount === 1 &&

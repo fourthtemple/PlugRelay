@@ -49,11 +49,13 @@ assert(
 );
 const pluginVst3MidiMapping = resolveRef(schema.$defs?.pluginVst3MidiMapping?.$ref, SCHEMA_URL);
 const pluginParameter = resolveRef(schema.$defs?.pluginParameter?.$ref, SCHEMA_URL);
+const pluginBusLayout = resolveRef(schema.$defs?.pluginBusLayout?.$ref, SCHEMA_URL);
 assert(
   pluginVst3MidiMapping?.properties?.controller?.maximum === 129 &&
     pluginParameter?.properties?.nameFallback?.type === "boolean" &&
+    pluginBusLayout?.properties?.nameFallback?.type === "boolean" &&
     pluginMetadata?.properties?.parameters?.items?.$ref === "#/$defs/pluginParameter",
-  "protocol schema declares VST3 parameter fallback and bounded MIDI-controller mappings"
+  "protocol schema declares VST3 metadata fallbacks and bounded MIDI-controller mappings"
 );
 
 const vst3EventBusIndex = resolveRef(schema.$defs?.vst3EventBusIndex?.$ref, SCHEMA_URL);
