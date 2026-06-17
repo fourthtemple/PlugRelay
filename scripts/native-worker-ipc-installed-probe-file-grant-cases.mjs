@@ -170,6 +170,25 @@ export async function exerciseInstalledProbeFileGrantSupport({ check }) {
       "installed plugin probe cleans up advertised file grants when responses leak paths"
     );
 
+    const failingRequests = [];
+    let failureCode = "";
+    try {
+      await probeFileGrantCacheDirectoryOpen({
+        ...advertisedArgs,
+        request: createFailingGrantRequest(failingRequests),
+        result: {}
+      });
+    } catch (error) {
+      failureCode = error.code;
+    }
+    check(
+      failureCode === "file_grant_operation_failed" &&
+        JSON.stringify(failingRequests.map((request) => request.method)) ===
+          JSON.stringify(["createFileGrant", "attachFileGrant", "useFileGrant", "detachFileGrant", "revokeFileGrant"]) &&
+        fs.readdirSync(tempDir).length === 0,
+      "installed plugin probe cleans up advertised file grants when workers fail"
+    );
+
     const failureSummary = summarizeProbeResults([
       {
         ok: true,
@@ -247,6 +266,21 @@ function createLeakingGrantRequest(observedRequests) {
     }
     if (method === "useFileGrant") {
       return { applied: true, operation: payload.operation, path: "should-not-leak" };
+    }
+    return { ok: true };
+  };
+}
+
+function createFailingGrantRequest(observedRequests) {
+  return async (_socket, method, payload) => {
+    observedRequests.push({ method, payload });
+    if (method === "createFileGrant") {
+      return { grantId: "grant-fail" };
+    }
+    if (method === "useFileGrant") {
+      const error = new Error("file grant operation failed");
+      error.code = "file_grant_operation_failed";
+      throw error;
     }
     return { ok: true };
   };
