@@ -87,6 +87,25 @@ export async function exerciseInstalledProbeFileGrantSupport({ check }) {
         fs.readdirSync(tempDir).length === 0,
       "installed plugin probe applies advertised advanced file-grant workflows with bounded grant shapes"
     );
+
+    const leakingRequests = [];
+    let leakCode = "";
+    try {
+      await probeFileGrantSampleLoad({
+        ...advertisedArgs,
+        request: createLeakingGrantRequest(leakingRequests),
+        result: {}
+      });
+    } catch (error) {
+      leakCode = error.code;
+    }
+    check(
+      leakCode === "native_editor_launch_data_leak" &&
+        JSON.stringify(leakingRequests.map((request) => request.method)) ===
+          JSON.stringify(["createFileGrant", "attachFileGrant", "useFileGrant", "detachFileGrant", "revokeFileGrant"]) &&
+        fs.readdirSync(tempDir).length === 0,
+      "installed plugin probe cleans up advertised file grants when responses leak paths"
+    );
   } finally {
     fs.rmSync(tempDir, { force: true, recursive: true });
   }
@@ -113,6 +132,19 @@ function createPathFreeGrantRequest(observedRequests) {
     }
     if (method === "useFileGrant") {
       return { applied: true, operation: payload.operation };
+    }
+    return { ok: true };
+  };
+}
+
+function createLeakingGrantRequest(observedRequests) {
+  return async (_socket, method, payload) => {
+    observedRequests.push({ method, payload });
+    if (method === "createFileGrant") {
+      return { grantId: "grant-leak" };
+    }
+    if (method === "useFileGrant") {
+      return { applied: true, operation: payload.operation, path: "should-not-leak" };
     }
     return { ok: true };
   };
