@@ -73,6 +73,9 @@ export async function exerciseVst3ProgramDataNativeWorker({
     const badRestoreAckMessage = await rejectedMessage(() =>
       programDataWorker.setVst3ProgramData(7, 3, "YWI=")
     );
+    const oversizedRestoreAckMessage = await rejectedMessage(() =>
+      programDataWorker.setVst3ProgramData(13, 1, "YWI=")
+    );
     check(
       restoredEmpty?.restored === "empty" &&
         restoredBytes?.restored === "bytes" &&
@@ -86,6 +89,11 @@ export async function exerciseVst3ProgramDataNativeWorker({
         invalidRestoreDataMessage === "VST3 program data was not valid base64." &&
         badRestoreAckMessage === "worker returned invalid VST3 program-data restore acknowledgement",
       "native VST3 workers reject invalid program-data restore requests and acknowledgements"
+    );
+    check(
+      oversizedRestoreAckMessage?.startsWith("worker_stdout_too_large:") &&
+        programDataWorker.process?.killed === true,
+      "native VST3 workers reject oversized program-data restore acknowledgements"
     );
   } finally {
     programDataWorker.destroy();
@@ -156,7 +164,8 @@ const responses = new Map([
   ["setProgramData 11 4 AAE=", { ok: true, restored: "binary-bytes" }],
   ["setProgramData 7 3 YWI=", { ok: false }],
   ["setProgramData 2147483647 255 +/8=", { ok: true, restored: "padded-bytes" }],
-  ["setProgramData 12 1 Zg==", { ok: true, restored: "double-padded-bytes" }]
+  ["setProgramData 12 1 Zg==", { ok: true, restored: "double-padded-bytes" }],
+  ["setProgramData 13 1 YWI=", { ok: true, restored: "oversized", padding: "x".repeat(4096) }]
 ]);
 
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
