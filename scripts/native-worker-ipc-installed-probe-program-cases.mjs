@@ -68,7 +68,17 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
     format: "vst3",
     vst3ProgramLists: [
       { id: 1, programDataSupported: false, programs: [{ index: 0 }] },
-      { id: 2, unitId: 4, programDataSupported: true, programs: [{ index: 3 }, { index: 3 }, { index: 4 }, { index: "bad" }] }
+      {
+        id: 2,
+        unitId: 4,
+        programDataSupported: true,
+        programs: [
+          { index: 3, normalizedValue: 0 },
+          { index: 3 },
+          { index: 4, normalizedValue: 1 },
+          { index: "bad", normalizedValue: "bad" }
+        ]
+      }
     ]
   });
   const weirdProgramDataProfile = summarizeVst3ProgramDataProfile({
@@ -78,7 +88,7 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       { id: -1, programDataSupported: true, programs: [{ index: 1 }] },
       { id: 4, programDataSupported: true, programs: [] },
       { id: 4, programDataSupported: true, programs: [] },
-      { id: 5, unitId: "bad", programDataSupported: true, programs: [{ index: 256 }] }
+      { id: 5, unitId: "bad", programDataSupported: true, programs: [{ index: 256, normalizedValue: -0.25 }] }
     ]
   });
   const targetedProgramDataMatrix = summarizeProbeResults([{
@@ -94,7 +104,7 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
   const ambiguousProgramDataProfile = summarizeVst3ProgramDataProfile({
     format: "vst3",
     vst3ProgramLists: [
-      { id: 8, programDataSupported: true, programs: [{ index: 0 }, { index: 0 }] }
+      { id: 8, programDataSupported: true, programs: [{ index: 0, normalizedValue: 0.25 }, { index: 0, normalizedValue: 0.75 }] }
     ]
   });
   const missingProgramsProfile = summarizeVst3ProgramDataProfile({
@@ -109,7 +119,10 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
     vst3ProgramLists: Array.from({ length: 256 }, (_, listIndex) => ({
       id: listIndex,
       programDataSupported: listIndex === 0,
-      programs: Array.from({ length: listIndex === 0 ? 256 : 1 }, (_, programIndex) => ({ index: programIndex }))
+      programs: Array.from({ length: listIndex === 0 ? 256 : 1 }, (_, programIndex) => ({
+        index: programIndex,
+        normalizedValue: listIndex === 0 ? programIndex / 255 : 0
+      }))
     }))
   });
   check(
@@ -123,9 +136,19 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       targetedProgramDataProfile.invalidProgramIndexCount === 1 &&
       targetedProgramDataProfile.duplicateProgramIndexCount === 1 &&
       targetedProgramDataProfile.unitLinkedProgramListCount === 1 &&
+      targetedProgramDataProfile.missingProgramValueCount === 1 &&
+      targetedProgramDataProfile.invalidProgramValueCount === 1 &&
+      targetedProgramDataProfile.minProgramValueCount === 1 &&
+      targetedProgramDataProfile.maxProgramValueCount === 1 &&
       targetedProgramDataProfile.flags.includes("duplicate-program-index") &&
       targetedProgramDataProfile.flags.includes("unit-linked-program-list") &&
+      targetedProgramDataProfile.flags.includes("missing-program-value") &&
+      targetedProgramDataProfile.flags.includes("invalid-program-value") &&
       targetedProgramDataMatrix.vst3ProgramDataUnitLinkedLists === 1 &&
+      targetedProgramDataMatrix.vst3ProgramDataMissingProgramValues === 1 &&
+      targetedProgramDataMatrix.vst3ProgramDataInvalidProgramValues === 1 &&
+      targetedProgramDataMatrix.vst3ProgramDataMinProgramValues === 1 &&
+      targetedProgramDataMatrix.vst3ProgramDataMaxProgramValues === 1 &&
       weirdProgramDataProfile.category === "no-valid-programs" &&
       weirdProgramDataProfile.invalidProgramListCount === 2 &&
       weirdProgramDataProfile.noProgramListSentinelCount === 1 &&
@@ -133,13 +156,16 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       weirdProgramDataProfile.invalidProgramIndexCount === 1 &&
       weirdProgramDataProfile.duplicateProgramListIdCount === 1 &&
       weirdProgramDataProfile.invalidProgramListUnitCount === 1 &&
+      weirdProgramDataProfile.invalidProgramValueCount === 1 &&
       weirdProgramDataProfile.flags.includes("invalid-program-list-id") &&
       weirdProgramDataProfile.flags.includes("no-program-list-sentinel") &&
       weirdProgramDataProfile.flags.includes("empty-program-list") &&
       weirdProgramDataProfile.flags.includes("invalid-program-index") &&
       weirdProgramDataProfile.flags.includes("duplicate-program-list-id") &&
       weirdProgramDataProfile.flags.includes("invalid-program-list-unit") &&
+      weirdProgramDataProfile.flags.includes("invalid-program-value") &&
       weirdProgramDataMatrix.vst3ProgramDataInvalidUnitLinkedLists === 1 &&
+      weirdProgramDataMatrix.vst3ProgramDataInvalidProgramValues === 1 &&
       ambiguousProgramDataProfile.category === "no-valid-programs" &&
       ambiguousProgramDataProfile.candidateProgramCount === 0 &&
       ambiguousProgramDataProfile.duplicateProgramIndexCount === 1 &&
@@ -153,6 +179,8 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       cappedProgramDataProfile.category === "targeted" &&
       cappedProgramDataProfile.programListCount === 256 &&
       cappedProgramDataProfile.candidateProgramCount === 256 &&
+      cappedProgramDataProfile.minProgramValueCount === 1 &&
+      cappedProgramDataProfile.maxProgramValueCount === 1 &&
       cappedProgramDataProfile.programListMetadataAtLimit === true &&
       cappedProgramDataProfile.programMetadataAtLimit === true &&
       cappedProgramDataProfile.flags.includes("program-list-metadata-at-limit") &&

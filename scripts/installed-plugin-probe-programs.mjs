@@ -163,6 +163,10 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       candidateProgramCount: 0,
       unitLinkedProgramListCount: 0,
       invalidProgramListUnitCount: 0,
+      missingProgramValueCount: 0,
+      invalidProgramValueCount: 0,
+      minProgramValueCount: 0,
+      maxProgramValueCount: 0,
       programListMetadataAtLimit: false,
       programMetadataAtLimit: false,
       noProgramListSentinelCount: 0
@@ -186,6 +190,10 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   let noProgramListSentinelCount = 0;
   let unitLinkedProgramListCount = 0;
   let invalidProgramListUnitCount = 0;
+  let missingProgramValueCount = 0;
+  let invalidProgramValueCount = 0;
+  let minProgramValueCount = 0;
+  let maxProgramValueCount = 0;
   let programMetadataAtLimit = false;
 
   if (lists.length === 0) {
@@ -252,6 +260,20 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     const seenProgramIndexes = new Set();
     for (const program of programList.programs.slice(0, MAX_PLUGIN_PROGRAMS)) {
       const programIndex = boundedProgramIndex(program?.index);
+      const programValue = boundedProgramValue(program?.normalizedValue);
+      if (programValue === undefined) {
+        if (hasOwn(program, "normalizedValue")) {
+          invalidProgramValueCount += 1;
+          flags.push("invalid-program-value");
+        } else {
+          missingProgramValueCount += 1;
+          flags.push("missing-program-value");
+        }
+      } else if (programValue === 0) {
+        minProgramValueCount += 1;
+      } else if (programValue === 1) {
+        maxProgramValueCount += 1;
+      }
       if (programIndex === undefined) {
         invalidProgramIndexCount += 1;
       } else {
@@ -302,6 +324,10 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     noProgramListSentinelCount,
     unitLinkedProgramListCount,
     invalidProgramListUnitCount,
+    missingProgramValueCount,
+    invalidProgramValueCount,
+    minProgramValueCount,
+    maxProgramValueCount,
     programListMetadataAtLimit,
     programMetadataAtLimit
   };
@@ -335,6 +361,10 @@ function boundedProgramListId(value) {
 
 function boundedProgramIndex(value) {
   return boundedInt(value, 0, MAX_PLUGIN_PROGRAMS - 1);
+}
+
+function boundedProgramValue(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1 ? value : undefined;
 }
 
 function boundedUnitId(value) {
@@ -374,7 +404,7 @@ function boundedInt(value, min, max) {
 }
 
 function hasOwn(object, key) {
-  return Object.prototype.hasOwnProperty.call(object, key);
+  return object != null && Object.prototype.hasOwnProperty.call(object, key);
 }
 
 function assertBoundedParameterSnapshot(response, assertProbe, context) {
