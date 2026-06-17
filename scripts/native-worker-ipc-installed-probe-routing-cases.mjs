@@ -248,6 +248,12 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
     "installed plugin probe classifies render signal coverage"
   );
 
+  const failedRenderSummary = summarizeProbeResults([{
+    ok: false,
+    format: "vst3",
+    pluginId: "vst3:render-failed",
+    phases: [{ name: "processAudioBlock", ok: false, error: { code: "bad_render_result" } }]
+  }]);
   const outputBusSignalProfile = summarizeProbeOutputBusSignal({
     channels: [[0.1, 0.2], [0, 0]],
     outputBuses: [
@@ -347,6 +353,9 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
       auxOnlyOutputSignalMatrix.outputBusSignalCount === 1 &&
       auxOnlyOutputSignalMatrix.outputBusSilentCount === 2 &&
       JSON.stringify(auxOnlyOutputSignalMatrix.outputBusSignalIndexes) === JSON.stringify([1]) &&
+      failedRenderSummary.coverage.hostTransport.failed === 1 &&
+      failedRenderSummary.matrix[0].hostTransport === "failed" &&
+      failedRenderSummary.matrix[0].featureStatus.transport === "failed" &&
       missingOutputSignalProfile.category === "main-signal" &&
       missingOutputSignalProfile.signalOutputBusCount === 1 &&
       missingOutputSignalProfile.silentOutputBusCount === 1 &&

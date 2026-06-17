@@ -13,7 +13,7 @@ export function summarizeFeatureStatus(result, options) {
     fileGrants: fileGrantFeatureStatus(result),
     midiEvents: phaseGroupStatus(result, ["sendMidiEvents", "sendMidiNoteOff"]),
     automation: safeMatrixText(automationLaneStatus(result), 64),
-    transport: hostTransportFeatureStatus(result),
+    transport: hostTransportStatus(result),
     rendering: renderingFeatureStatus(result),
     busLayouts: busLayoutFeatureStatus(result),
     latencyTail: phaseGroupStatus(result, ["getLatency", "getTailTime"]),
@@ -283,7 +283,7 @@ function renderingFeatureStatus(result) {
     : "missing";
 }
 
-function hostTransportFeatureStatus(result) {
+export function hostTransportStatus(result) {
   if (hasFailedPhase(result, ["processAudioBlock"])) {
     return "failed";
   }
