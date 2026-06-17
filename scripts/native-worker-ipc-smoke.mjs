@@ -101,6 +101,8 @@ try {
     exampleStderrBudgetWorkerPath,
     nativeStderrBudgetWorkerPath,
     diagnosticControlWorkerPath,
+    examplePathErrorWorkerPath,
+    nativePathErrorWorkerPath,
     malformedExampleWorkerPath,
     malformedNativeReadyWorkerPath,
     invalidNativeReadyWorkerPath,
@@ -279,6 +281,29 @@ try {
     "worker stderr diagnostics cap displayed log length"
   );
 
+  const pathErrorWorkers = createTestWorkers(nativePathErrorWorkerPath);
+  const examplePathErrorWorker = new pathErrorWorkers.ExampleInstrumentWorker(examplePathErrorWorkerPath);
+  await expectRejectedRedacted(
+    () => examplePathErrorWorker.render({ frames: 1, sampleRate: 48000, gain: 0.5, tone: 0.5, detune: 0.5 }),
+    "failed while loading",
+    "/tmp/soundbridge-fixture/private-plugin.vst3",
+    "example instrument worker command errors redact local paths"
+  );
+  examplePathErrorWorker.destroy();
+
+  const nativePathErrorWorker = new pathErrorWorkers.NativeHostWorker(
+    { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
+    nativeWorkerInstance()
+  );
+  await nativePathErrorWorker.ready;
+  await expectRejectedRedacted(
+    () => nativePathErrorWorker.getParameters(),
+    "failed while opening",
+    "file:///tmp/soundbridge-fixture/private-license.lic",
+    "native host worker command errors redact local paths"
+  );
+  nativePathErrorWorker.destroy();
+
   const malformedWorkers = createTestWorkers(malformedNativeCommandWorkerPath);
   const malformedExampleWorker = new malformedWorkers.ExampleInstrumentWorker(malformedExampleWorkerPath);
   await expectRejected(
@@ -320,9 +345,10 @@ try {
     { format: "lv2", bundlePath: tempDir, renderEngine: "native-lv2" },
     nativeWorkerInstance()
   );
-  await expectRejected(
+  await expectRejectedRedacted(
     () => invalidNativeReadyWorker.ready,
     "worker_ready_invalid",
+    "/tmp/soundbridge-fixture/private-plugin.vst3",
     "native host workers reject invalid ready handshakes"
   );
   check(invalidNativeReadyWorker.process?.killed === true, "invalid-ready native host worker process is killed");
@@ -630,6 +656,21 @@ async function expectRejected(operation, expectedText, message) {
     fail(message);
   } catch (error) {
     check(String(error?.message ?? error).includes(expectedText), message);
+  }
+}
+
+async function expectRejectedRedacted(operation, expectedText, forbiddenText, message) {
+  try {
+    await operation();
+    fail(message);
+  } catch (error) {
+    const errorText = String(error?.message ?? error);
+    check(
+      errorText.includes(expectedText) &&
+        errorText.includes("[local-path]") &&
+        !errorText.includes(forbiddenText),
+      message
+    );
   }
 }
 

@@ -227,6 +227,29 @@ process.stdin.on("data", () => {
 setTimeout(() => {}, 30000);
 `
     ),
+    examplePathErrorWorkerPath: writeExecutable(
+      tempDir,
+      "example-path-error-worker.mjs",
+      `#!/usr/bin/env node
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", () => {
+  process.stdout.write(JSON.stringify({ error: "failed while loading /tmp/soundbridge-fixture/private-plugin.vst3" }) + "\\n");
+});
+setTimeout(() => {}, 30000);
+`
+    ),
+    nativePathErrorWorkerPath: writeExecutable(
+      tempDir,
+      "native-path-error-worker.mjs",
+      `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", () => {
+  process.stdout.write(JSON.stringify({ error: "failed while opening file:///tmp/soundbridge-fixture/private-license.lic" }) + "\\n");
+});
+setTimeout(() => {}, 30000);
+`
+    ),
     malformedExampleWorkerPath: writeExecutable(
       tempDir,
       "malformed-example-worker.mjs",
@@ -250,7 +273,7 @@ setTimeout(() => {}, 30000);
       tempDir,
       "invalid-native-ready-worker.mjs",
       `#!/usr/bin/env node
-process.stdout.write(JSON.stringify({ ok: false, error: "bad-ready" }) + "\\n");
+process.stdout.write(JSON.stringify({ ok: false, error: "bad-ready /tmp/soundbridge-fixture/private-plugin.vst3" }) + "\\n");
 setTimeout(() => {}, 30000);
 `
     ),

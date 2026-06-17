@@ -28,6 +28,7 @@ import {
   normalizeWorkerStderrLineLimit,
   normalizeWorkerStdoutLineLimit,
   normalizeWorkerTerminationGrace,
+  sanitizeWorkerDiagnosticMessage,
   terminateWorkerProcess,
   workerCommandBytes,
   workerCommandTimeoutError,
@@ -231,7 +232,7 @@ export function createNativeWorkerProcesses({
         try {
           const parsed = JSON.parse(line);
           if (parsed.error) {
-            pending.reject(new Error(parsed.error));
+            pending.reject(new Error(sanitizeWorkerDiagnosticMessage(parsed.error, this.maxDiagnosticLogChars)));
           } else {
             pending.resolve(parsed);
           }
@@ -590,7 +591,7 @@ export function createNativeWorkerProcesses({
           if (parsed.ok === true && parsed.ready === true) {
             this.setReadyOk(parsed);
           } else {
-            this.abortWorker(workerReadyHandshakeError(parsed.error ?? "worker did not report ready"));
+            this.abortWorker(workerReadyHandshakeError(parsed.error ?? "worker did not report ready", this.maxDiagnosticLogChars));
             return;
           }
           continue;
@@ -605,7 +606,7 @@ export function createNativeWorkerProcesses({
 
         clearTimeout(pending.timeout);
         if (parsed.error) {
-          pending.reject(new Error(parsed.error));
+          pending.reject(new Error(sanitizeWorkerDiagnosticMessage(parsed.error, this.maxDiagnosticLogChars)));
         } else {
           pending.resolve(parsed);
         }

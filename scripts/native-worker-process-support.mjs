@@ -179,8 +179,8 @@ export function workerReadyTimeoutError(timeoutMs) {
   return new Error(`worker_ready_timeout: worker did not report ready within ${timeoutMs}ms`);
 }
 
-export function workerReadyHandshakeError(message) {
-  return new Error(`worker_ready_invalid: ${message}`);
+export function workerReadyHandshakeError(message, maxChars = DEFAULT_MAX_WORKER_DIAGNOSTIC_LOG_CHARS) {
+  return new Error(`worker_ready_invalid: ${sanitizeWorkerDiagnosticMessage(message, maxChars)}`);
 }
 
 export function workerPendingCommandsError(maxCommands) {
@@ -319,7 +319,7 @@ function accountWorkerStderr(worker, rawText) {
   return true;
 }
 
-function sanitizeWorkerDiagnosticMessage(value, maxChars) {
+export function sanitizeWorkerDiagnosticMessage(value, maxChars) {
   const limit = normalizeWorkerDiagnosticLogLimit(maxChars);
   let sanitized = "";
   for (const char of redactLocalPaths(value)) {
