@@ -46,7 +46,8 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       automatable: false,
       readOnly: true,
       vst3MidiMappings: [
-        { busIndex: 1, channel: 99, controller: 74 }
+        { busIndex: 1, channel: 99, controller: 74 },
+        { busIndex: 0, channel: 0, controller: 130 }
       ]
     }
   ], { format: "vst3" });
@@ -128,7 +129,9 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.vst3MidiMappingBusCount === 3 &&
       parameterProfile.vst3MidiMappingChannelCount === 3 &&
       parameterProfile.vst3MidiDuplicateMappingCount === 1 &&
-      parameterProfile.invalidVst3MidiMappingCount === 2 &&
+      parameterProfile.invalidVst3MidiMappingCount === 3 &&
+      parameterProfile.invalidVst3MidiMappingRouteCount === 2 &&
+      parameterProfile.invalidVst3MidiMappingControllerCount === 1 &&
       parameterProfile.vst3MidiCcMappingCount === 5 &&
       parameterProfile.vst3MidiAftertouchMappingCount === 1 &&
       parameterProfile.vst3MidiPitchBendMappingCount === 1 &&
@@ -144,6 +147,8 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       parameterProfile.flags.includes("vst3-midi-mapping-non-main-channel") &&
       parameterProfile.flags.includes("vst3-midi-mapping-duplicate") &&
       parameterProfile.flags.includes("invalid-vst3-midi-mapping") &&
+      parameterProfile.flags.includes("invalid-vst3-midi-mapping-route") &&
+      parameterProfile.flags.includes("invalid-vst3-midi-mapping-controller") &&
       parameterProfile.flags.includes("vst3-midi-mapping-cc") &&
       parameterProfile.flags.includes("vst3-midi-mapping-aftertouch") &&
       parameterProfile.flags.includes("vst3-midi-mapping-pitch-bend") &&
@@ -156,7 +161,9 @@ export function exerciseInstalledProbeParameterSupport({ check }) {
       matrix.parameterVst3MidiMappedParameterCount === 3 &&
       matrix.parameterVst3MidiMappingCount === 7 &&
       matrix.parameterVst3MidiDuplicateMappingCount === 1 &&
-      matrix.parameterInvalidVst3MidiMappingCount === 2 &&
+      matrix.parameterInvalidVst3MidiMappingCount === 3 &&
+      matrix.parameterInvalidVst3MidiMappingRouteCount === 2 &&
+      matrix.parameterInvalidVst3MidiMappingControllerCount === 1 &&
       matrix.parameterVst3MidiCcMappingCount === 5 &&
       matrix.parameterVst3MidiAftertouchMappingCount === 1 &&
       matrix.parameterVst3MidiPitchBendMappingCount === 1 &&

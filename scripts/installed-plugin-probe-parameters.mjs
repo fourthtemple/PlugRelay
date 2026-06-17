@@ -73,6 +73,8 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
       vst3MidiMappingChannelCount: 0,
       vst3MidiDuplicateMappingCount: 0,
       invalidVst3MidiMappingCount: 0,
+      invalidVst3MidiMappingRouteCount: 0,
+      invalidVst3MidiMappingControllerCount: 0,
       vst3MidiCcMappingCount: 0,
       vst3MidiAftertouchMappingCount: 0,
       vst3MidiPitchBendMappingCount: 0,
@@ -108,6 +110,8 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     vst3MidiMappingChannelCount: 0,
     vst3MidiDuplicateMappingCount: 0,
     invalidVst3MidiMappingCount: 0,
+    invalidVst3MidiMappingRouteCount: 0,
+    invalidVst3MidiMappingControllerCount: 0,
     vst3MidiCcMappingCount: 0,
     vst3MidiAftertouchMappingCount: 0,
     vst3MidiPitchBendMappingCount: 0,
@@ -174,6 +178,14 @@ export function summarizeParameterProfile(parameters, { atLimit = false, format 
     profile.invalidVst3MidiMappingCount = Math.min(
       MAX_VST3_MIDI_MAPPINGS,
       profile.invalidVst3MidiMappingCount + midiMappingProfile.invalidCount
+    );
+    profile.invalidVst3MidiMappingRouteCount = Math.min(
+      MAX_VST3_MIDI_MAPPINGS,
+      profile.invalidVst3MidiMappingRouteCount + midiMappingProfile.invalidRouteCount
+    );
+    profile.invalidVst3MidiMappingControllerCount = Math.min(
+      MAX_VST3_MIDI_MAPPINGS,
+      profile.invalidVst3MidiMappingControllerCount + midiMappingProfile.invalidControllerCount
     );
     if (midiMappings.length > 0) {
       profile.vst3MidiMappedParameterCount += 1;
@@ -299,6 +311,12 @@ function parameterProfileFlags(profile, { atLimit, isVst3 }) {
   if (isVst3 && profile.invalidVst3MidiMappingCount > 0) {
     flags.push("invalid-vst3-midi-mapping");
   }
+  if (isVst3 && profile.invalidVst3MidiMappingRouteCount > 0) {
+    flags.push("invalid-vst3-midi-mapping-route");
+  }
+  if (isVst3 && profile.invalidVst3MidiMappingControllerCount > 0) {
+    flags.push("invalid-vst3-midi-mapping-controller");
+  }
   if (profile.duplicateParameterIdCount > 0) {
     flags.push("duplicate-parameter-id");
   }
@@ -307,30 +325,44 @@ function parameterProfileFlags(profile, { atLimit, isVst3 }) {
 
 function boundedVst3MidiMappings(mappings, limit = MAX_VST3_MIDI_MAPPINGS) {
   if (!Array.isArray(mappings)) {
-    return { valid: [], invalidCount: 0 };
+    return { valid: [], invalidCount: 0, invalidRouteCount: 0, invalidControllerCount: 0 };
   }
   const valid = [];
   let invalidCount = 0;
+  let invalidRouteCount = 0;
+  let invalidControllerCount = 0;
   for (const mapping of mappings.slice(0, limit)) {
     if (validVst3MidiMapping(mapping)) {
       valid.push(mapping);
     } else {
       invalidCount += 1;
+      const issues = vst3MidiMappingIssues(mapping);
+      invalidRouteCount += issues.invalidRoute ? 1 : 0;
+      invalidControllerCount += issues.invalidController ? 1 : 0;
     }
   }
-  return { valid, invalidCount };
+  return { valid, invalidCount, invalidRouteCount, invalidControllerCount };
 }
 
 function validVst3MidiMapping(mapping) {
-  return Number.isInteger(mapping?.busIndex) &&
-    mapping.busIndex >= 0 &&
-    mapping.busIndex <= 31 &&
-    Number.isInteger(mapping.channel) &&
-    mapping.channel >= 0 &&
-    mapping.channel <= 15 &&
-    Number.isInteger(mapping.controller) &&
-    mapping.controller >= 0 &&
-    mapping.controller <= 129;
+  const issues = vst3MidiMappingIssues(mapping);
+  return !issues.invalidRoute && !issues.invalidController;
+}
+
+function vst3MidiMappingIssues(mapping) {
+  return {
+    invalidRoute:
+      !Number.isInteger(mapping?.busIndex) ||
+      mapping.busIndex < 0 ||
+      mapping.busIndex > 31 ||
+      !Number.isInteger(mapping?.channel) ||
+      mapping.channel < 0 ||
+      mapping.channel > 15,
+    invalidController:
+      !Number.isInteger(mapping?.controller) ||
+      mapping.controller < 0 ||
+      mapping.controller > 129
+  };
 }
 
 function sortedIntegers(values) {
