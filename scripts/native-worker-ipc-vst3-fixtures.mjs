@@ -62,6 +62,12 @@ export async function exerciseVst3MidiControllerMappingNativeWorker({
         midiWorker.sendMidiEvents([
           { type: "controlChange", controller: 1, value: 0.5, channel: 0, time: 0, busIndex: 32 }
         ])
+      ),
+      rejectedMessage(() =>
+        midiWorker.sendMidiEvents([{ type: "channelPressure", pressure: 0.5, channel: 16, time: 0 }])
+      ),
+      rejectedMessage(() =>
+        midiWorker.sendMidiEvents([{ type: "pitchBend", value: 0.5, channel: 0, time: 8192 }])
       )
     ]);
     check(
@@ -80,7 +86,9 @@ export async function exerciseVst3MidiControllerMappingNativeWorker({
         "MIDI value must be a number in 0..1.",
         "MIDI pitch bend value must be a number in -1..1.",
         "MIDI program must be an integer in 0..127.",
-        "MIDI busIndex must be an integer in 0..31."
+        "MIDI busIndex must be an integer in 0..31.",
+        "MIDI channel must be an integer in 0..15.",
+        "MIDI time must be an integer in 0..8191."
       ]),
       "native VST3 workers reject malformed MIDI-controller/program-change events before IPC"
     );
