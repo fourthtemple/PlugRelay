@@ -2,6 +2,7 @@ import { assertNoNativeLaunchData } from "./installed-plugin-probe-file-grants.m
 
 const MAX_PLUGIN_PARAMETERS = 1024;
 const MAX_PLUGIN_PROGRAMS = 256;
+const MAX_PLUGIN_PROGRAM_SCAN = MAX_PLUGIN_PROGRAMS * 2;
 const MAX_PLUGIN_PROGRAM_LISTS = 256;
 const MAX_PLUGIN_PROGRAM_DATA_BYTES = 384 * 1024;
 const VST3_NO_PROGRAM_LIST_ID = -1;
@@ -242,8 +243,11 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       programListNameFallbackCount += 1;
       flags.push("program-list-name-fallback");
     }
-    if (Array.isArray(programList.programs)) {
-      for (const program of programList.programs.slice(0, MAX_PLUGIN_PROGRAMS)) {
+    const scannedPrograms = Array.isArray(programList.programs)
+      ? programList.programs.slice(0, MAX_PLUGIN_PROGRAM_SCAN)
+      : [];
+    if (scannedPrograms.length > 0) {
+      for (const program of scannedPrograms) {
         if (program?.nameFallback === true || hasEmptyName(program)) {
           programNameFallbackCount += 1;
           flags.push("program-name-fallback");
@@ -280,9 +284,9 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     const programIndexResolutions = boundedProgramIndexResolutions(programList.programs);
     ambiguousProgramIndexCount += programIndexResolutions.ambiguousIndexes.size;
     consistentDuplicateProgramIndexCount += programIndexResolutions.consistentDuplicateIndexes.size;
-    let validProgramIndexCount = 0;
+    let targetableValidProgramIndexCount = 0;
     const seenProgramIndexes = new Set();
-    for (const program of programList.programs.slice(0, MAX_PLUGIN_PROGRAMS)) {
+    for (const [programPosition, program] of scannedPrograms.entries()) {
       const programIndex = boundedProgramIndex(program?.index);
       const programValue = boundedProgramValue(program?.normalizedValue);
       if (programValue === undefined) {
@@ -305,10 +309,12 @@ export function summarizeVst3ProgramDataProfile(plugin) {
           duplicateProgramIndexCount += 1;
         }
         seenProgramIndexes.add(programIndex);
-        validProgramIndexCount += 1;
+        if (programPosition < MAX_PLUGIN_PROGRAMS) {
+          targetableValidProgramIndexCount += 1;
+        }
       }
     }
-    if (validProgramIndexCount === 0) {
+    if (targetableValidProgramIndexCount === 0) {
       flags.push("invalid-program-index");
       continue;
     }
@@ -323,6 +329,9 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     flags.push("no-valid-program-data-programs");
   } else if (candidateProgramCount > 0) {
     flags.push("bounded-target");
+  }
+  if (invalidProgramIndexCount > 0) {
+    flags.push("invalid-program-index");
   }
   if (duplicateProgramIndexCount > 0) {
     flags.push("duplicate-program-index");

@@ -173,6 +173,30 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
     format: "vst3",
     vst3ProgramDataProfile: cappedProgramDataProfile
   }]).matrix[0];
+  const saturatedProgramMetadataProfile = summarizeVst3ProgramDataProfile({
+    format: "vst3",
+    vst3ProgramLists: [
+      {
+        id: 12,
+        programDataSupported: true,
+        programs: [
+          ...Array.from({ length: 256 }, (_, programIndex) => ({
+            index: programIndex,
+            normalizedValue: programIndex / 255
+          })),
+          { index: 256, normalizedValue: 0.5 },
+          { index: 1, normalizedValue: -1 },
+          { index: 2 },
+          { index: 0, normalizedValue: 0.25 }
+        ]
+      }
+    ]
+  });
+  const saturatedProgramMetadataMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    vst3ProgramDataProfile: saturatedProgramMetadataProfile
+  }]).matrix[0];
   check(
     targetedProgramDataProfile.category === "targeted" &&
       targetedProgramDataProfile.flags.includes("program-data-unsupported") &&
@@ -255,7 +279,24 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       cappedProgramDataMatrix.vst3ProgramDataProgramLists === 256 &&
       cappedProgramDataMatrix.vst3ProgramDataCandidatePrograms === 256 &&
       cappedProgramDataMatrix.vst3ProgramDataProgramListMetadataAtLimit === true &&
-      cappedProgramDataMatrix.vst3ProgramDataProgramMetadataAtLimit === true,
+      cappedProgramDataMatrix.vst3ProgramDataProgramMetadataAtLimit === true &&
+      saturatedProgramMetadataProfile.category === "targeted" &&
+      saturatedProgramMetadataProfile.candidateProgramCount === 256 &&
+      saturatedProgramMetadataProfile.invalidProgramIndexCount === 1 &&
+      saturatedProgramMetadataProfile.duplicateProgramIndexCount === 3 &&
+      saturatedProgramMetadataProfile.invalidProgramValueCount === 1 &&
+      saturatedProgramMetadataProfile.missingProgramValueCount === 1 &&
+      saturatedProgramMetadataProfile.programMetadataAtLimit === true &&
+      saturatedProgramMetadataProfile.flags.includes("program-metadata-at-limit") &&
+      saturatedProgramMetadataProfile.flags.includes("invalid-program-index") &&
+      saturatedProgramMetadataProfile.flags.includes("duplicate-program-index") &&
+      saturatedProgramMetadataProfile.flags.includes("invalid-program-value") &&
+      saturatedProgramMetadataProfile.flags.includes("missing-program-value") &&
+      saturatedProgramMetadataMatrix.vst3ProgramDataCandidatePrograms === 256 &&
+      saturatedProgramMetadataMatrix.vst3ProgramDataInvalidProgramIndexes === 1 &&
+      saturatedProgramMetadataMatrix.vst3ProgramDataDuplicateProgramIndexes === 3 &&
+      saturatedProgramMetadataMatrix.vst3ProgramDataInvalidProgramValues === 1 &&
+      saturatedProgramMetadataMatrix.vst3ProgramDataMissingProgramValues === 1,
     "installed plugin probe classifies VST3 program-data target edge cases"
   );
 
