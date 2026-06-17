@@ -272,6 +272,9 @@ function fileGrantFeatureStatus(result) {
     result.fileGrantLicenseLoad,
     result.fileGrantOtherPresetLoad
   ].filter(Boolean).map(String);
+  if (workflowStatuses.some((status) => status === "failed")) {
+    return "failed";
+  }
   if (workflowStatuses.some((status) => status === "applied")) {
     return "passed";
   }

@@ -7,6 +7,7 @@ import {
   probeFileGrantOtherPresetLoad,
   probeFileGrantSampleLoad
 } from "./installed-plugin-probe-file-grants.mjs";
+import { summarizeProbeResults } from "./installed-plugin-probe-reporting.mjs";
 
 export async function exerciseInstalledProbeFileGrantSupport({ check }) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-probe-file-grants-"));
@@ -105,6 +106,26 @@ export async function exerciseInstalledProbeFileGrantSupport({ check }) {
           JSON.stringify(["createFileGrant", "attachFileGrant", "useFileGrant", "detachFileGrant", "revokeFileGrant"]) &&
         fs.readdirSync(tempDir).length === 0,
       "installed plugin probe cleans up advertised file grants when responses leak paths"
+    );
+
+    const failureSummary = summarizeProbeResults([
+      {
+        ok: true,
+        pluginId: "neutral:file-grant-failed",
+        fileGrantSampleLoad: "failed",
+        fileGrantCacheDirectoryOpen: "failed",
+        fileGrantLicenseLoad: "failed",
+        fileGrantOtherPresetLoad: "failed",
+        fileGrantOperations: ["loadSample", "openCacheDirectory", "loadLicense", "other"]
+      }
+    ]);
+    check(
+      failureSummary.coverage.fileGrantSampleLoad.failed === 1 &&
+        failureSummary.coverage.fileGrantCacheDirectoryOpen.failed === 1 &&
+        failureSummary.coverage.fileGrantLicenseLoad.failed === 1 &&
+        failureSummary.coverage.fileGrantOtherPresetLoad.failed === 1 &&
+        failureSummary.matrix[0].featureStatus.fileGrants === "failed",
+      "installed plugin probe reports advanced file-grant workflow failures"
     );
   } finally {
     fs.rmSync(tempDir, { force: true, recursive: true });
