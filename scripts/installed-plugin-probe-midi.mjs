@@ -296,7 +296,14 @@ function defaultEventRoute(event) {
 }
 
 function boundedInt(value, min, max) {
-  return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+  if (typeof value !== "number" && typeof value !== "string") {
+    return undefined;
+  }
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined;
+  }
+  const number = Number(value);
+  return Number.isInteger(number) && number >= min && number <= max ? number : undefined;
 }
 
 function controllerValueFlags(events) {
@@ -331,6 +338,12 @@ function controllerValueRange(event) {
 }
 
 function boundedNumberRange(value, min, max) {
+  if (typeof value !== "number" && typeof value !== "string") {
+    return undefined;
+  }
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined;
+  }
   const number = Number(value);
   return Number.isFinite(number) && number >= min && number <= max ? { value: number, min, max } : undefined;
 }
@@ -340,12 +353,17 @@ function hasOwn(object, key) {
 }
 
 function uniqueSortedIntegers(values, min, max) {
-  return [...new Set(values.filter((value) =>
-    Number.isInteger(value) && value >= min && value <= max
-  ))].sort((left, right) => left - right);
+  return [...new Set(values.map((value) => boundedInt(value, min, max)).filter((value) => value !== undefined))]
+    .sort((left, right) => left - right);
 }
 
 function clampInt(value, min, max, fallback) {
+  if (typeof value !== "number" && typeof value !== "string") {
+    return fallback;
+  }
+  if (typeof value === "string" && value.trim().length === 0) {
+    return fallback;
+  }
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || numeric < min || numeric > max) {
     return fallback;
