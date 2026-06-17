@@ -1,6 +1,6 @@
 const MAX_VST3_NOTE_EXPRESSIONS = 256;
 const MAX_VST3_NOTE_EXPRESSION_STEPS = 1_000_000;
-const VST3_NO_PARAM_ID = "4294967295";
+const VST3_NO_PARAM_IDS = new Set(["4294967295", "-1"]);
 const TEXT_NOTE_EXPRESSION_TYPE_ID = 6;
 
 export function summarizeProbeVst3Events(plugin) {
@@ -16,6 +16,7 @@ export function summarizeProbeVst3Events(plugin) {
     invalidRouteExpressionCount,
     invalidValueMetadataCount,
     invalidUnitLinkCount,
+    noAssociatedParameterSentinelCount,
     metadataAtLimit
   } = boundedNoteExpressionProfile(plugin?.vst3NoteExpressions);
   const eventBuses = uniqueSorted(expressions.map((expression) => expression.busIndex));
@@ -32,6 +33,7 @@ export function summarizeProbeVst3Events(plugin) {
     invalidRouteExpressionCount,
     invalidValueMetadataCount,
     invalidUnitLinkCount,
+    noAssociatedParameterSentinelCount,
     metadataAtLimit
   });
 
@@ -48,6 +50,7 @@ export function summarizeProbeVst3Events(plugin) {
     invalidNoteExpressionRouteCount: invalidRouteExpressionCount,
     invalidNoteExpressionValueMetadataCount: invalidValueMetadataCount,
     invalidNoteExpressionUnitLinkCount: invalidUnitLinkCount,
+    noAssociatedParameterSentinelCount,
     duplicateNoteExpressionTypeIdCount: duplicateTypeIdCount,
     associatedParameterCount: expressions.filter((expression) => expression.hasAssociatedParameter).length,
     unitLinkedExpressionCount: expressions.filter((expression) => expression.hasUnitLink).length,
@@ -75,6 +78,7 @@ function expressionFlags(
     invalidRouteExpressionCount,
     invalidValueMetadataCount,
     invalidUnitLinkCount,
+    noAssociatedParameterSentinelCount,
     metadataAtLimit
   }
 ) {
@@ -103,6 +107,9 @@ function expressionFlags(
   }
   if (invalidAssociatedParameterCount > 0) {
     flags.push("invalid-associated-parameter");
+  }
+  if (noAssociatedParameterSentinelCount > 0) {
+    flags.push("no-associated-parameter-sentinel");
   }
   if (invalidUnitLinkCount > 0) {
     flags.push("invalid-unit-link");
@@ -188,6 +195,7 @@ function boundedNoteExpressionProfile(value) {
       invalidRouteExpressionCount: 0,
       invalidValueMetadataCount: 0,
       invalidUnitLinkCount: 0,
+      noAssociatedParameterSentinelCount: 0,
       metadataAtLimit: false
     };
   }
@@ -198,6 +206,7 @@ function boundedNoteExpressionProfile(value) {
   let invalidRouteExpressionCount = 0;
   let invalidValueMetadataCount = 0;
   let invalidUnitLinkCount = 0;
+  let noAssociatedParameterSentinelCount = 0;
   for (const expression of value.slice(0, MAX_VST3_NOTE_EXPRESSIONS)) {
     const normalized = normalizeNoteExpression(expression);
     if (normalized) {
@@ -214,6 +223,9 @@ function boundedNoteExpressionProfile(value) {
       if (normalized.invalidAssociatedParameterMetadata) {
         invalidAssociatedParameterCount += 1;
       }
+      if (normalized.noAssociatedParameterSentinel) {
+        noAssociatedParameterSentinelCount += 1;
+      }
       if (normalized.invalidUnitLinkMetadata) {
         invalidUnitLinkCount += 1;
       }
@@ -229,6 +241,7 @@ function boundedNoteExpressionProfile(value) {
     invalidRouteExpressionCount,
     invalidValueMetadataCount,
     invalidUnitLinkCount,
+    noAssociatedParameterSentinelCount,
     metadataAtLimit: value.length >= MAX_VST3_NOTE_EXPRESSIONS
   };
 }
@@ -245,6 +258,7 @@ function normalizeNoteExpression(expression) {
   const channel = boundedInt(expression.channel, 0, 15);
   const unitId = boundedInt(expression.unitId, -2_147_483_648, 2_147_483_647);
   const associatedParameterId = normalizeAssociatedParameterId(expression.associatedParameterId);
+  const noAssociatedParameterSentinel = isNoAssociatedParameterSentinel(expression.associatedParameterId);
   const valueMetadata = normalizeValueMetadata(expression);
   return {
     typeId,
@@ -255,7 +269,9 @@ function normalizeNoteExpression(expression) {
       (hasOwn(expression, "channel") && channel === undefined),
     defaultRouteMetadata: !hasOwn(expression, "busIndex") || !hasOwn(expression, "channel"),
     invalidValueMetadata: valueMetadata.invalid,
-    invalidAssociatedParameterMetadata: hasOwn(expression, "associatedParameterId") && associatedParameterId === undefined,
+    invalidAssociatedParameterMetadata:
+      hasOwn(expression, "associatedParameterId") && associatedParameterId === undefined && !noAssociatedParameterSentinel,
+    noAssociatedParameterSentinel,
     invalidUnitLinkMetadata: hasOwn(expression, "unitId") && unitId === undefined,
     fixedValueRange: valueMetadata.fixedRange,
     steppedValue: valueMetadata.stepped,
@@ -289,10 +305,14 @@ function normalizeValueMetadata(expression) {
 }
 
 function normalizeAssociatedParameterId(value) {
-  if (typeof value !== "string" || value.length === 0 || value === VST3_NO_PARAM_ID || value === "-1") {
+  if (typeof value !== "string" || value.length === 0 || isNoAssociatedParameterSentinel(value)) {
     return undefined;
   }
   return value;
+}
+
+function isNoAssociatedParameterSentinel(value) {
+  return VST3_NO_PARAM_IDS.has(String(value ?? ""));
 }
 
 function hasOwn(object, key) {
