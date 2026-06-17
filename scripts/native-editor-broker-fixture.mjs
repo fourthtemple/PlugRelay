@@ -34,6 +34,10 @@ process.stdin.on("data", (chunk) => {
         process.stdout.write(`${JSON.stringify({ error: "fixture_open_failed" })}\n`);
         continue;
       }
+      if (mode === "open-path-error") {
+        process.stdout.write(`${JSON.stringify({ error: "failed while opening /tmp/private-plugin.vst3" })}\n`);
+        continue;
+      }
       if (mode === "malformed-open") {
         process.stdout.write("{not-json\n");
         continue;
