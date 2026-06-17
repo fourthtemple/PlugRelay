@@ -68,6 +68,19 @@ Open:
 }
 ```
 
+For Audio Units, `nativeHost` carries bounded component identity instead of a bundle path:
+
+```json
+{
+  "format": "au",
+  "renderEngine": "native-au",
+  "componentType": "aufx",
+  "componentSubType": "gain",
+  "componentManufacturer": "SBrg",
+  "hostProfile": "realtime-main-bus"
+}
+```
+
 The `capabilityPolicy` object is the daemon's effective allow/deny policy for privileged UI surfaces. Brokers must treat omitted or `false` policy fields as denied, even if the native platform windowing layer could expose the feature. The `nativeHost` object is bounded to known launch fields for the plugin format, and both `nativeHost` and `fileGrants[].absolutePath` are daemon-to-broker data only. The daemon includes only grants already attached to the owning plugin instance and only after session ownership checks. Browser responses must remain path-free.
 
 Open response:

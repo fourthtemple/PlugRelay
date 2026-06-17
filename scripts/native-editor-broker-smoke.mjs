@@ -35,6 +35,19 @@ const fixtureInstance = {
     bundlePath: "/tmp/fixture.vst3"
   }
 };
+const fixtureAuInstance = {
+  ...fixtureInstance,
+  pluginId: "au:fixture",
+  format: "au",
+  nativeHost: {
+    format: "au",
+    renderEngine: "native-au",
+    componentType: "aufx",
+    componentSubType: "gain",
+    componentManufacturer: "SBrg",
+    hostProfile: "realtime-main-bus"
+  }
+};
 const broker = new NativeEditorBroker({
   executablePath: process.execPath,
   args: [fixturePath],
@@ -183,6 +196,37 @@ assert(
   "broker receives bounded VST3 native host launch descriptors"
 );
 await nativeHostOpened.brokerSession.close("editor-00000000-0000-4000-8000-000000000001");
+
+const auNativeHostBroker = new NativeEditorBroker({
+  executablePath: process.execPath,
+  args: [fixturePath, "require-au-native-host"],
+  limits: {
+    maxWorkerStdoutLineBytes: 64 * 1024,
+    maxWorkerCommandBytes: 64 * 1024,
+    maxWorkerStderrLineBytes: 16 * 1024,
+    maxWorkerStderrBytes: 64 * 1024,
+    maxWorkerDiagnosticLogChars: 1024,
+    workerReadyTimeoutMs: 1000,
+    nativeWorkerCommandTimeoutMs: 1000,
+    workerTerminationGraceMs: 50
+  }
+});
+const auNativeHostOpened = await auNativeHostBroker.openEditor({
+  editor: fixtureEditor,
+  instance: {
+    ...fixtureAuInstance,
+    nativeHost: {
+      ...fixtureAuInstance.nativeHost,
+      bundlePath: "/tmp/not-an-au-bundle",
+      extraLaunchSecret: "drop-me"
+    }
+  }
+});
+assert(
+  auNativeHostOpened.brokerSessionId.startsWith("fixture-editor-"),
+  "broker receives bounded AU native host launch descriptors"
+);
+await auNativeHostOpened.brokerSession.close("editor-00000000-0000-4000-8000-000000000001");
 
 const configured = createConfiguredNativeEditorBroker({
   env: {

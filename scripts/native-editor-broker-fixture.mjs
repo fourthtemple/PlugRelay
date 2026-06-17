@@ -103,6 +103,23 @@ process.stdin.on("data", (chunk) => {
           continue;
         }
       }
+      if (mode === "require-au-native-host") {
+        const nativeHost = message.nativeHost;
+        if (
+          !nativeHost ||
+          nativeHost.format !== "au" ||
+          nativeHost.renderEngine !== "native-au" ||
+          nativeHost.componentType !== "aufx" ||
+          nativeHost.componentSubType !== "gain" ||
+          nativeHost.componentManufacturer !== "SBrg" ||
+          nativeHost.hostProfile !== "realtime-main-bus" ||
+          Object.hasOwn(nativeHost, "bundlePath") ||
+          Object.hasOwn(nativeHost, "extraLaunchSecret")
+        ) {
+          process.stdout.write(`${JSON.stringify({ error: "bad_au_native_host" })}\n`);
+          continue;
+        }
+      }
       process.stdout.write(
         `${JSON.stringify({
           ok: true,
