@@ -46,10 +46,14 @@ export function summarizeProbeMidiControllerEvents(events) {
       event?.type === "channelPressure"
   );
   const types = knownControllerEventTypes(controllerEvents);
+  const invalidControllerNumberCount = controllerEvents.filter(invalidControllerNumber).length;
+  const invalidControllerRouteCount = controllerEvents.filter(invalidEventRoute).length;
   return {
     eventCount: controllerEvents.length,
     controllerFamilyCount: types.length,
-    flags: midiControllerFlags(controllerEvents, types),
+    invalidControllerNumberCount,
+    invalidControllerRouteCount,
+    flags: midiControllerFlags(controllerEvents, types, { invalidControllerNumberCount, invalidControllerRouteCount }),
     types,
     controllers: uniqueSortedIntegers(controllerEvents.map((event) => event.controller), 0, 127),
     channels: uniqueSortedIntegers(controllerEvents.map((event) => event.channel ?? 0), 0, 15),
@@ -65,9 +69,13 @@ export function summarizeProbeMidiProgramChangeEvents(events) {
   if (programEvents.length === 0) {
     return emptyMidiProgramChangeProfile();
   }
+  const invalidProgramNumberCount = programEvents.filter(invalidProgramNumber).length;
+  const invalidProgramRouteCount = programEvents.filter(invalidEventRoute).length;
   return {
     eventCount: programEvents.length,
-    flags: midiProgramChangeFlags(programEvents),
+    invalidProgramNumberCount,
+    invalidProgramRouteCount,
+    flags: midiProgramChangeFlags(programEvents, { invalidProgramNumberCount, invalidProgramRouteCount }),
     programs: uniqueSortedIntegers(programEvents.map((event) => event.program), 0, 127),
     channels: uniqueSortedIntegers(programEvents.map((event) => event.channel ?? 0), 0, 15),
     eventBuses: uniqueSortedIntegers(programEvents.map((event) => event.busIndex ?? 0), 0, 31)
@@ -78,6 +86,8 @@ function emptyMidiControllerProfile() {
   return {
     eventCount: 0,
     controllerFamilyCount: 0,
+    invalidControllerNumberCount: 0,
+    invalidControllerRouteCount: 0,
     flags: ["no-controller-events"],
     types: [],
     controllers: [],
@@ -89,6 +99,8 @@ function emptyMidiControllerProfile() {
 function emptyMidiProgramChangeProfile() {
   return {
     eventCount: 0,
+    invalidProgramNumberCount: 0,
+    invalidProgramRouteCount: 0,
     flags: ["no-program-change-events"],
     programs: [],
     channels: [],
@@ -101,7 +113,11 @@ function knownControllerEventTypes(events) {
   return ["controlChange", "pitchBend", "channelPressure"].filter((type) => present.has(type));
 }
 
-function midiControllerFlags(events, types = knownControllerEventTypes(events)) {
+function midiControllerFlags(
+  events,
+  types = knownControllerEventTypes(events),
+  { invalidControllerNumberCount = 0, invalidControllerRouteCount = 0 } = {}
+) {
   if (events.length === 0) {
     return ["no-controller-events"];
   }
@@ -112,24 +128,57 @@ function midiControllerFlags(events, types = knownControllerEventTypes(events)) 
   if (types.length > 1) {
     flags.push("multi-controller-family");
   }
-  if (events.some((event) => Number.isInteger(event.busIndex) && event.busIndex > 0)) {
+  if (events.some((event) => boundedInt(event.busIndex, 0, 31) > 0)) {
     flags.push("non-main-event-bus");
   }
-  if (events.some((event) => Number.isInteger(event.channel) && event.channel > 0)) {
+  if (events.some((event) => boundedInt(event.channel, 0, 15) > 0)) {
     flags.push("non-main-channel");
+  }
+  if (invalidControllerNumberCount > 0) {
+    flags.push("invalid-controller-number");
+  }
+  if (invalidControllerRouteCount > 0) {
+    flags.push("invalid-controller-route");
   }
   return flags;
 }
 
-function midiProgramChangeFlags(events) {
+function midiProgramChangeFlags(events, { invalidProgramNumberCount = 0, invalidProgramRouteCount = 0 } = {}) {
   const flags = ["program-change-events"];
-  if (events.some((event) => Number.isInteger(event.busIndex) && event.busIndex > 0)) {
+  if (events.some((event) => boundedInt(event.busIndex, 0, 31) > 0)) {
     flags.push("non-main-event-bus");
   }
-  if (events.some((event) => Number.isInteger(event.channel) && event.channel > 0)) {
+  if (events.some((event) => boundedInt(event.channel, 0, 15) > 0)) {
     flags.push("non-main-channel");
   }
+  if (invalidProgramNumberCount > 0) {
+    flags.push("invalid-program-number");
+  }
+  if (invalidProgramRouteCount > 0) {
+    flags.push("invalid-program-route");
+  }
   return flags;
+}
+
+function invalidControllerNumber(event) {
+  return event?.type === "controlChange" && boundedInt(event.controller, 0, 127) === undefined;
+}
+
+function invalidProgramNumber(event) {
+  return boundedInt(event?.program, 0, 127) === undefined;
+}
+
+function invalidEventRoute(event) {
+  return (hasOwn(event, "channel") && boundedInt(event.channel, 0, 15) === undefined) ||
+    (hasOwn(event, "busIndex") && boundedInt(event.busIndex, 0, 31) === undefined);
+}
+
+function boundedInt(value, min, max) {
+  return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+}
+
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
 }
 
 function uniqueSortedIntegers(values, min, max) {

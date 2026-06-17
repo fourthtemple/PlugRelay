@@ -178,6 +178,8 @@ export function exerciseInstalledProbeSupport({ check }) {
       midiControllerEventProfile: {
         eventCount: 6,
         controllerFamilyCount: 3,
+        invalidControllerNumberCount: 1,
+        invalidControllerRouteCount: 1,
         flags: [
           "controller-events",
           "type:controlChange",
@@ -185,7 +187,9 @@ export function exerciseInstalledProbeSupport({ check }) {
           "type:channelPressure",
           "multi-controller-family",
           "non-main-event-bus",
-          "non-main-channel"
+          "non-main-channel",
+          "invalid-controller-number",
+          "invalid-controller-route"
         ],
         types: ["controlChange", "pitchBend", "channelPressure"],
         controllers: [1, 74],
@@ -196,7 +200,15 @@ export function exerciseInstalledProbeSupport({ check }) {
       vst3MidiControllerEvents: "accepted",
       midiProgramChangeEventProfile: {
         eventCount: 2,
-        flags: ["program-change-events", "non-main-event-bus", "non-main-channel"],
+        invalidProgramNumberCount: 1,
+        invalidProgramRouteCount: 1,
+        flags: [
+          "program-change-events",
+          "non-main-event-bus",
+          "non-main-channel",
+          "invalid-program-number",
+          "invalid-program-route"
+        ],
         programs: [2, 7],
         channels: [0, 2],
         eventBuses: [0, 1]
@@ -370,8 +382,12 @@ export function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].midiEventCount === 16 &&
       coverageSummary.matrix[0].midiControllerEventCount === 6 &&
       coverageSummary.matrix[0].midiControllerFamilyCount === 3 &&
+      coverageSummary.matrix[0].midiControllerInvalidNumberCount === 1 &&
+      coverageSummary.matrix[0].midiControllerInvalidRouteCount === 1 &&
       coverageSummary.matrix[0].midiControllerFlags.includes("multi-controller-family") &&
       coverageSummary.matrix[0].midiControllerFlags.includes("non-main-event-bus") &&
+      coverageSummary.matrix[0].midiControllerFlags.includes("invalid-controller-number") &&
+      coverageSummary.matrix[0].midiControllerFlags.includes("invalid-controller-route") &&
       coverageSummary.matrix[0].midiControllerFlags.includes("type:controlChange") &&
       JSON.stringify(coverageSummary.matrix[0].midiControllerEventTypes) ===
         JSON.stringify(["controlChange", "pitchBend", "channelPressure"]) &&
@@ -380,7 +396,11 @@ export function exerciseInstalledProbeSupport({ check }) {
       JSON.stringify(coverageSummary.matrix[0].midiControllerEventBuses) === JSON.stringify([0, 1]) &&
       coverageSummary.matrix[0].vst3MidiControllerEvents === "accepted" &&
       coverageSummary.matrix[0].midiProgramChangeEventCount === 2 &&
+      coverageSummary.matrix[0].midiProgramChangeInvalidNumberCount === 1 &&
+      coverageSummary.matrix[0].midiProgramChangeInvalidRouteCount === 1 &&
       coverageSummary.matrix[0].midiProgramChangeFlags.includes("non-main-event-bus") &&
+      coverageSummary.matrix[0].midiProgramChangeFlags.includes("invalid-program-number") &&
+      coverageSummary.matrix[0].midiProgramChangeFlags.includes("invalid-program-route") &&
       JSON.stringify(coverageSummary.matrix[0].midiProgramChangePrograms) === JSON.stringify([2, 7]) &&
       JSON.stringify(coverageSummary.matrix[0].midiProgramChangeChannels) === JSON.stringify([0, 2]) &&
       JSON.stringify(coverageSummary.matrix[0].midiProgramChangeEventBuses) === JSON.stringify([0, 1]) &&

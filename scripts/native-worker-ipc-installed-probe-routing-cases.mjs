@@ -305,6 +305,15 @@ function exerciseProbeMidiCoverage({ check }) {
   const vst3MidiEvents = midiEventsForBlock("vst3", 64, 64);
   const vst3MidiControllerProfile = summarizeProbeMidiControllerEvents(vst3MidiEvents);
   const vst3MidiProgramChangeProfile = summarizeProbeMidiProgramChangeEvents(vst3MidiEvents);
+  const invalidControllerProfile = summarizeProbeMidiControllerEvents([
+    { type: "controlChange", controller: 128, channel: 16, busIndex: 32 },
+    { type: "pitchBend", value: 0, channel: -1 },
+    { type: "channelPressure", pressure: 0.25, busIndex: "bad" }
+  ]);
+  const invalidProgramChangeProfile = summarizeProbeMidiProgramChangeEvents([
+    { type: "programChange", program: 128, channel: 16, busIndex: 32 },
+    { type: "programChange", program: "bad", channel: -1 }
+  ]);
   check(
     vst3MidiEvents.length === 16 &&
       vst3MidiEvents.some((event) => event.type === "noteExpression" && event.noteId === 77) &&
@@ -331,6 +340,18 @@ function exerciseProbeMidiCoverage({ check }) {
       JSON.stringify(vst3MidiProgramChangeProfile.programs) === JSON.stringify([2, 7]) &&
       JSON.stringify(vst3MidiProgramChangeProfile.channels) === JSON.stringify([0, 2]) &&
       JSON.stringify(vst3MidiProgramChangeProfile.eventBuses) === JSON.stringify([0, 1]) &&
+      invalidControllerProfile.invalidControllerNumberCount === 1 &&
+      invalidControllerProfile.invalidControllerRouteCount === 3 &&
+      invalidControllerProfile.flags.includes("invalid-controller-number") &&
+      invalidControllerProfile.flags.includes("invalid-controller-route") &&
+      !invalidControllerProfile.flags.includes("non-main-event-bus") &&
+      !invalidControllerProfile.flags.includes("non-main-channel") &&
+      invalidProgramChangeProfile.invalidProgramNumberCount === 2 &&
+      invalidProgramChangeProfile.invalidProgramRouteCount === 2 &&
+      invalidProgramChangeProfile.flags.includes("invalid-program-number") &&
+      invalidProgramChangeProfile.flags.includes("invalid-program-route") &&
+      !invalidProgramChangeProfile.flags.includes("non-main-event-bus") &&
+      !invalidProgramChangeProfile.flags.includes("non-main-channel") &&
       midiEventsForBlock("au", 64, 64).every((event) => !event.type.startsWith("noteExpression")),
     "installed plugin probe sends VST3 note-expression, MIDI-controller, and program-change coverage"
   );
