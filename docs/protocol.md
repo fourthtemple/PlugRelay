@@ -702,4 +702,4 @@ Measures liveness and rough round-trip time.
 
 ## Versioning
 
-Every daemon reports a semantic `protocolVersion`. Backward-compatible additions add optional fields. Breaking changes increment the major version and must negotiate capabilities in `hello`.
+Every daemon reports a semantic `protocolVersion`. Backward-compatible additions add optional fields. Breaking changes increment the major version and must negotiate capabilities in `hello`. See [Release readiness](release-readiness.md) for compatibility status terms and protocol evolution rules.

@@ -271,6 +271,7 @@ npm run check
 - [Native editor broker](docs/native-editor-broker.md)
 - [File grant approval broker](docs/file-grant-approval-broker.md)
 - [Plugin compatibility reports](docs/compatibility-reports.md)
+- [Release readiness](docs/release-readiness.md)
 - [Why browser plugin bridges need an open standard](docs/open-standard.md)
 - [Roadmap](docs/roadmap.md)
 - [Architecture](docs/architecture.md)

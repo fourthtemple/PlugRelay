@@ -106,9 +106,9 @@ The reference implementation is macOS-first today.
 - Keep README focused on quick-start hosting from a website.
 - Keep protocol docs normative about payload shapes, limits, ownership, and per-format behavior.
 - Keep security docs explicit about the trust boundary crossed by browser and desktop hosts.
+- Keep [release readiness](release-readiness.md) explicit about compatibility terms, matrix evidence, and protocol evolution.
 - Document why applications should use an auditable open bridge instead of opaque localhost helpers.
 - Publish the native editor broker, file grant broker, and worker IPC contracts clearly enough for independent implementations.
-- Add versioning guidance for protocol evolution and backward compatibility.
 
 ## Extended Sandboxed Worker Profile
 
