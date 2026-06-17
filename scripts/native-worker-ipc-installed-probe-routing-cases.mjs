@@ -155,7 +155,7 @@ export function exerciseInstalledProbeRoutingSupport({ check }) {
     format: "vst3",
     vst3NoteExpressions: [
       { typeId: 0, busIndex: 0, channel: 0, minValue: 0.5, maxValue: 0.5, defaultValue: 0.5, stepCount: 4, bipolar: true },
-      { typeId: 6, busIndex: 2, channel: 3, nameFallback: true, unitId: 4, associatedParameterId: "param-1", oneShot: true },
+      { typeId: 6, name: "", busIndex: 2, channel: 3, unitId: 4, associatedParameterId: "param-1", oneShot: true },
       { typeId: 6 },
       { typeId: 7, busIndex: 99, channel: 99, minValue: 1, maxValue: 0, unitId: "bad", associatedParameterId: "4294967295", absolute: true },
       { typeId: 8, associatedParameterId: -1 },

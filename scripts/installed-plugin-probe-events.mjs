@@ -278,7 +278,7 @@ function normalizeNoteExpression(expression) {
     invalidUnitLinkMetadata: hasOwn(expression, "unitId") && unitId === undefined,
     fixedValueRange: valueMetadata.fixedRange,
     steppedValue: valueMetadata.stepped,
-    nameFallback: expression.nameFallback === true,
+    nameFallback: expression.nameFallback === true || hasEmptyName(expression),
     hasAssociatedParameter: associatedParameterId !== undefined,
     hasUnitLink: unitId !== undefined,
     bipolar: expression.bipolar === true,
@@ -320,6 +320,10 @@ function isNoAssociatedParameterSentinel(value) {
 
 function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function hasEmptyName(value) {
+  return hasOwn(value, "name") && String(value.name ?? "").length === 0;
 }
 
 function uniqueSorted(values) {
