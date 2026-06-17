@@ -50,11 +50,25 @@ export function createDaemonNormalizers(options = {}) {
           return vst3BusEventToken(["program", event.program, event.channel, event.time], event, format);
         }
         if (event.type === "noteExpression" && format === "vst3") {
-          return vst3BusEventToken(["expr", event.typeId, event.value, event.noteId, event.channel, event.time], event, format);
+          return vst3BusEventToken([
+            "expr",
+            boundedVst3NoteExpressionInteger(event.typeId, 0, 4_294_967_295, "typeId"),
+            boundedVst3NoteExpressionValue(event.value),
+            boundedVst3NoteExpressionInteger(event.noteId, 0, 2_147_483_647, "noteId"),
+            event.channel,
+            event.time
+          ], event, format);
         }
         if (event.type === "noteExpressionText" && format === "vst3") {
           const encodedText = encodeVst3NoteExpressionText(event.text);
-          return vst3BusEventToken(["exprText", event.typeId, encodedText, event.noteId, event.channel, event.time], event, format);
+          return vst3BusEventToken([
+            "exprText",
+            boundedVst3NoteExpressionInteger(event.typeId, 0, 4_294_967_295, "typeId"),
+            encodedText,
+            boundedVst3NoteExpressionInteger(event.noteId, 0, 2_147_483_647, "noteId"),
+            event.channel,
+            event.time
+          ], event, format);
         }
         throw protocolError("invalid_argument", `Unsupported MIDI event type: ${event.type}`);
       })
@@ -73,6 +87,20 @@ export function createDaemonNormalizers(options = {}) {
       );
     }
     return Buffer.from(value, "utf8").toString("base64");
+  }
+
+  function boundedVst3NoteExpressionInteger(value, min, max, field) {
+    if (!Number.isInteger(value) || value < min || value > max) {
+      throw protocolError("invalid_argument", `VST3 note-expression ${field} must be an integer in ${min}..${max}.`);
+    }
+    return value;
+  }
+
+  function boundedVst3NoteExpressionValue(value) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+      throw protocolError("invalid_argument", "VST3 note-expression value must be a number in 0..1.");
+    }
+    return value;
   }
 
   function vst3NoteEventToken(kind, event, value, format) {
