@@ -41,6 +41,7 @@ export async function exerciseVst3MidiControllerMappingNativeWorker({
       { type: "programChange", program: 0, channel: 0, time: 3, busIndex: 0 },
       { type: "programChange", program: 127, channel: 15, time: 4, busIndex: 31 }
     ]);
+    const emptyBatch = await midiWorker.sendMidiEvents([]);
     const badAckMessage = await rejectedMessage(() =>
       midiWorker.sendMidiEvents([{ type: "controlChange", controller: 2, value: 0.5, channel: 0, time: 0 }])
     );
@@ -68,6 +69,7 @@ export async function exerciseVst3MidiControllerMappingNativeWorker({
       "native VST3 workers encode explicit-bus and main-bus MIDI-controller/program-change events"
     );
     check(boundaries.eventCount === 8, "native VST3 workers encode MIDI-controller/program-change boundary routes");
+    check(emptyBatch.eventCount === 0, "native VST3 workers encode empty MIDI event batches");
     check(
       badAckMessage === "worker returned invalid MIDI acknowledgement",
       "native host workers reject mismatched MIDI acknowledgements"
@@ -243,7 +245,8 @@ function writeVst3MidiControllerMappingNativeWorker(tempDir) {
 const expectedCommands = new Set([
   "midi cc:74:0.25:2:3:bus=1;bend:-0.5:2:4:bus=1;pressure:0.75:2:5:bus=1;program:7:2:6:bus=1",
   "midi cc:1:0.4:0:0;bend:0.1:0:1;pressure:0.3:0:2;program:2:0:3",
-  "midi cc:0:0:0:0:bus=0;cc:127:1:15:7:bus=31;bend:-1:0:1:bus=0;bend:1:15:6:bus=31;pressure:0:0:2:bus=0;pressure:1:15:5:bus=31;program:0:0:3:bus=0;program:127:15:4:bus=31"
+  "midi cc:0:0:0:0:bus=0;cc:127:1:15:7:bus=31;bend:-1:0:1:bus=0;bend:1:15:6:bus=31;pressure:0:0:2:bus=0;pressure:1:15:5:bus=31;program:0:0:3:bus=0;program:127:15:4:bus=31",
+  "midi -"
 ]);
 const mismatchedAckCommands = new Set([
   "midi cc:2:0.5:0:0"
@@ -266,7 +269,7 @@ process.stdin.on("data", (chunk) => {
     }
     process.stdout.write(JSON.stringify(
       expectedCommands.has(line)
-        ? { ok: true, eventCount: line.slice(5).split(";").length }
+        ? { ok: true, eventCount: line === "midi -" ? 0 : line.slice(5).split(";").length }
         : mismatchedAckCommands.has(line)
           ? { ok: true, eventCount: 0 }
         : { error: "bad_mapped_midi_controller_events" }
