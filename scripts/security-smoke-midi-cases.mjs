@@ -91,6 +91,15 @@ export function createSecurityMidiCases({ check, request }) {
       socket,
       session,
       instanceId,
+      [{ type: "noteExpressionText", typeId: 6, noteId: 1, text: "" }],
+      "invalid_argument",
+      "sendMidiEvents rejects empty VST3 note-expression text"
+    );
+
+    await expectMidiError(
+      socket,
+      session,
+      instanceId,
       [{ type: "noteExpressionText", typeId: 6, noteId: 1, text: "a\u0000h" }],
       "invalid_argument",
       "sendMidiEvents rejects NUL VST3 note-expression text"

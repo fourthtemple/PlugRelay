@@ -30,7 +30,13 @@ export async function exerciseVst3NoteExpressionNativeWorker({
       { type: "noteExpressionText", typeId: 6, text: "\u00b5-tilt", noteId: 2147483647, channel: 15, time: 2 },
       { type: "noteExpressionText", typeId: 6, text: "x".repeat(256), noteId: 2147483647, channel: 15, time: 3 }
     ]);
+    await noteExpressionWorker.sendMidiEvents([
+      { type: "noteOn", note: 0, velocity: 0.1, channel: 0, time: 0, noteId: 0 },
+      { type: "noteExpression", typeId: 1, value: 0, noteId: 0, channel: 0, time: 0 },
+      { type: "noteExpressionText", typeId: 6, text: "z", noteId: 0, channel: 0, time: 1 }
+    ]);
     check(true, "native VST3 workers encode bounded note-expression value/text event lists");
+    check(true, "native VST3 workers encode minimum note-expression value/text boundaries");
   } finally {
     noteExpressionWorker.destroy();
   }
@@ -88,7 +94,8 @@ const expectedCommands = new Set([
     "expr:4294967295:1:2147483647:15:1",
     \`exprText:6:\${Buffer.from(utf8Text, "utf8").toString("base64")}:2147483647:15:2\`,
     \`exprText:6:\${Buffer.from(maxText, "utf8").toString("base64")}:2147483647:15:3\`
-  ].join(";")
+  ].join(";"),
+  "midi on:0:0.1:0:0:0;expr:1:0:0:0:0;exprText:6:eg==:0:0:1"
 ]);
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
 process.stdin.setEncoding("utf8");
