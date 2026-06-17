@@ -377,6 +377,12 @@ function optionalBoundedNumber(value, min, max) {
   if (value === undefined) {
     return undefined;
   }
+  if (typeof value !== "number" && typeof value !== "string") {
+    return undefined;
+  }
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined;
+  }
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= min && numeric <= max ? numeric : undefined;
 }

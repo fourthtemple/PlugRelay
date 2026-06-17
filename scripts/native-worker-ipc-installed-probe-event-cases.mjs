@@ -83,6 +83,16 @@ export function exerciseInstalledProbeEventSupport({ check }) {
     format: "vst3",
     vst3NoteExpressions: [{ typeId: 11, busIndex: 99, channel: "bad" }]
   });
+  const typedValueVst3EventProfile = summarizeProbeVst3Events({
+    format: "vst3",
+    vst3NoteExpressions: [{
+      typeId: 12,
+      minValue: false,
+      maxValue: true,
+      defaultValue: "",
+      stepCount: false
+    }]
+  });
   const invalidRouteOnlyVst3EventSummary = summarizeProbeResults([{
     ok: true,
     format: "vst3",
@@ -178,6 +188,9 @@ export function exerciseInstalledProbeEventSupport({ check }) {
       typedVst3EventProfile.noteExpressionCount === 1 &&
       typedVst3EventProfile.invalidNoteExpressionCount === 3 &&
       JSON.stringify(typedVst3EventProfile.typeIds) === JSON.stringify([6]) &&
+      typedValueVst3EventProfile.noteExpressionCount === 1 &&
+      typedValueVst3EventProfile.invalidNoteExpressionValueMetadataCount === 1 &&
+      typedValueVst3EventProfile.flags.includes("invalid-value-metadata") &&
       invalidRouteOnlyVst3EventProfile.category === "invalid-route-metadata" &&
       invalidRouteOnlyVst3EventProfile.invalidNoteExpressionRouteCount === 1 &&
       invalidRouteOnlyVst3EventProfile.eventBuses.length === 1 &&
