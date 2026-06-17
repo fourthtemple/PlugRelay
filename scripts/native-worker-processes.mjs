@@ -36,6 +36,7 @@ import {
   workerLineTooLarge,
   workerPendingCommandBytesError,
   workerPendingCommandsError,
+  workerProcessError,
   workerReadyHandshakeError,
   workerReadyTimeoutError,
   workerStdoutLineError,
@@ -132,7 +133,7 @@ export function createNativeWorkerProcesses({
       this.process.stdout.on("data", (chunk) => this.handleStdout(chunk));
       this.process.stderr.setEncoding("utf8");
       this.process.stderr.on("data", (chunk) => handleWorkerStderr(this, chunk, "Example instrument worker"));
-      this.process.on("error", (error) => this.rejectAll(error));
+      this.process.on("error", (error) => this.rejectAll(workerProcessError(error, this.maxDiagnosticLogChars)));
       this.process.on("exit", (code, signal) => {
         if (this.pending.length > 0) {
           this.rejectAll(new Error(`worker exited code=${code ?? "none"} signal=${signal ?? "none"}`));
@@ -322,7 +323,7 @@ export function createNativeWorkerProcesses({
       this.process.stdout.on("data", (chunk) => this.handleStdout(chunk));
       this.process.stderr.setEncoding("utf8");
       this.process.stderr.on("data", (chunk) => handleWorkerStderr(this, chunk, "Native host worker"));
-      this.process.on("error", (error) => this.rejectAll(error));
+      this.process.on("error", (error) => this.rejectAll(workerProcessError(error, this.maxDiagnosticLogChars)));
       this.process.on("exit", (code, signal) => {
         const error = new Error(`worker exited code=${code ?? "none"} signal=${signal ?? "none"}`);
         if (!this.readySettled) {

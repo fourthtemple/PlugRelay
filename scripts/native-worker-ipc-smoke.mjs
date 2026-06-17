@@ -15,6 +15,7 @@ import { exerciseInstalledProbeLatencySupport } from "./native-worker-ipc-instal
 import { exerciseInstalledProbeMidiSupport } from "./native-worker-ipc-installed-probe-midi-cases.mjs";
 import { exerciseInstalledProbeParameterSupport } from "./native-worker-ipc-installed-probe-parameter-cases.mjs";
 import { exerciseInstalledProbeStateSupport } from "./native-worker-ipc-installed-probe-state-cases.mjs";
+import { exerciseNativeWorkerProcessErrorSupport } from "./native-worker-ipc-process-error-cases.mjs";
 import {
   exerciseGrantAwareNativeWorker,
   writeNativeWorkerIpcFixtures
@@ -125,6 +126,13 @@ try {
   const { programDataNativeWorkerPath } = writeVst3ProgramDataNativeWorkerIpcFixtures({ tempDir });
 
   const workers = createTestWorkers(nativeWorkerPath);
+
+  await exerciseNativeWorkerProcessErrorSupport({
+    check,
+    createTestWorkers,
+    nativeWorkerInstance,
+    tempDir
+  });
 
   await exerciseGrantAwareNativeWorker({
     check,

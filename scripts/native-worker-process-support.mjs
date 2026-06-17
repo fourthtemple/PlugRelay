@@ -183,6 +183,10 @@ export function workerReadyHandshakeError(message, maxChars = DEFAULT_MAX_WORKER
   return new Error(`worker_ready_invalid: ${sanitizeWorkerDiagnosticMessage(message, maxChars)}`);
 }
 
+export function workerProcessError(error, maxChars = DEFAULT_MAX_WORKER_DIAGNOSTIC_LOG_CHARS) {
+  return new Error(sanitizeWorkerDiagnosticMessage(error?.message ?? error, maxChars));
+}
+
 export function workerPendingCommandsError(maxCommands) {
   return new Error(`worker_pending_commands_exceeded: worker has ${maxCommands} pending commands`);
 }
