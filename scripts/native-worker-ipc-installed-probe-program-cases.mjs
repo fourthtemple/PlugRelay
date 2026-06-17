@@ -136,6 +136,7 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       targetedProgramDataProfile.unsupportedProgramListCount === 1 &&
       targetedProgramDataProfile.invalidProgramIndexCount === 1 &&
       targetedProgramDataProfile.duplicateProgramIndexCount === 1 &&
+      targetedProgramDataProfile.ambiguousProgramIndexCount === 1 &&
       targetedProgramDataProfile.unitLinkedProgramListCount === 1 &&
       targetedProgramDataProfile.programListNameFallbackCount === 1 &&
       targetedProgramDataProfile.programNameFallbackCount === 1 &&
@@ -144,6 +145,7 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       targetedProgramDataProfile.minProgramValueCount === 1 &&
       targetedProgramDataProfile.maxProgramValueCount === 1 &&
       targetedProgramDataProfile.flags.includes("duplicate-program-index") &&
+      targetedProgramDataProfile.flags.includes("ambiguous-program-index") &&
       targetedProgramDataProfile.flags.includes("unit-linked-program-list") &&
       targetedProgramDataProfile.flags.includes("program-list-name-fallback") &&
       targetedProgramDataProfile.flags.includes("program-name-fallback") &&
@@ -156,6 +158,7 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       targetedProgramDataMatrix.vst3ProgramDataInvalidProgramValues === 1 &&
       targetedProgramDataMatrix.vst3ProgramDataMinProgramValues === 1 &&
       targetedProgramDataMatrix.vst3ProgramDataMaxProgramValues === 1 &&
+      targetedProgramDataMatrix.vst3ProgramDataAmbiguousProgramIndexes === 1 &&
       weirdProgramDataProfile.category === "no-valid-programs" &&
       weirdProgramDataProfile.invalidProgramListCount === 2 &&
       weirdProgramDataProfile.noProgramListSentinelCount === 1 &&
@@ -176,7 +179,9 @@ export function exerciseInstalledProbeProgramSupport({ check }) {
       ambiguousProgramDataProfile.category === "no-valid-programs" &&
       ambiguousProgramDataProfile.candidateProgramCount === 0 &&
       ambiguousProgramDataProfile.duplicateProgramIndexCount === 1 &&
+      ambiguousProgramDataProfile.ambiguousProgramIndexCount === 1 &&
       ambiguousProgramDataProfile.flags.includes("duplicate-program-index") &&
+      ambiguousProgramDataProfile.flags.includes("ambiguous-program-index") &&
       ambiguousProgramDataProfile.flags.includes("no-valid-program-data-programs") &&
       missingProgramsProfile.category === "no-valid-programs" &&
       missingProgramsProfile.missingProgramArrayCount === 1 &&

@@ -171,6 +171,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
       maxProgramValueCount: 0,
       programListMetadataAtLimit: false,
       programMetadataAtLimit: false,
+      ambiguousProgramIndexCount: 0,
       noProgramListSentinelCount: 0
     };
   }
@@ -189,6 +190,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   let invalidProgramIndexCount = 0;
   let duplicateProgramListIdCount = 0;
   let duplicateProgramIndexCount = 0;
+  let ambiguousProgramIndexCount = 0;
   let noProgramListSentinelCount = 0;
   let unitLinkedProgramListCount = 0;
   let invalidProgramListUnitCount = 0;
@@ -272,6 +274,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     }
 
     const programIndexCounts = boundedProgramIndexCounts(programList.programs);
+    ambiguousProgramIndexCount += [...programIndexCounts.values()].filter((count) => count > 1).length;
     let validProgramIndexCount = 0;
     const seenProgramIndexes = new Set();
     for (const program of programList.programs.slice(0, MAX_PLUGIN_PROGRAMS)) {
@@ -319,6 +322,9 @@ export function summarizeVst3ProgramDataProfile(plugin) {
   if (duplicateProgramIndexCount > 0) {
     flags.push("duplicate-program-index");
   }
+  if (ambiguousProgramIndexCount > 0) {
+    flags.push("ambiguous-program-index");
+  }
   if (duplicateProgramListIdCount > 0) {
     flags.push("duplicate-program-list-id");
   }
@@ -337,6 +343,7 @@ export function summarizeVst3ProgramDataProfile(plugin) {
     invalidProgramIndexCount,
     duplicateProgramListIdCount,
     duplicateProgramIndexCount,
+    ambiguousProgramIndexCount,
     noProgramListSentinelCount,
     unitLinkedProgramListCount,
     invalidProgramListUnitCount,
