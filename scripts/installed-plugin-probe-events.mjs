@@ -315,10 +315,15 @@ function normalizeValueMetadata(expression) {
 }
 
 function normalizeAssociatedParameterId(value) {
-  if (typeof value !== "string" || value.length === 0 || isNoAssociatedParameterSentinel(value)) {
+  const id = typeof value === "string"
+    ? value
+    : Number.isInteger(value) && value >= 0 && value < 4_294_967_295
+      ? String(value)
+      : "";
+  if (id.length === 0 || isNoAssociatedParameterSentinel(id)) {
     return undefined;
   }
-  return value;
+  return id;
 }
 
 function isNoAssociatedParameterSentinel(value) {

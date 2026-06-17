@@ -326,7 +326,12 @@ export function createDaemonNormalizers(options = {}) {
   }
 
   function normalizeVst3AssociatedParameterId(value) {
-    const id = truncateText(value, 64);
+    const rawId = typeof value === "string"
+      ? value
+      : Number.isInteger(value) && value >= 0 && value < Number(vst3NoParamId)
+        ? String(value)
+        : "";
+    const id = truncateText(rawId, 64);
     if (!id || id === vst3NoParamId || id === "-1") {
       return undefined;
     }

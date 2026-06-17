@@ -62,6 +62,7 @@ export function exerciseInstalledProbeEventSupport({ check }) {
       { typeId: 7, busIndex: 99, channel: 99, minValue: 1, maxValue: 0, unitId: "bad", associatedParameterId: "4294967295", absolute: true },
       { typeId: 8, associatedParameterId: -1 },
       { typeId: 9, associatedParameterId: "" },
+      { typeId: 10, associatedParameterId: 123 },
       { typeId: "bad", busIndex: 0, channel: 0 }
     ]
   });
@@ -109,11 +110,11 @@ export function exerciseInstalledProbeEventSupport({ check }) {
   }]);
   check(
     vst3EventProfile.category === "non-main-event-bus" &&
-      vst3EventProfile.noteExpressionCount === 6 &&
-      vst3EventProfile.valueExpressionCount === 4 &&
+      vst3EventProfile.noteExpressionCount === 7 &&
+      vst3EventProfile.valueExpressionCount === 5 &&
       vst3EventProfile.textExpressionCount === 2 &&
       vst3EventProfile.nameFallbackExpressionCount === 1 &&
-      vst3EventProfile.defaultRouteExpressionCount === 3 &&
+      vst3EventProfile.defaultRouteExpressionCount === 4 &&
       vst3EventProfile.invalidNoteExpressionCount === 1 &&
       vst3EventProfile.invalidNoteExpressionRouteCount === 1 &&
       vst3EventProfile.invalidAssociatedParameterCount === 1 &&
@@ -121,14 +122,14 @@ export function exerciseInstalledProbeEventSupport({ check }) {
       vst3EventProfile.invalidNoteExpressionUnitLinkCount === 1 &&
       vst3EventProfile.noAssociatedParameterSentinelCount === 2 &&
       vst3EventProfile.duplicateNoteExpressionTypeIdCount === 1 &&
-      vst3EventProfile.associatedParameterCount === 1 &&
+      vst3EventProfile.associatedParameterCount === 2 &&
       vst3EventProfile.unitLinkedExpressionCount === 1 &&
       vst3EventProfile.fixedValueRangeCount === 1 &&
       vst3EventProfile.steppedExpressionCount === 1 &&
       vst3EventProfile.bipolarExpressionCount === 1 &&
       vst3EventProfile.oneShotExpressionCount === 1 &&
       vst3EventProfile.absoluteExpressionCount === 1 &&
-      JSON.stringify(vst3EventProfile.typeIds) === JSON.stringify([0, 6, 7, 8, 9]) &&
+      JSON.stringify(vst3EventProfile.typeIds) === JSON.stringify([0, 6, 7, 8, 9, 10]) &&
       JSON.stringify(vst3EventProfile.eventBuses) === JSON.stringify([0, 2]) &&
       vst3EventProfile.flags.includes("text-expression") &&
       vst3EventProfile.flags.includes("note-expression-name-fallback") &&
@@ -149,9 +150,10 @@ export function exerciseInstalledProbeEventSupport({ check }) {
       vst3EventProfile.flags.includes("stepped-expression") &&
       vst3EventProfile.flags.includes("duplicate-note-expression-type-id") &&
       vst3EventMatrix.vst3InvalidAssociatedNoteExpressionCount === 1 &&
+      vst3EventMatrix.vst3AssociatedNoteExpressionCount === 2 &&
       vst3EventMatrix.vst3NoAssociatedParameterSentinelCount === 2 &&
       vst3EventMatrix.vst3NameFallbackNoteExpressionCount === 1 &&
-      vst3EventMatrix.vst3DefaultRoutedNoteExpressionCount === 3 &&
+      vst3EventMatrix.vst3DefaultRoutedNoteExpressionCount === 4 &&
       vst3EventMatrix.vst3InvalidNoteExpressionValueMetadataCount === 1 &&
       vst3EventMatrix.vst3InvalidUnitLinkedNoteExpressionCount === 1 &&
       vst3EventMatrix.vst3FixedNoteExpressionValueRangeCount === 1 &&
