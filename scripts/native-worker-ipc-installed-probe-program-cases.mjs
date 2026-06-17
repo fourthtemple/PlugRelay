@@ -262,6 +262,8 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       targetedProgramDataProfile.flags.includes("program-name-fallback") &&
       targetedProgramDataProfile.flags.includes("missing-program-value") &&
       targetedProgramDataProfile.flags.includes("invalid-program-value") &&
+      targetedProgramDataProfile.flags.includes("min-program-value") &&
+      targetedProgramDataProfile.flags.includes("max-program-value") &&
       targetedProgramDataMatrix.vst3ProgramDataUnitLinkedLists === 1 &&
       targetedProgramDataMatrix.vst3ProgramDataProgramListNameFallbacks === 1 &&
       targetedProgramDataMatrix.vst3ProgramDataProgramNameFallbacks === 1 &&
@@ -330,6 +332,8 @@ export async function exerciseInstalledProbeProgramSupport({ check }) {
       cappedProgramDataProfile.programMetadataAtLimit === true &&
       cappedProgramDataProfile.flags.includes("program-list-metadata-at-limit") &&
       cappedProgramDataProfile.flags.includes("program-metadata-at-limit") &&
+      cappedProgramDataProfile.flags.includes("min-program-value") &&
+      cappedProgramDataProfile.flags.includes("max-program-value") &&
       cappedProgramDataMatrix.vst3ProgramDataProgramLists === 256 &&
       cappedProgramDataMatrix.vst3ProgramDataCandidatePrograms === 256 &&
       cappedProgramDataMatrix.vst3ProgramDataProgramListMetadataAtLimit === true &&

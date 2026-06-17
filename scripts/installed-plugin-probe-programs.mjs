@@ -300,8 +300,10 @@ export function summarizeVst3ProgramDataProfile(plugin) {
         }
       } else if (programValue === 0) {
         minProgramValueCount += 1;
+        flags.push("min-program-value");
       } else if (programValue === 1) {
         maxProgramValueCount += 1;
+        flags.push("max-program-value");
       }
       if (programIndex === undefined) {
         invalidProgramIndexCount += 1;
