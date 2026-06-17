@@ -15,6 +15,10 @@ export async function probeFileGrantPresetLoad({
   socket,
   state
 }) {
+  if (!pluginAdvertisesFileGrantOperation(plugin, "loadPreset")) {
+    result.fileGrantPresetLoad = "skipped-unadvertised";
+    return;
+  }
   const presetText = nativeStateFileText(plugin.format, state.state);
   if (!presetText) {
     result.fileGrantPresetLoad = "skipped";
@@ -58,6 +62,10 @@ export async function probeFileGrantStateRestore({
   socket,
   state
 }) {
+  if (!pluginAdvertisesFileGrantOperation(plugin, "restoreState")) {
+    result.fileGrantStateRestore = "skipped-unadvertised";
+    return;
+  }
   const stateText = nativeStateFileText(plugin.format, state.state);
   if (!stateText) {
     result.fileGrantStateRestore = "skipped";
@@ -100,6 +108,11 @@ export async function probeFileGrantStateSave({
   session,
   socket
 }) {
+  if (!pluginAdvertisesFileGrantOperation(plugin, "saveStateDirectory")) {
+    result.fileGrantStateSave = "skipped-unadvertised";
+    result.fileGrantSavedStateRestore = "skipped-unadvertised";
+    return;
+  }
   const stateDir = fs.mkdtempSync(path.join(fileGrantRoot, `${safeFilename(plugin.pluginId)}-save-`));
   let directoryGrantId = "";
   let fileGrantId = "";
@@ -129,6 +142,10 @@ export async function probeFileGrantStateSave({
       "saved state file size is invalid"
     );
 
+    if (!pluginAdvertisesFileGrantOperation(plugin, "restoreState")) {
+      result.fileGrantSavedStateRestore = "skipped-unadvertised";
+      return;
+    }
     const fileGrant = await phase(result, "createSavedStateFileGrant", () =>
       request(socket, "createFileGrant", { path: savedPath, purpose: "state", access: "read", kind: "file" }, true, session)
     );

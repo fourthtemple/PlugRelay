@@ -5,7 +5,10 @@ import {
   probeFileGrantCacheDirectoryOpen,
   probeFileGrantLicenseLoad,
   probeFileGrantOtherPresetLoad,
-  probeFileGrantSampleLoad
+  probeFileGrantPresetLoad,
+  probeFileGrantSampleLoad,
+  probeFileGrantStateRestore,
+  probeFileGrantStateSave
 } from "./installed-plugin-probe-file-grants.mjs";
 import { summarizeProbeResults } from "./installed-plugin-probe-reporting.mjs";
 
@@ -14,6 +17,7 @@ export async function exerciseInstalledProbeFileGrantSupport({ check }) {
   try {
     const result = {};
     let requestCount = 0;
+    const state = { state: nativeStateEnvelope({ format: "vst3", component: "Yw==", controller: "Yw==" }) };
     const args = {
       assertProbe,
       fileGrantRoot: tempDir,
@@ -30,7 +34,8 @@ export async function exerciseInstalledProbeFileGrantSupport({ check }) {
       },
       result,
       session: "session",
-      socket: {}
+      socket: {},
+      state
     };
 
     await probeFileGrantSampleLoad(args);
@@ -46,6 +51,63 @@ export async function exerciseInstalledProbeFileGrantSupport({ check }) {
         requestCount === 0 &&
         fs.readdirSync(tempDir).length === 0,
       "installed plugin probe skips unadvertised advanced file-grant workflows before path use"
+    );
+
+    const unadvertisedCoreResult = {};
+    const unadvertisedCoreArgs = {
+      ...args,
+      plugin: { format: "vst3", pluginId: "vst3:file-grant-fixture", fileGrantOperations: [] },
+      result: unadvertisedCoreResult
+    };
+    await probeFileGrantPresetLoad(unadvertisedCoreArgs);
+    await probeFileGrantStateRestore(unadvertisedCoreArgs);
+    await probeFileGrantStateSave(unadvertisedCoreArgs);
+    check(
+      unadvertisedCoreResult.fileGrantPresetLoad === "skipped-unadvertised" &&
+        unadvertisedCoreResult.fileGrantStateRestore === "skipped-unadvertised" &&
+        unadvertisedCoreResult.fileGrantStateSave === "skipped-unadvertised" &&
+        unadvertisedCoreResult.fileGrantSavedStateRestore === "skipped-unadvertised" &&
+        requestCount === 0 &&
+        fs.readdirSync(tempDir).length === 0,
+      "installed plugin probe skips unadvertised preset/state file-grant workflows before path use"
+    );
+
+    const stateResult = {};
+    const observedStateRequests = [];
+    const stateArgs = {
+      ...args,
+      plugin: {
+        format: "vst3",
+        pluginId: "vst3:file-grant-fixture",
+        fileGrantOperations: ["loadPreset", "restoreState", "saveStateDirectory"]
+      },
+      request: createStateGrantRequest(observedStateRequests),
+      result: stateResult
+    };
+    await probeFileGrantPresetLoad(stateArgs);
+    await probeFileGrantStateRestore(stateArgs);
+    await probeFileGrantStateSave(stateArgs);
+    const stateCreateRequests = observedStateRequests.filter((request) => request.method === "createFileGrant");
+    const stateUseRequests = observedStateRequests.filter((request) => request.method === "useFileGrant");
+    check(
+      stateResult.fileGrantPresetLoad === "applied" &&
+        stateResult.fileGrantStateRestore === "applied" &&
+        stateResult.fileGrantStateSave === "applied" &&
+        stateResult.fileGrantSavedStateRestore === "applied" &&
+        JSON.stringify(stateCreateRequests.map((request) => grantShape(request.payload))) === JSON.stringify([
+          { purpose: "preset", access: "read", kind: "file" },
+          { purpose: "state", access: "read", kind: "file" },
+          { purpose: "state", access: "readWrite", kind: "directory" },
+          { purpose: "state", access: "read", kind: "file" }
+        ]) &&
+        JSON.stringify(stateUseRequests.map((request) => useGrantShape(request.payload))) === JSON.stringify([
+          { operation: "loadPreset" },
+          { operation: "restoreState" },
+          { operation: "saveStateDirectory" },
+          { operation: "restoreState" }
+        ]) &&
+        fs.readdirSync(tempDir).length === 0,
+      "installed plugin probe applies advertised preset/state file-grant workflows with bounded grant shapes"
     );
 
     const advertisedResult = {};
@@ -158,6 +220,25 @@ function createPathFreeGrantRequest(observedRequests) {
   };
 }
 
+function createStateGrantRequest(observedRequests) {
+  const grantPaths = new Map();
+  return async (_socket, method, payload) => {
+    observedRequests.push({ method, payload });
+    if (method === "createFileGrant") {
+      const grantId = `grant-${observedRequests.length}`;
+      grantPaths.set(grantId, payload.path);
+      return { grantId };
+    }
+    if (method === "useFileGrant") {
+      if (payload.operation === "saveStateDirectory") {
+        fs.writeFileSync(path.join(grantPaths.get(payload.grantId), "state.fixture"), "saved-state\n", "utf8");
+      }
+      return { applied: true, operation: payload.operation };
+    }
+    return { ok: true };
+  };
+}
+
 function createLeakingGrantRequest(observedRequests) {
   return async (_socket, method, payload) => {
     observedRequests.push({ method, payload });
@@ -186,4 +267,8 @@ function useGrantShape(payload) {
     ...(payload.access ? { access: payload.access } : {}),
     ...(payload.kind ? { kind: payload.kind } : {})
   };
+}
+
+function nativeStateEnvelope(nativeState) {
+  return Buffer.from(JSON.stringify({ nativeState }), "utf8").toString("base64");
 }
