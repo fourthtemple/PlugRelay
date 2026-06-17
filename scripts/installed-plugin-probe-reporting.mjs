@@ -233,6 +233,7 @@ function summarizeCompatibilityMatrix(results, options) {
         4096
       ),
       midiControllerFamilyCount: safeMatrixInteger(result.midiControllerEventProfile?.controllerFamilyCount, 0, 16),
+      midiControllerDefaultRouteCount: safeMatrixInteger(result.midiControllerEventProfile?.defaultControllerRouteCount, 0, 4096),
       midiControllerInvalidNumberCount: safeMatrixInteger(result.midiControllerEventProfile?.invalidControllerNumberCount, 0, 4096),
       midiControllerInvalidRouteCount: safeMatrixInteger(result.midiControllerEventProfile?.invalidControllerRouteCount, 0, 4096),
       midiControllerInvalidValueCount: safeMatrixInteger(result.midiControllerEventProfile?.invalidControllerValueCount, 0, 4096),
@@ -247,6 +248,7 @@ function summarizeCompatibilityMatrix(results, options) {
         0,
         4096
       ),
+      midiProgramChangeDefaultRouteCount: safeMatrixInteger(result.midiProgramChangeEventProfile?.defaultProgramRouteCount, 0, 4096),
       midiProgramChangeInvalidNumberCount: safeMatrixInteger(result.midiProgramChangeEventProfile?.invalidProgramNumberCount, 0, 4096),
       midiProgramChangeInvalidRouteCount: safeMatrixInteger(result.midiProgramChangeEventProfile?.invalidProgramRouteCount, 0, 4096),
       midiProgramChangeFlags: safeMatrixArray(result.midiProgramChangeEventProfile?.flags, 64),

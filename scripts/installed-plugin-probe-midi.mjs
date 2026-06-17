@@ -46,16 +46,19 @@ export function summarizeProbeMidiControllerEvents(events) {
       event?.type === "channelPressure"
   );
   const types = knownControllerEventTypes(controllerEvents);
+  const defaultControllerRouteCount = controllerEvents.filter(defaultEventRoute).length;
   const invalidControllerNumberCount = controllerEvents.filter(invalidControllerNumber).length;
   const invalidControllerRouteCount = controllerEvents.filter(invalidEventRoute).length;
   const invalidControllerValueCount = controllerEvents.filter(invalidControllerValue).length;
   return {
     eventCount: controllerEvents.length,
     controllerFamilyCount: types.length,
+    defaultControllerRouteCount,
     invalidControllerNumberCount,
     invalidControllerRouteCount,
     invalidControllerValueCount,
     flags: midiControllerFlags(controllerEvents, types, {
+      defaultControllerRouteCount,
       invalidControllerNumberCount,
       invalidControllerRouteCount,
       invalidControllerValueCount
@@ -75,13 +78,15 @@ export function summarizeProbeMidiProgramChangeEvents(events) {
   if (programEvents.length === 0) {
     return emptyMidiProgramChangeProfile();
   }
+  const defaultProgramRouteCount = programEvents.filter(defaultEventRoute).length;
   const invalidProgramNumberCount = programEvents.filter(invalidProgramNumber).length;
   const invalidProgramRouteCount = programEvents.filter(invalidEventRoute).length;
   return {
     eventCount: programEvents.length,
+    defaultProgramRouteCount,
     invalidProgramNumberCount,
     invalidProgramRouteCount,
-    flags: midiProgramChangeFlags(programEvents, { invalidProgramNumberCount, invalidProgramRouteCount }),
+    flags: midiProgramChangeFlags(programEvents, { defaultProgramRouteCount, invalidProgramNumberCount, invalidProgramRouteCount }),
     programs: uniqueSortedIntegers(programEvents.map((event) => event.program), 0, 127),
     channels: uniqueSortedIntegers(programEvents.map((event) => event.channel ?? 0), 0, 15),
     eventBuses: uniqueSortedIntegers(programEvents.map((event) => event.busIndex ?? 0), 0, 31)
@@ -114,6 +119,7 @@ function emptyMidiControllerProfile() {
   return {
     eventCount: 0,
     controllerFamilyCount: 0,
+    defaultControllerRouteCount: 0,
     invalidControllerNumberCount: 0,
     invalidControllerRouteCount: 0,
     invalidControllerValueCount: 0,
@@ -128,6 +134,7 @@ function emptyMidiControllerProfile() {
 function emptyMidiProgramChangeProfile() {
   return {
     eventCount: 0,
+    defaultProgramRouteCount: 0,
     invalidProgramNumberCount: 0,
     invalidProgramRouteCount: 0,
     flags: ["no-program-change-events"],
@@ -156,7 +163,12 @@ function knownControllerEventTypes(events) {
 function midiControllerFlags(
   events,
   types = knownControllerEventTypes(events),
-  { invalidControllerNumberCount = 0, invalidControllerRouteCount = 0, invalidControllerValueCount = 0 } = {}
+  {
+    defaultControllerRouteCount = 0,
+    invalidControllerNumberCount = 0,
+    invalidControllerRouteCount = 0,
+    invalidControllerValueCount = 0
+  } = {}
 ) {
   if (events.length === 0) {
     return ["no-controller-events"];
@@ -174,6 +186,9 @@ function midiControllerFlags(
   if (events.some((event) => boundedInt(event.channel, 0, 15) > 0)) {
     flags.push("non-main-channel");
   }
+  if (defaultControllerRouteCount > 0) {
+    flags.push("default-controller-route");
+  }
   if (invalidControllerNumberCount > 0) {
     flags.push("invalid-controller-number");
   }
@@ -187,13 +202,20 @@ function midiControllerFlags(
   return flags;
 }
 
-function midiProgramChangeFlags(events, { invalidProgramNumberCount = 0, invalidProgramRouteCount = 0 } = {}) {
+function midiProgramChangeFlags(events, {
+  defaultProgramRouteCount = 0,
+  invalidProgramNumberCount = 0,
+  invalidProgramRouteCount = 0
+} = {}) {
   const flags = ["program-change-events"];
   if (events.some((event) => boundedInt(event.busIndex, 0, 31) > 0)) {
     flags.push("non-main-event-bus");
   }
   if (events.some((event) => boundedInt(event.channel, 0, 15) > 0)) {
     flags.push("non-main-channel");
+  }
+  if (defaultProgramRouteCount > 0) {
+    flags.push("default-program-route");
   }
   if (invalidProgramNumberCount > 0) {
     flags.push("invalid-program-number");
@@ -254,6 +276,10 @@ function invalidProgramNumber(event) {
 function invalidEventRoute(event) {
   return (hasOwn(event, "channel") && boundedInt(event.channel, 0, 15) === undefined) ||
     (hasOwn(event, "busIndex") && boundedInt(event.busIndex, 0, 31) === undefined);
+}
+
+function defaultEventRoute(event) {
+  return !hasOwn(event, "channel") || !hasOwn(event, "busIndex");
 }
 
 function boundedInt(value, min, max) {

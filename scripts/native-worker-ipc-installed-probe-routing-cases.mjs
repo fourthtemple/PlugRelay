@@ -442,6 +442,11 @@ function exerciseProbeMidiCoverage({ check }) {
     { type: "programChange", program: 128, channel: 16, busIndex: 32 },
     { type: "programChange", program: "bad", channel: -1 }
   ]);
+  const programChangeMatrix = summarizeProbeResults([{
+    ok: true,
+    format: "vst3",
+    midiProgramChangeEventProfile: vst3MidiProgramChangeProfile
+  }]).matrix[0];
   check(
     vst3MidiEvents.length === 16 &&
       vst3MidiEvents.some((event) => event.type === "noteExpression" && event.noteId === 77) &&
@@ -463,9 +468,11 @@ function exerciseProbeMidiCoverage({ check }) {
       midiControllerEventCount(vst3MidiEvents) === 6 &&
       vst3MidiControllerProfile.eventCount === 6 &&
       vst3MidiControllerProfile.controllerFamilyCount === 3 &&
+      vst3MidiControllerProfile.defaultControllerRouteCount === 3 &&
       vst3MidiControllerProfile.flags.includes("multi-controller-family") &&
       vst3MidiControllerProfile.flags.includes("non-main-event-bus") &&
       vst3MidiControllerProfile.flags.includes("non-main-channel") &&
+      vst3MidiControllerProfile.flags.includes("default-controller-route") &&
       vst3MidiControllerProfile.flags.includes("negative-controller-value") &&
       vst3MidiControllerProfile.flags.includes("positive-controller-value") &&
       JSON.stringify(vst3MidiControllerProfile.types) === JSON.stringify(["controlChange", "pitchBend", "channelPressure"]) &&
@@ -473,7 +480,10 @@ function exerciseProbeMidiCoverage({ check }) {
       JSON.stringify(vst3MidiControllerProfile.channels) === JSON.stringify([0, 2]) &&
       JSON.stringify(vst3MidiControllerProfile.eventBuses) === JSON.stringify([0, 1]) &&
       vst3MidiProgramChangeProfile.eventCount === 2 &&
+      vst3MidiProgramChangeProfile.defaultProgramRouteCount === 1 &&
       vst3MidiProgramChangeProfile.flags.includes("non-main-event-bus") &&
+      vst3MidiProgramChangeProfile.flags.includes("default-program-route") &&
+      programChangeMatrix.midiProgramChangeDefaultRouteCount === 1 &&
       JSON.stringify(vst3MidiProgramChangeProfile.programs) === JSON.stringify([2, 7]) &&
       JSON.stringify(vst3MidiProgramChangeProfile.channels) === JSON.stringify([0, 2]) &&
       JSON.stringify(vst3MidiProgramChangeProfile.eventBuses) === JSON.stringify([0, 1]) &&
@@ -489,6 +499,7 @@ function exerciseProbeMidiCoverage({ check }) {
       controllerBoundaryProfile.flags.includes("max-controller-value") &&
       controllerBoundaryProfile.flags.includes("negative-controller-value") &&
       controllerBoundaryProfile.flags.includes("invalid-controller-value") &&
+      controllerBoundaryMatrix.midiControllerDefaultRouteCount === 2 &&
       controllerBoundaryMatrix.midiControllerInvalidValueCount === 1 &&
       controllerBoundaryMatrix.midiControllerFlags.includes("max-controller-value") &&
       invalidProgramChangeProfile.invalidProgramNumberCount === 2 &&
