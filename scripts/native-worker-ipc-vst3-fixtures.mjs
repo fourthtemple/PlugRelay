@@ -76,6 +76,7 @@ export async function exerciseVst3WeirdMetadataNativeWorker({
         parameters[0].readOnly === true &&
         !parameters[0].vst3Unit &&
         parameters[1].programChange === true &&
+        parameters[1].programList?.programDataSupported === false &&
         parameters[1].programList?.programs?.[0]?.index === 1 &&
         parameters[1].programList?.programs?.[0]?.name === "Program 2",
       "native VST3 workers normalize partial/weird parameter metadata"
@@ -239,6 +240,7 @@ const responses = {
         programList: {
           id: 9,
           name: "",
+          programDataSupported: false,
           programs: [
             { index: "bad", name: "broken", normalizedValue: 0.5 },
             { name: "", normalizedValue: 2 }

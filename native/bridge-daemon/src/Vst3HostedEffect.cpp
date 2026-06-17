@@ -233,7 +233,8 @@ std::vector<std::string> HostedVst3Effect::parameterJsonList() const {
     if (controller_->getParameterInfo(index, info) != Steinberg::kResultOk) {
       continue;
     }
-    parameters.push_back(vst3_worker::parameterInfoToJson(info, controller_, unitInfo_));
+    parameters.push_back(
+        vst3_worker::parameterInfoToJson(info, controller_, unitInfo_, programListData_));
   }
   return parameters;
 }
@@ -296,7 +297,9 @@ std::string HostedVst3Effect::setParameter(Steinberg::Vst::ParamID id, double va
       static_cast<Steinberg::int32>(kMaxWorkerParameters));
   for (Steinberg::int32 index = 0; index < count; ++index) {
     if (controller_->getParameterInfo(index, info) == Steinberg::kResultOk && info.id == id) {
-      return std::string("{\"parameter\":") + vst3_worker::parameterInfoToJson(info, controller_, unitInfo_) + "}";
+      return std::string("{\"parameter\":") +
+          vst3_worker::parameterInfoToJson(info, controller_, unitInfo_, programListData_) +
+          "}";
     }
   }
   throw std::runtime_error("unknown_parameter");

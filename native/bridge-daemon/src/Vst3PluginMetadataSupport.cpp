@@ -122,12 +122,13 @@ std::string unitInfoToJson(
 
 std::string programListToJson(
     const Steinberg::Vst::ParameterInfo& parameter,
-    Steinberg::Vst::IUnitInfo* unitInfo) {
+    Steinberg::Vst::IUnitInfo* unitInfo,
+    Steinberg::Vst::IProgramListData* programListData) {
   Steinberg::Vst::ProgramListInfo programList {};
   if (!programListForParameter(parameter, unitInfo, programList)) {
     return "";
   }
-  return programListInfoToJson(programList, unitInfo, nullptr);
+  return programListInfoToJson(programList, unitInfo, programListData);
 }
 
 std::string programListInfoToJson(
@@ -309,7 +310,8 @@ std::string noteExpressionsToJson(
 std::string parameterInfoToJson(
     const Steinberg::Vst::ParameterInfo& info,
     Steinberg::Vst::IEditController* controller,
-    Steinberg::Vst::IUnitInfo* unitInfo) {
+    Steinberg::Vst::IUnitInfo* unitInfo,
+    Steinberg::Vst::IProgramListData* programListData) {
   const auto normalizedValue = std::clamp(controller->getParamNormalized(info.id), 0.0, 1.0);
   const auto defaultValue = std::clamp(info.defaultNormalizedValue, 0.0, 1.0);
   const auto name = cappedString(VST3::StringConvert::convert(info.title));
@@ -344,7 +346,7 @@ std::string parameterInfoToJson(
          << ",\"readOnly\":" << ((info.flags & Steinberg::Vst::ParameterInfo::kIsReadOnly) ? "true" : "false");
   if (programChange) {
     output << ",\"programChange\":true";
-    const auto programList = programListToJson(info, unitInfo);
+    const auto programList = programListToJson(info, unitInfo, programListData);
     if (!programList.empty()) {
       output << ",\"programList\":" << programList;
     }

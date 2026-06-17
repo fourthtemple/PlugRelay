@@ -170,7 +170,8 @@ const VST3::Hosting::ClassInfo* findAudioClass(const VST3::Hosting::PluginFactor
 std::string parameterInfoToJson(
     const Steinberg::Vst::ParameterInfo& info,
     Steinberg::Vst::IEditController* controller,
-    Steinberg::Vst::IUnitInfo* unitInfo);
+    Steinberg::Vst::IUnitInfo* unitInfo,
+    Steinberg::Vst::IProgramListData* programListData);
 
 } // namespace soundbridge::vst3_worker
 
