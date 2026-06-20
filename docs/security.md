@@ -80,6 +80,14 @@ Binding to loopback is necessary but not sufficient. A public website can use DN
 
 Conforming daemons MUST reject any request or upgrade whose `Host` header is not `127.0.0.1`, `localhost`, or `[::1]` (optionally with the expected port). Production daemons MUST also ship a non-empty origin allowlist and/or a native per-origin approval prompt; the reference daemon warns at startup when no allowlist is configured. The reference daemon enforces the `Host` check on both the HTTP and WebSocket-upgrade paths.
 
+## Remote Collaboration
+
+Two-person remote sessions are a useful future profile, but they are not the same security model as the loopback bridge. A collaborator should reach SoundBridge through an authenticated app or relay that carries user identity, invite scope, TLS transport, revocation, and role policy. The local owner should approve the remote collaborator and the requested capabilities before scanning, creating instances, sending MIDI/audio, changing parameters, or rendering through local plugins.
+
+Remote collaborators must not receive plugin bundle paths, local filesystem paths, plugin binaries, license files, sample-library locations, cache paths, or arbitrary file handles. File grants stay local, owner-approved, operation-specific, and path-free from the remote collaborator's perspective. Plugins execute on the machine where they are installed and authorized; SoundBridge should not be used to bypass a vendor's license terms by copying plugin code or license material to another machine.
+
+The reference daemon remains loopback-only by default. `SOUNDBRIDGE_ALLOW_NON_LOOPBACK=1` is for unsafe development experiments, not a production remote-collaboration mode.
+
 ## Resource Limits And Input Validation
 
 Pairing and instance ownership stop other origins from reaching an instance, but a single authorized origin (including one compromised by XSS) can still try to exhaust the host. Instance-count quotas alone do not cover this: a single instance with an attacker-chosen channel count or block size can exhaust memory. Conforming daemons MUST validate and bound the numeric fields on untrusted commands and reject out-of-range values rather than coercing them.

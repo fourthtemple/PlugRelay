@@ -63,6 +63,8 @@ The core architectural target is a compatibility worker boundary, not a universa
 
 An operating-system sandbox around third-party plugin workers is still a real extended security profile. It should be added after core host behavior is understood well enough to avoid accidentally breaking normal plugins, and it should be advertised separately for deployments that prefer stricter containment over maximum plugin compatibility.
 
+Remote collaboration should layer on top of this topology rather than replacing the loopback boundary. A production collaboration app can add an authenticated relay or peer media path between collaborators, but the local daemon should still treat remote control as an owner-approved session with explicit roles and bounded capabilities. The plugin binary, local paths, grants, sample libraries, caches, and license material remain on the machine that owns the plugin installation.
+
 ## Source Size Fitness
 
 `npm run check` includes `scripts/check-file-sizes.mjs`. Source, schema, config, and documentation files must stay below 800 lines (799 lines maximum), and files at or above 750 lines must either be split or receive an explicit reviewed near-limit budget that cannot grow. The current tree has no reviewed near-limit exceptions, so new host features should extract focused modules instead of quietly extending already-large files.

@@ -77,6 +77,21 @@ The current JSON/WebSocket audio path is good for correctness and demos. It is n
 - Keep the protocol transport abstraction open for WebRTC data channels, shared-memory helpers, or desktop-host transports.
 - Keep the same pairing, origin, session, instance, and resource-limit model across browser and local desktop hosts.
 
+## Remote Collaboration Profile
+
+Remote collaboration is a promising future use case, especially when two people are working from different machines and only one machine has a licensed local plugin installed. It must be treated as a separate profile from the default loopback daemon. The current daemon must not be exposed directly to a LAN or the public internet.
+
+A future remote profile should support:
+
+- short-lived invite links or pairing codes that identify both the requesting app origin and the remote collaborator
+- TLS or an authenticated relay instead of raw public WebSocket exposure
+- per-collaborator roles, such as listen-only, parameter control, MIDI input, or render/export permission
+- explicit local approval prompts before any remote collaborator can scan, instantiate, control, hear, or render through local plugins
+- path-free metadata, state, preset, and file-grant responses, with file grants remaining local and owner-approved
+- clear license posture: plugins execute only on the machine where they are installed and authorized; SoundBridge does not transmit plugin binaries or local license material to collaborators
+- revocation, auditing, quotas, and rate limits suitable for long-lived collaborative sessions
+- WebRTC or another jitter-aware media path for collaborator monitoring, separate from the bounded plugin-control protocol
+
 ## Desktop And Cross-Platform Work
 
 The reference implementation is macOS-first today.
