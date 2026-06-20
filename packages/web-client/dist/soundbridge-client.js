@@ -366,6 +366,22 @@ export class SoundBridgeAudioNode extends EventTarget {
   }
 }
 
+const PARAMETER_CATEGORY_PATTERNS = [
+  ["wave", /\b(wave\s*shaper|waveshaper|wave\s*fold|wavefold|fold|shape|shaper)\b/u],
+  ["drive", /\b(drive|distortion|saturat|clip|crush|fuzz|overdrive)\b/u],
+  ["gain", /\b(gain|volume|level|trim|input|output|makeup)\b/u],
+  ["filter", /\b(cutoff|freq|frequency|filter|tone|brightness|color)\b/u],
+  ["resonance", /\b(resonance|reso|res|q|emphasis|bandwidth)\b/u],
+  ["envelope", /\b(attack|decay|sustain|release|adsr|envelope|env|hold)\b/u],
+  ["mix", /\b(mix|blend|wet|dry)\b/u],
+  ["pan", /\b(pan|balance|width|spread|stereo)\b/u],
+  ["pitch", /\b(pitch|tune|detune|octave|semitone|transpose|cent)\b/u],
+  ["modulation", /\b(lfo|mod|modulation|rate|depth|vibrato|tremolo)\b/u],
+  ["space", /\b(reverb|delay|echo|room|size|feedback|damping)\b/u],
+  ["midi", /\b(midi|cc|controller|note|velocity|aftertouch|expression)\b/u],
+  ["timing", /\b(sync|tempo|time|bpm|swing)\b/u],
+  ["program", /\b(program|preset|patch|bank)\b/u]
+];
 export function renderParameterControls(options) {
   const { container, client, instanceId, parameters } = options;
   container.replaceChildren();
@@ -373,6 +389,7 @@ export function renderParameterControls(options) {
   for (const parameter of parameters) {
     const row = document.createElement("label");
     row.className = "parameter-row";
+    row.dataset.parameterCategory = parameterCategory(parameter);
     row.dataset.parameterId = parameter.id;
 
     const name = document.createElement("span");
@@ -422,6 +439,19 @@ export function renderParameterControls(options) {
     row.append(name, control, value);
     container.append(row);
   }
+}
+
+function parameterCategory(parameter) {
+  if (parameter.programChange || parameter.programList) {
+    return "program";
+  }
+  const label = `${parameter.id} ${parameter.name} ${parameter.unit ?? ""}`.toLowerCase();
+  for (const [category, pattern] of PARAMETER_CATEGORY_PATTERNS) {
+    if (pattern.test(label)) {
+      return category;
+    }
+  }
+  return parameter.readOnly ? "status" : "utility";
 }
 
 function formatParameterValue(parameter) {

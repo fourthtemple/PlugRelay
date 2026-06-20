@@ -254,11 +254,11 @@ textarea {
 #scope {
   width: 100%;
   min-height: 180px;
-  border: 1px solid var(--line);
+  border: 1px solid rgb(93 205 244 / 0.36);
   border-radius: 6px;
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.04), transparent),
-    #0c1010;
+    linear-gradient(180deg, rgb(93 205 244 / 0.1), transparent),
+    #071c24;
 }
 
 .stats-grid {
@@ -294,21 +294,136 @@ textarea {
 }
 
 .parameter-row {
-  display: grid;
-  grid-template-columns: minmax(76px, 0.8fr) minmax(120px, 1.2fr) minmax(58px, 0.5fr);
-  gap: 8px;
+  --parameter-accent: #9fb0b6;
+  --parameter-bg: rgb(159 176 182 / 0.09);
+  --parameter-line: rgb(159 176 182 / 0.28);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
   align-items: center;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--parameter-line);
+  border-left: 3px solid var(--parameter-accent);
+  border-radius: 6px;
+  background: var(--parameter-bg);
   color: var(--muted);
   font-size: 0.84rem;
 }
 
-.parameter-row input {
+.parameter-row[data-parameter-category="wave"] {
+  --parameter-accent: #5dcdf4;
+  --parameter-bg: rgb(45 166 214 / 0.15);
+  --parameter-line: rgb(93 205 244 / 0.45);
+}
+
+.parameter-row[data-parameter-category="drive"] {
+  --parameter-accent: #ff936f;
+  --parameter-bg: rgb(255 147 111 / 0.12);
+  --parameter-line: rgb(255 147 111 / 0.36);
+}
+
+.parameter-row[data-parameter-category="gain"] {
+  --parameter-accent: #73e0a7;
+  --parameter-bg: rgb(115 224 167 / 0.11);
+  --parameter-line: rgb(115 224 167 / 0.36);
+}
+
+.parameter-row[data-parameter-category="filter"] {
+  --parameter-accent: #63c7d6;
+  --parameter-bg: rgb(99 199 214 / 0.12);
+  --parameter-line: rgb(99 199 214 / 0.38);
+}
+
+.parameter-row[data-parameter-category="resonance"] {
+  --parameter-accent: #f4c95d;
+  --parameter-bg: rgb(244 201 93 / 0.12);
+  --parameter-line: rgb(244 201 93 / 0.38);
+}
+
+.parameter-row[data-parameter-category="envelope"] {
+  --parameter-accent: #c6a3ff;
+  --parameter-bg: rgb(198 163 255 / 0.11);
+  --parameter-line: rgb(198 163 255 / 0.34);
+}
+
+.parameter-row[data-parameter-category="mix"] {
+  --parameter-accent: #7fe7d6;
+  --parameter-bg: rgb(127 231 214 / 0.11);
+  --parameter-line: rgb(127 231 214 / 0.35);
+}
+
+.parameter-row[data-parameter-category="pan"] {
+  --parameter-accent: #ffb06f;
+  --parameter-bg: rgb(255 176 111 / 0.11);
+  --parameter-line: rgb(255 176 111 / 0.34);
+}
+
+.parameter-row[data-parameter-category="pitch"] {
+  --parameter-accent: #95a8ff;
+  --parameter-bg: rgb(149 168 255 / 0.11);
+  --parameter-line: rgb(149 168 255 / 0.34);
+}
+
+.parameter-row[data-parameter-category="modulation"] {
+  --parameter-accent: #f08cc8;
+  --parameter-bg: rgb(240 140 200 / 0.11);
+  --parameter-line: rgb(240 140 200 / 0.34);
+}
+
+.parameter-row[data-parameter-category="space"] {
+  --parameter-accent: #70d6a9;
+  --parameter-bg: rgb(112 214 169 / 0.1);
+  --parameter-line: rgb(112 214 169 / 0.34);
+}
+
+.parameter-row[data-parameter-category="midi"] {
+  --parameter-accent: #c9e66c;
+  --parameter-bg: rgb(201 230 108 / 0.1);
+  --parameter-line: rgb(201 230 108 / 0.34);
+}
+
+.parameter-row[data-parameter-category="timing"] {
+  --parameter-accent: #8ec7ff;
+  --parameter-bg: rgb(142 199 255 / 0.11);
+  --parameter-line: rgb(142 199 255 / 0.34);
+}
+
+.parameter-row[data-parameter-category="program"] {
+  --parameter-accent: #ffd86d;
+  --parameter-bg: rgb(255 216 109 / 0.11);
+  --parameter-line: rgb(255 216 109 / 0.36);
+}
+
+.parameter-name {
+  flex: 1 1 86px;
+  min-width: 72px;
+  color: color-mix(in srgb, var(--parameter-accent) 74%, var(--text));
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.parameter-row input,
+.parameter-row select {
+  flex: 999 1 130px;
+  width: auto;
+  min-width: min(130px, 100%);
+  border-color: color-mix(in srgb, var(--parameter-accent) 36%, var(--line));
+  background: color-mix(in srgb, #0f1414 88%, var(--parameter-accent));
+}
+
+.parameter-row input[type="range"] {
   padding-inline: 0;
+  accent-color: var(--parameter-accent);
 }
 
 .parameter-value {
-  color: var(--text);
+  flex: 0 1 72px;
+  min-width: 58px;
+  margin-left: auto;
+  color: color-mix(in srgb, var(--parameter-accent) 42%, var(--text));
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .log {
@@ -349,9 +464,20 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .stats-grid,
-  .parameter-row {
+  .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .parameter-row {
+    align-items: stretch;
+  }
+
+  .parameter-name,
+  .parameter-row input,
+  .parameter-row select,
+  .parameter-value {
+    flex-basis: 100%;
+    width: 100%;
   }
 
   .keyboard {

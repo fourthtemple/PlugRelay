@@ -679,10 +679,10 @@ function drawIdleScope() {
 
 function drawScope(context, canvas, data) {
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#0c1010";
+  context.fillStyle = "#071c24";
   context.fillRect(0, 0, canvas.width, canvas.height);
 
-  context.strokeStyle = "rgba(119, 214, 180, 0.22)";
+  context.strokeStyle = "rgba(93, 205, 244, 0.2)";
   context.lineWidth = 1;
   for (let y = 32; y < canvas.height; y += 32) {
     context.beginPath();
@@ -691,7 +691,9 @@ function drawScope(context, canvas, data) {
     context.stroke();
   }
 
-  context.strokeStyle = "#77d6b4";
+  context.strokeStyle = "#5dcdf4";
+  context.shadowColor = "rgba(93, 205, 244, 0.46)";
+  context.shadowBlur = 9;
   context.lineWidth = 2;
   context.beginPath();
   for (let index = 0; index < data.length; index += 1) {
@@ -704,4 +706,5 @@ function drawScope(context, canvas, data) {
     }
   }
   context.stroke();
+  context.shadowBlur = 0;
 }
