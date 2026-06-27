@@ -367,6 +367,9 @@ async function doEnsureBridgeInstance(recreate = false) {
   bridge.addEventListener("healthchange", (event) => {
     realtimeStats.updateLatencyHealth(event.detail);
   });
+  bridge.addEventListener("transport-pressure", (event) => {
+    realtimeStats.updateTransportPressure(event.detail);
+  });
   bridge.addEventListener("audio-error", (event) => {
     logError(event.detail);
   });

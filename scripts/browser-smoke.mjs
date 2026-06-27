@@ -131,6 +131,10 @@ async function assertRealtimeStats(page) {
   }
   const renderBudgetStatus = await page.locator("#renderBudgetStatus").textContent();
   assert(/^(OK|Over)$/.test((renderBudgetStatus ?? "").trim()), "Render budget status reports live render pressure.");
+  const latencyDirection = await page.locator("#latencyDirection").textContent();
+  assert(/^(None|Changed|Increased|Decreased)$/.test((latencyDirection ?? "").trim()), "Latency direction reports live latency health.");
+  const pressureReasons = await page.locator("#transportPressureReasons").textContent();
+  assert(/^(None|[a-z-]+(, [a-z-]+)*)$/.test((pressureReasons ?? "").trim()), "Pressure reason reports latest live transport pressure.");
 }
 
 async function assertFileGrantControls(page, option, label) {

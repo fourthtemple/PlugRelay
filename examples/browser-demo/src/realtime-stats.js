@@ -11,11 +11,13 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
     reportedLatencyMs: document.querySelector("#reportedLatencyMs"),
     latencyIncreases: document.querySelector("#latencyIncreases"),
     latencyDecreases: document.querySelector("#latencyDecreases"),
+    latencyDirection: document.querySelector("#latencyDirection"),
     responseDeadlineLeadSamples: document.querySelector("#responseDeadlineLeadSamples"),
     responseJitterSamples: document.querySelector("#responseJitterSamples"),
     sharedAudioEnabled: document.querySelector("#sharedAudioEnabled"),
     sharedQueuedBlocks: document.querySelector("#sharedQueuedBlocks"),
     sharedDroppedBlocks: document.querySelector("#sharedDroppedBlocks"),
+    transportPressureReasons: document.querySelector("#transportPressureReasons"),
     inputBufferAllocations: document.querySelector("#inputBufferAllocations"),
     inputBufferReuses: document.querySelector("#inputBufferReuses"),
     latencyRecoveryBlocks: document.querySelector("#latencyRecoveryBlocks"),
@@ -53,6 +55,11 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
     },
     updateLatencyHealth(health = {}) {
       setText(elements.reportedLatencyMs, formatMilliseconds(health.reportedLatencyMs));
+      setText(elements.latencyDirection, formatDirection(health.lastLatencyChangeDirection));
+      setReasons(elements.transportPressureReasons, health.lastTransportPressureReasons);
+    },
+    updateTransportPressure(detail = {}) {
+      setReasons(elements.transportPressureReasons, detail.reasons ?? detail.health?.lastTransportPressureReasons);
     }
   };
 }
@@ -60,6 +67,12 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
 function setText(element, value) {
   if (element) {
     element.textContent = String(value ?? 0);
+  }
+}
+
+function setReasons(element, reasons) {
+  if (element) {
+    element.textContent = Array.isArray(reasons) && reasons.length > 0 ? reasons.join(", ") : "None";
   }
 }
 
@@ -83,4 +96,8 @@ function setSharedAudio(elements, stats) {
 function formatMilliseconds(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(60000, number)).toFixed(3) : "0";
+}
+
+function formatDirection(value) {
+  return value === "increased" ? "Increased" : value === "decreased" ? "Decreased" : value === "changed" ? "Changed" : "None";
 }
