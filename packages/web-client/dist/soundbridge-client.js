@@ -2038,15 +2038,20 @@ export class LiveEffectRackChain {
     ).filter((stage) => typeof stage?.processBlock === "function");
     this.stages = stages.slice(0, maxStages);
     this.maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
+    this.processBudgetMs = boundedLiveEffectNumber(options.processBudgetMs, 0, 0, 60000);
+    this.maxConsecutiveProcessBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveProcessBudgetMisses, 0, 0, 1024);
     this.outputChannels = options.outputChannels === void 0
       ? void 0
       : boundedLiveEffectInteger(options.outputChannels, 2, 1, 32);
+    this.nowMs = typeof options.nowMs === "function" ? options.nowMs : liveEffectNowMs;
+    this.processBudgetMisses = 0;
   }
 
   async processBlock(request, options = {}) {
+    const processStartedAt = this.nowMs();
     const outputChannels = this.chainOutputChannels(request.channels);
     if (this.stages.length === 0) {
-      return this.chainDryResponse(request, "chain-empty", outputChannels);
+      return this.finishChainResponse(this.chainDryResponse(request, "chain-empty", outputChannels), processStartedAt);
     }
     let channels = boundedLiveEffectChannels(request.channels, outputChannels, this.maxBlockSize);
     let latencySamples = 0;
@@ -2055,12 +2060,14 @@ export class LiveEffectRackChain {
     const stageResults = [];
     for (let index = 0; index < this.stages.length; index += 1) {
       const stage = this.stages[index];
+      const stageStartedAt = this.nowMs();
       try {
         const response = await stage.processBlock({
           ...request,
           channels,
           wetMix: liveEffectChainStageWetMix(options.stageWetMixes, index, request.wetMix)
         });
+        const stageDurationMs = this.nowMs() - stageStartedAt;
         channels = boundedLiveEffectChannels(response.channels, outputChannels, this.maxBlockSize);
         latencySamples = boundedLiveEffectLatencySamples(
           latencySamples + boundedLiveEffectLatencySamples(response.latencySamples, 0),
@@ -2071,10 +2078,10 @@ export class LiveEffectRackChain {
           tailSamples
         );
         infiniteTail = infiniteTail || response.infiniteTail === true;
-        stageResults.push(liveEffectChainStageResult(index, stage, response));
+        stageResults.push(liveEffectChainStageResult(index, stage, response, stageDurationMs));
       } catch (error) {
-        stageResults.push(liveEffectChainStageErrorResult(index, stage, error));
-        return {
+        stageResults.push(liveEffectChainStageErrorResult(index, stage, error, this.nowMs() - stageStartedAt));
+        return this.finishChainResponse({
           blockId: request.blockId,
           channels,
           latencySamples,
@@ -2088,10 +2095,10 @@ export class LiveEffectRackChain {
           processedStages: stageResults.length,
           failedStageIndex: index,
           stageResults
-        };
+        }, processStartedAt);
       }
     }
-    return {
+    return this.finishChainResponse({
       blockId: request.blockId,
       channels,
       latencySamples,
@@ -2103,12 +2110,15 @@ export class LiveEffectRackChain {
       stageCount: this.stages.length,
       processedStages: stageResults.length,
       stageResults
-    };
+    }, processStartedAt);
   }
 
   processScheduledBlock(scheduled, options = {}) {
     if (scheduled.stale) {
-      return Promise.resolve(this.chainDryResponse(scheduled.request, "chain-stale-input", this.chainOutputChannels(scheduled.request.channels)));
+      return Promise.resolve(this.finishChainResponse(
+        this.chainDryResponse(scheduled.request, "chain-stale-input", this.chainOutputChannels(scheduled.request.channels)),
+        this.nowMs()
+      ));
     }
     return this.processBlock(scheduled.request, options);
   }
@@ -2125,12 +2135,32 @@ export class LiveEffectRackChain {
       healthy: true,
       stageCount: this.stages.length,
       processedStages: 0,
-      stageResults: []
+      stageResults: [],
+      chainProcessBudgetExceeded: false,
+      chainProcessBudgetMisses: this.processBudgetMisses,
+      chainProcessBudgetTripped: false
     };
   }
 
   chainOutputChannels(channels) {
     return this.outputChannels ?? boundedLiveEffectInteger(channels.length, 2, 1, 32);
+  }
+
+  finishChainResponse(response, processStartedAt) {
+    const durationMs = boundedLiveEffectOptionalNumber(this.nowMs() - processStartedAt, 0, 60000);
+    const chainProcessBudgetExceeded = this.processBudgetMs > 0 && (durationMs ?? 0) > this.processBudgetMs;
+    this.processBudgetMisses = chainProcessBudgetExceeded ? Math.min(1024, this.processBudgetMisses + 1) : 0;
+    const chainProcessBudgetTripped = this.maxConsecutiveProcessBudgetMisses > 0 && this.processBudgetMisses >= this.maxConsecutiveProcessBudgetMisses;
+    return {
+      ...response,
+      healthy: response.healthy !== false && !chainProcessBudgetTripped,
+      error: chainProcessBudgetTripped ? response.error ?? new Error("chain_process_budget_exceeded") : response.error,
+      chainProcessDurationMs: durationMs,
+      chainProcessBudgetMs: this.processBudgetMs > 0 ? this.processBudgetMs : void 0,
+      chainProcessBudgetExceeded,
+      chainProcessBudgetMisses: this.processBudgetMisses,
+      chainProcessBudgetTripped
+    };
   }
 }
 
@@ -2142,7 +2172,7 @@ function liveEffectChainStageWetMix(stageWetMixes, index, fallback) {
   return stageWetMixes && index < stageWetMixes.length ? Number(stageWetMixes[index]) : fallback;
 }
 
-function liveEffectChainStageResult(index, stage, response) {
+function liveEffectChainStageResult(index, stage, response, durationMs) {
   return {
     index,
     bypassed: response.bypassed === true,
@@ -2150,17 +2180,19 @@ function liveEffectChainStageResult(index, stage, response) {
     instanceId: stage.health?.instanceId,
     renderEngine: typeof response.renderEngine === "string" ? response.renderEngine : void 0,
     lastDryReason: typeof stage.health?.lastDryReason === "string" ? stage.health.lastDryReason : void 0,
+    durationMs: boundedLiveEffectOptionalNumber(durationMs, 0, 60000),
     error: response.error
   };
 }
 
-function liveEffectChainStageErrorResult(index, stage, error) {
+function liveEffectChainStageErrorResult(index, stage, error, durationMs) {
   return {
     index,
     bypassed: true,
     healthy: false,
     instanceId: stage.health?.instanceId,
     lastDryReason: typeof stage.health?.lastDryReason === "string" ? stage.health.lastDryReason : void 0,
+    durationMs: boundedLiveEffectOptionalNumber(durationMs, 0, 60000),
     error
   };
 }

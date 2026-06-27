@@ -9,18 +9,22 @@ function assert(condition, message) {
   }
 }
 
+let fakeNowMs = 0;
+
 class FakeStage {
-  constructor(name, gain, latencySamples = 0, tailSamples = 0) {
+  constructor(name, gain, latencySamples = 0, tailSamples = 0, durationMs = 0) {
     this.name = name;
     this.gain = gain;
     this.latencySamples = latencySamples;
     this.tailSamples = tailSamples;
+    this.durationMs = durationMs;
     this.requests = [];
     this.health = { instanceId: `inst-${name}` };
   }
 
   async processBlock(request) {
     this.requests.push(request);
+    fakeNowMs += this.durationMs;
     return {
       blockId: request.blockId,
       channels: request.channels.map((channel) => Array.from(channel, (sample) => sample * this.gain)),
@@ -57,6 +61,37 @@ assert(response.latencySamples === 17 && response.tailSamples === 10, "live rack
 assert(response.stageCount === 2 && response.processedStages === 2, "live rack chain reports processed stages");
 assert(response.stageResults[0].instanceId === "inst-left", "live rack chain reports stage instance ids");
 assert(left.requests[0].wetMix === 0.25 && right.requests[0].wetMix === 0.75, "live rack chain applies per-stage wet mix overrides");
+assert(response.chainProcessBudgetExceeded === false && response.chainProcessBudgetMisses === 0, "live rack chain starts without chain budget pressure");
+
+fakeNowMs = 0;
+const timedChain = createLiveEffectRackChain({
+  stages: [new FakeStage("timed-left", 1, 0, 0, 4), new FakeStage("timed-right", 1, 0, 0, 5)],
+  outputChannels: 1,
+  maxBlockSize: 2,
+  processBudgetMs: 12,
+  maxConsecutiveProcessBudgetMisses: 2,
+  nowMs: () => fakeNowMs
+});
+const timed = await timedChain.processBlock({ blockId: 5, channels: [[1, 1]], sampleRate: 48000 });
+assert(timed.chainProcessDurationMs === 9, "live rack chain reports bounded chain process duration");
+assert(timed.chainProcessBudgetMs === 12 && timed.chainProcessBudgetExceeded === false, "live rack chain reports in-budget chain timing");
+assert(timed.stageResults[0].durationMs === 4 && timed.stageResults[1].durationMs === 5, "live rack chain reports per-stage duration");
+
+fakeNowMs = 0;
+const pressureChain = createLiveEffectRackChain({
+  stages: [new FakeStage("pressure", 1, 0, 0, 3)],
+  outputChannels: 1,
+  maxBlockSize: 2,
+  processBudgetMs: 2,
+  maxConsecutiveProcessBudgetMisses: 2,
+  nowMs: () => fakeNowMs
+});
+const firstPressure = await pressureChain.processBlock({ blockId: 6, channels: [[1, 1]], sampleRate: 48000 });
+const secondPressure = await pressureChain.processBlock({ blockId: 7, channels: [[1, 1]], sampleRate: 48000 });
+assert(firstPressure.chainProcessBudgetExceeded === true && firstPressure.chainProcessBudgetMisses === 1, "live rack chain counts first chain budget miss");
+assert(firstPressure.healthy === true && firstPressure.chainProcessBudgetTripped === false, "live rack chain observes initial budget pressure before tripping");
+assert(secondPressure.chainProcessBudgetMisses === 2 && secondPressure.chainProcessBudgetTripped === true, "live rack chain trips after bounded repeated misses");
+assert(secondPressure.healthy === false && secondPressure.error instanceof Error, "live rack chain marks repeated chain budget pressure unhealthy");
 
 const scheduler = createLiveEffectRackBlockScheduler({
   sampleRate: 48000,
