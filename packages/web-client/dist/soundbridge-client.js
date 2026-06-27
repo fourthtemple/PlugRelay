@@ -827,6 +827,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
     this.lastRenderBudgetExceeded = false;
+    this.lastOutputPath = void 0;
+    this.lastOutputTail = void 0;
     this.client = options.client;
     this.plugin = options.plugin;
     this.sampleRate = options.sampleRate;
@@ -837,6 +839,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, 0, 0, 60000);
     this.maxInFlightBlocks = boundedLiveEffectInteger(options.maxInFlightBlocks, 1, 1, 32);
     this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, 0, 0, 60000);
+    this.transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, 0, 0, 4096);
     this.maxConsecutiveRenderBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 3, 0, 1024);
     this.renderBudgetRecoveryBlocks = boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, 0, 0, 4096);
   }
@@ -870,7 +873,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       inFlightBlocks: this.inFlightBlocks,
       maxInFlightBlocks: this.maxInFlightBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
-      staleInputBlocks: this.staleInputBlocks
+      staleInputBlocks: this.staleInputBlocks,
+      transitionFadeSamples: this.transitionFadeSamples
     };
   }
 
@@ -949,7 +953,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
         this.failClosed(error, "render-budget-exceeded");
         return this.dryResponse(request, error);
       }
-      return { ...response, bypassed: false, healthy: true };
+      return this.finishResponse({ ...response, bypassed: false, healthy: true });
     } catch (error) {
       this.failClosed(error, liveEffectFailureReason(error));
       return this.dryResponse(request, error);
@@ -977,6 +981,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
     this.lastRenderBudgetExceeded = false;
+    this.lastOutputPath = void 0;
+    this.lastOutputTail = void 0;
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
@@ -991,7 +997,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   }
 
   dryResponse(request, error, renderEngine = "dry-bypass") {
-    return {
+    return this.finishResponse({
       blockId: request.blockId,
       channels: dryLiveEffectChannels(request.channels, this.outputChannels),
       latencySamples: 0,
@@ -1001,7 +1007,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       bypassed: true,
       healthy: this.healthy,
       error
-    };
+    });
   }
 
   recordRenderBudget(response) {
@@ -1052,6 +1058,14 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       return;
     }
     this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
+  }
+
+  finishResponse(response) {
+    const outputPath = response.bypassed ? "dry" : "wet";
+    const channels = transitionLiveEffectOutputChannels(response.channels, this.lastOutputTail, this.lastOutputPath, outputPath, this.transitionFadeSamples);
+    this.lastOutputTail = liveEffectOutputTail(channels, this.outputChannels);
+    this.lastOutputPath = outputPath;
+    return channels === response.channels ? response : { ...response, channels };
   }
 }
 
@@ -1104,6 +1118,30 @@ function liveEffectFailureReason(error) {
 
 function liveEffectNowMs() {
   return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+}
+
+function transitionLiveEffectOutputChannels(channels, previousTail, previousPath, outputPath, fadeSamples) {
+  if (fadeSamples <= 0 || !previousTail || previousPath === void 0 || previousPath === outputPath) {
+    return channels;
+  }
+  return channels.map((source, channelIndex) => {
+    const output = Array.from(source);
+    const fade = Math.min(output.length, fadeSamples);
+    const previous = previousTail[channelIndex % previousTail.length] ?? 0;
+    for (let frame = 0; frame < fade; frame += 1) {
+      const wet = (frame + 1) / (fade + 1);
+      output[frame] = previous * (1 - wet) + output[frame] * wet;
+    }
+    return output;
+  });
+}
+
+function liveEffectOutputTail(channels, outputChannels) {
+  return Array.from({ length: outputChannels }, (_, index) => {
+    const channel = channels.length > 0 ? channels[index % channels.length] : void 0;
+    const sample = Number(channel?.[Math.max(0, channel.length - 1)] ?? 0);
+    return Number.isFinite(sample) ? sample : 0;
+  });
 }
 
 function cloneLiveEffectChannels(channels) {

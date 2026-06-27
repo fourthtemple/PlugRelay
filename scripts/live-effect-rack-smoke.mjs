@@ -151,6 +151,29 @@ await rack.processBlock({
 });
 assert(client.binaryProcessed.at(-1)?.inputBuses?.[0]?.index === 1, "binary live rack forwards indexed input buses");
 
+const fadeRack = await SoundBridgeLiveEffectRack.create({
+  client,
+  plugin,
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  maxInputAgeMs: 1,
+  transitionFadeSamples: 2
+});
+const fadeInput = [
+  [1, 1, 1, 1],
+  [1, 1, 1, 1]
+];
+await fadeRack.processBlock({ blockId: 7, channels: fadeInput });
+fadeRack.setBypassed(true);
+const fadedDry = await fadeRack.processBlock({ blockId: 8, channels: fadeInput });
+assert(near(fadedDry.channels[0][0], 2 / 3) && near(fadedDry.channels[0][1], 5 / 6), "live rack fades wet-to-dry transitions");
+fadeRack.setBypassed(false);
+const staleDry = await fadeRack.processBlock({ blockId: 9, channels: [[0, 0, 0, 0]], timestamp: -1000 });
+assert(staleDry.channels[0][0] === 0 && staleDry.channels[0][1] === 0, "live rack does not fade between dry fallback reasons");
+const fadedWet = await fadeRack.processBlock({ blockId: 10, channels: fadeInput });
+assert(near(fadedWet.channels[0][0], 1 / 6) && near(fadedWet.channels[0][1], 1 / 3), "live rack fades dry-to-wet transitions");
+await fadeRack.destroy();
+
 const pressureRack = await SoundBridgeLiveEffectRack.create({
   client,
   plugin,
@@ -170,22 +193,22 @@ pressureRack.addEventListener("render-budget-recovered", () => {
 client.renderDurationMs = 5;
 client.renderBudgetMs = 2;
 client.renderBudgetExceeded = true;
-const pressured = await pressureRack.processBlock({ blockId: 7, channels: inputChannels });
+const pressured = await pressureRack.processBlock({ blockId: 10, channels: inputChannels });
 assert(pressured.bypassed === false && pressureRack.health.renderBudgetMisses === 1, "first render budget miss stays wet");
-const overloaded = await pressureRack.processBlock({ blockId: 8, channels: inputChannels });
+const overloaded = await pressureRack.processBlock({ blockId: 11, channels: inputChannels });
 assert(overloaded.bypassed === true && overloaded.healthy === false, "repeated render budget misses fail closed to dry audio");
 assert(overloaded.channels[0][0] === 1, "render budget fallback preserves dry input");
 assert(pressureRack.health.unhealthyReason === "render-budget-exceeded", "render pressure records a recoverable reason");
 assert(budgetEvents === 2, "render budget misses emit host-visible events");
-const cooldownOne = await pressureRack.processBlock({ blockId: 9, channels: inputChannels });
+const cooldownOne = await pressureRack.processBlock({ blockId: 12, channels: inputChannels });
 assert(cooldownOne.bypassed === true && pressureRack.health.recoveryDryBlocks === 1, "render pressure recovery waits through dry cooldown blocks");
-const cooldownTwo = await pressureRack.processBlock({ blockId: 10, channels: inputChannels });
+const cooldownTwo = await pressureRack.processBlock({ blockId: 13, channels: inputChannels });
 assert(cooldownTwo.bypassed === true && cooldownTwo.healthy === false, "final cooldown block is still dry");
 assert(pressureRack.health.healthy === true && recoveredEvents === 1, "render pressure rack recovers after bounded dry cooldown");
 client.renderDurationMs = 0.5;
 client.renderBudgetMs = 2.667;
 client.renderBudgetExceeded = false;
-const pressureRecovered = await pressureRack.processBlock({ blockId: 11, channels: inputChannels });
+const pressureRecovered = await pressureRack.processBlock({ blockId: 14, channels: inputChannels });
 assert(pressureRecovered.bypassed === false && pressureRack.health.renderBudgetMisses === 0, "recovered render pressure rack resumes wet processing");
 await pressureRack.destroy();
 
@@ -259,7 +282,7 @@ const jsonRack = await SoundBridgeLiveEffectRack.create({
 const beforeJsonProcessed = client.processed.length;
 const beforeJsonBinaryProcessed = client.binaryProcessed.length;
 await jsonRack.processBlock({
-  blockId: 7,
+  blockId: 20,
   channels: inputChannels,
   inputBuses: [{ index: 1, channels: [Float32Array.from([0.4, 0.3, 0.2, 0.1])] }]
 });
@@ -278,6 +301,10 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function near(actual, expected, epsilon = 0.000001) {
+  return Math.abs(Number(actual) - expected) < epsilon;
 }
 
 function delay(ms) {
