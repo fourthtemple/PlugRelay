@@ -22,6 +22,8 @@ export interface LiveEffectRackOptions {
   transitionFadeSamples?: number;
   maxConsecutiveRenderBudgetMisses?: number;
   renderBudgetRecoveryBlocks?: number;
+  processTimeoutRecoveryBlocks?: number;
+  maxProcessTimeoutRecoveries?: number;
 }
 
 export interface LivePerformanceRackOptions extends LiveEffectRackOptions {
@@ -58,7 +60,11 @@ export interface LiveEffectRackHealth {
   renderBudgetExceeded: boolean;
   unhealthyReason?: "processing-error" | "process-timeout" | "render-budget-exceeded" | "destroyed";
   recoveryDryBlocks: number;
+  recoveryInProgress: boolean;
   renderBudgetRecoveryBlocks: number;
+  processTimeoutRecoveryBlocks: number;
+  processTimeoutRecoveryAttempts: number;
+  maxProcessTimeoutRecoveries: number;
   processTimeoutMs: number;
   maxInputAgeMs: number;
   inFlightBlocks: number;
@@ -72,6 +78,7 @@ const LIVE_PERFORMANCE_INPUT_AGE_BLOCKS = 4;
 const LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS = 4;
 const LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS = 0.5;
 const LIVE_PERFORMANCE_RECOVERY_BLOCKS = 16;
+const LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES = 1;
 
 export function createLivePerformanceRackOptions(options: LivePerformanceRackOptions): LiveEffectRackOptions {
   const {
@@ -94,7 +101,9 @@ export function createLivePerformanceRackOptions(options: LivePerformanceRackOpt
     processTimeoutMs: boundedLiveEffectNumber(options.processTimeoutMs, blockMs * timeoutBlocks, 0, 60000),
     transitionFadeSamples: boundedLiveEffectInteger(options.transitionFadeSamples, Math.ceil(blockFrames * fadeBlocks), 0, 4096),
     maxConsecutiveRenderBudgetMisses: boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024),
-    renderBudgetRecoveryBlocks: boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096)
+    renderBudgetRecoveryBlocks: boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
+    processTimeoutRecoveryBlocks: boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
+    maxProcessTimeoutRecoveries: boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES, 0, 32)
   };
 }
 
@@ -112,13 +121,18 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   readonly transitionFadeSamples: number;
   readonly maxConsecutiveRenderBudgetMisses: number;
   readonly renderBudgetRecoveryBlocks: number;
+  readonly processTimeoutRecoveryBlocks: number;
+  readonly maxProcessTimeoutRecoveries: number;
 
   private created?: CreateInstanceResponse;
+  private destroyed = false;
   private bypassed = false;
   private healthy = true;
   private lastError?: unknown;
   private unhealthyReason?: LiveEffectRackHealth["unhealthyReason"];
   private recoveryDryBlocks = 0;
+  private recoveryInProgress = false;
+  private processTimeoutRecoveryAttempts = 0;
   private inFlightEpoch = 0;
   private inFlightBlocks = 0;
   private droppedInputBlocks = 0;
@@ -145,6 +159,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, 0, 0, 4096);
     this.maxConsecutiveRenderBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 3, 0, 1024);
     this.renderBudgetRecoveryBlocks = boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, 0, 0, 4096);
+    this.processTimeoutRecoveryBlocks = boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, 0, 0, 4096);
+    this.maxProcessTimeoutRecoveries = boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, 0, 0, 32);
   }
 
   static async create(options: LiveEffectRackOptions): Promise<SoundBridgeLiveEffectRack> {
@@ -174,7 +190,11 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       renderBudgetExceeded: this.lastRenderBudgetExceeded,
       unhealthyReason: this.unhealthyReason,
       recoveryDryBlocks: this.recoveryDryBlocks,
+      recoveryInProgress: this.recoveryInProgress,
       renderBudgetRecoveryBlocks: this.renderBudgetRecoveryBlocks,
+      processTimeoutRecoveryBlocks: this.processTimeoutRecoveryBlocks,
+      processTimeoutRecoveryAttempts: this.processTimeoutRecoveryAttempts,
+      maxProcessTimeoutRecoveries: this.maxProcessTimeoutRecoveries,
       processTimeoutMs: this.processTimeoutMs,
       maxInputAgeMs: this.maxInputAgeMs,
       inFlightBlocks: this.inFlightBlocks,
@@ -191,11 +211,16 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   }
 
   async recreate(): Promise<void> {
+    this.destroyed = false;
+    this.recoveryInProgress = false;
+    this.processTimeoutRecoveryAttempts = 0;
     await this.destroyInstance().catch(() => undefined);
     await this.createInstance();
   }
 
   async destroy(): Promise<void> {
+    this.destroyed = true;
+    this.recoveryInProgress = false;
     await this.destroyInstance();
     this.healthy = false;
     this.unhealthyReason = "destroyed";
@@ -217,7 +242,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   async processBlock(request: LiveEffectBlockRequest): Promise<LiveEffectBlockResponse> {
     if (this.bypassed || !this.instanceId || !this.healthy) {
       const response = this.dryResponse(request, undefined);
-      this.maybeRecoverFromRenderPressure();
+      this.maybeRecoverFromFailure();
       return response;
     }
     if (this.isStaleInput(request.timestamp)) {
@@ -273,6 +298,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   }
 
   private async createInstance(): Promise<void> {
+    this.destroyed = false;
     this.created = await this.client.createInstance({
       pluginId: this.plugin.pluginId,
       format: this.plugin.format,
@@ -285,6 +311,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastError = undefined;
     this.unhealthyReason = undefined;
     this.recoveryDryBlocks = 0;
+    this.recoveryInProgress = false;
     this.inFlightEpoch += 1;
     this.inFlightBlocks = 0;
     this.droppedInputBlocks = 0;
@@ -333,6 +360,14 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     return this.maxConsecutiveRenderBudgetMisses > 0 && this.renderBudgetMisses >= this.maxConsecutiveRenderBudgetMisses;
   }
 
+  private maybeRecoverFromFailure(): void {
+    if (this.unhealthyReason === "render-budget-exceeded") {
+      this.maybeRecoverFromRenderPressure();
+    } else if (this.unhealthyReason === "process-timeout") {
+      this.maybeRecoverFromProcessTimeout();
+    }
+  }
+
   private maybeRecoverFromRenderPressure(): void {
     if (this.healthy || this.unhealthyReason !== "render-budget-exceeded" || this.renderBudgetRecoveryBlocks <= 0) {
       return;
@@ -351,11 +386,46 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
+  private maybeRecoverFromProcessTimeout(): void {
+    if (this.healthy || this.destroyed || this.unhealthyReason !== "process-timeout" || this.recoveryInProgress) {
+      return;
+    }
+    if (this.maxProcessTimeoutRecoveries <= 0 || this.processTimeoutRecoveryAttempts >= this.maxProcessTimeoutRecoveries) {
+      return;
+    }
+    this.recoveryDryBlocks = Math.min(4096, this.recoveryDryBlocks + 1);
+    if (this.recoveryDryBlocks < this.processTimeoutRecoveryBlocks) {
+      return;
+    }
+    this.recoveryInProgress = true;
+    this.processTimeoutRecoveryAttempts = Math.min(32, this.processTimeoutRecoveryAttempts + 1);
+    this.dispatchEvent(new CustomEvent("process-timeout-recovery-started", { detail: { health: this.health } }));
+    this.recoverFromProcessTimeout();
+  }
+
+  private async recoverFromProcessTimeout(): Promise<void> {
+    try {
+      await this.destroyInstance().catch(() => undefined);
+      if (this.destroyed) {
+        return;
+      }
+      await this.createInstance();
+      this.dispatchEvent(new CustomEvent("process-timeout-recovered", { detail: { health: this.health } }));
+    } catch (error) {
+      if (this.destroyed) {
+        return;
+      }
+      this.recoveryInProgress = false;
+      this.failClosed(error, "processing-error");
+    }
+  }
+
   private failClosed(error: unknown, reason: LiveEffectRackHealth["unhealthyReason"]): void {
     this.healthy = false;
     this.lastError = error;
     this.unhealthyReason = reason;
     this.recoveryDryBlocks = 0;
+    this.recoveryInProgress = false;
     this.dispatchEvent(new CustomEvent("effect-error", { detail: { error, health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }

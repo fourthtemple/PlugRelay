@@ -106,6 +106,8 @@ assert(livePerformanceOptions.audioTransport === "binary", "live performance pre
 assert(livePerformanceOptions.maxInFlightBlocks === 1, "live performance preset bounds in-flight processing");
 assert(livePerformanceOptions.maxConsecutiveRenderBudgetMisses === 2, "live performance preset fails dry after repeated budget misses");
 assert(livePerformanceOptions.renderBudgetRecoveryBlocks === 16, "live performance preset allows bounded render-pressure recovery");
+assert(livePerformanceOptions.processTimeoutRecoveryBlocks === 16, "live performance preset cools down before process-timeout recovery");
+assert(livePerformanceOptions.maxProcessTimeoutRecoveries === 1, "live performance preset bounds process-timeout recovery attempts");
 assert(livePerformanceOptions.transitionFadeSamples === 64, "live performance preset fades wet/dry transitions");
 assert(near(livePerformanceOptions.maxInputAgeMs, (128 / 48000) * 1000 * 4), "live performance preset bounds stale input age by block time");
 assert(near(livePerformanceOptions.processTimeoutMs, (128 / 48000) * 1000 * 4), "live performance preset bounds processing time by block time");
@@ -120,12 +122,16 @@ const overriddenLivePerformance = createLivePerformanceRackOptions({
   transitionFadeBlocks: 1,
   maxInFlightBlocks: 3,
   maxConsecutiveRenderBudgetMisses: 5,
-  renderBudgetRecoveryBlocks: 6
+  renderBudgetRecoveryBlocks: 6,
+  processTimeoutRecoveryBlocks: 4,
+  maxProcessTimeoutRecoveries: 2
 });
 assert(overriddenLivePerformance.audioTransport === "json", "live performance preset preserves explicit transport overrides");
 assert(overriddenLivePerformance.maxInFlightBlocks === 3, "live performance preset preserves explicit in-flight overrides");
 assert(overriddenLivePerformance.maxConsecutiveRenderBudgetMisses === 5, "live performance preset preserves explicit budget miss overrides");
 assert(overriddenLivePerformance.renderBudgetRecoveryBlocks === 6, "live performance preset preserves explicit recovery overrides");
+assert(overriddenLivePerformance.processTimeoutRecoveryBlocks === 4, "live performance preset preserves process-timeout recovery overrides");
+assert(overriddenLivePerformance.maxProcessTimeoutRecoveries === 2, "live performance preset preserves process-timeout recovery attempt overrides");
 assert(overriddenLivePerformance.transitionFadeSamples === 128, "live performance preset derives fade overrides from block size");
 assert(near(overriddenLivePerformance.maxInputAgeMs, (128 / 48000) * 1000 * 2), "live performance preset derives freshness overrides from block time");
 assert(near(overriddenLivePerformance.processTimeoutMs, (128 / 48000) * 1000 * 3), "live performance preset derives timeout overrides from block time");
@@ -314,6 +320,47 @@ assert(afterTimeout.bypassed === true && timeoutRack.health.healthy === false, "
 client.processingDelayMs = 0;
 await timeoutRack.destroy();
 
+const timeoutRecoveryRack = await SoundBridgeLiveEffectRack.create({
+  client,
+  plugin,
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processTimeoutMs: 1,
+  processTimeoutRecoveryBlocks: 2,
+  maxProcessTimeoutRecoveries: 1
+});
+let timeoutRecoveryStarted = 0;
+let timeoutRecovered = 0;
+timeoutRecoveryRack.addEventListener("process-timeout-recovery-started", () => {
+  timeoutRecoveryStarted += 1;
+});
+timeoutRecoveryRack.addEventListener("process-timeout-recovered", () => {
+  timeoutRecovered += 1;
+});
+client.processingDelayMs = 20;
+const recoverableTimeout = await timeoutRecoveryRack.processBlock({ blockId: 18, channels: inputChannels });
+assert(recoverableTimeout.bypassed === true && timeoutRecoveryRack.health.unhealthyReason === "process-timeout", "recoverable timeout starts dry and unhealthy");
+client.processingDelayMs = 0;
+const recoveryDryOne = await timeoutRecoveryRack.processBlock({ blockId: 19, channels: inputChannels });
+assert(recoveryDryOne.bypassed === true && timeoutRecoveryRack.health.recoveryDryBlocks === 1, "process-timeout recovery observes dry cooldown blocks");
+const createdBeforeTimeoutRecovery = client.created;
+const recoveryDryTwo = await timeoutRecoveryRack.processBlock({ blockId: 20, channels: inputChannels });
+assert(recoveryDryTwo.bypassed === true && recoveryDryTwo.healthy === false, "final process-timeout cooldown block stays dry");
+await waitUntil(() => timeoutRecovered === 1, "process-timeout recovery completes");
+assert(timeoutRecoveryStarted === 1 && timeoutRecovered === 1, "process-timeout recovery recreates the effect instance");
+assert(timeoutRecoveryRack.health.healthy === true && client.created === createdBeforeTimeoutRecovery + 1, "process-timeout recovery restores rack health");
+const timeoutRecoveredWet = await timeoutRecoveryRack.processBlock({ blockId: 21, channels: inputChannels });
+assert(timeoutRecoveredWet.bypassed === false, "recovered process-timeout rack resumes wet processing");
+client.processingDelayMs = 20;
+const secondRecoverableTimeout = await timeoutRecoveryRack.processBlock({ blockId: 22, channels: inputChannels });
+assert(secondRecoverableTimeout.bypassed === true && timeoutRecoveryRack.health.processTimeoutRecoveryAttempts === 1, "process-timeout recovery attempts stay bounded");
+client.processingDelayMs = 0;
+await timeoutRecoveryRack.processBlock({ blockId: 23, channels: inputChannels });
+await timeoutRecoveryRack.processBlock({ blockId: 24, channels: inputChannels });
+await flushAsync();
+assert(timeoutRecovered === 1 && timeoutRecoveryRack.health.healthy === false, "process-timeout recovery cap leaves repeated failures dry");
+await timeoutRecoveryRack.destroy();
+
 const livePerformanceRack = await SoundBridgeLiveEffectRack.createLivePerformance({
   client,
   plugin,
@@ -376,6 +423,19 @@ function near(actual, expected, epsilon = 0.000001) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function flushAsync() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+async function waitUntil(condition, message) {
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    if (condition()) return;
+    await delay(1);
+  }
+  assert(condition(), message);
 }
 
 function liveEffectTestNowMs() {
