@@ -332,4 +332,74 @@ assert(
   "live frame batch reports invalid targets without rejecting the whole frame"
 );
 
+now = 4000;
+let budgetTargetCalls = 0;
+let budgetDurationMs = 5;
+const budgetScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  startBlockId: 300,
+  startSamplePosition: 38400,
+  nowMs: () => now
+});
+const budgetTarget = {
+  health: { healthy: true, reportedLatencySamples: 64 },
+  async processScheduledBlock(scheduled) {
+    budgetTargetCalls += 1;
+    now += budgetDurationMs;
+    return {
+      blockId: scheduled.blockId,
+      channels: scheduled.request.channels,
+      latencySamples: 32,
+      renderEngine: "budget-target",
+      bypassed: false,
+      healthy: true
+    };
+  }
+};
+const budgetProcessor = createLiveEffectRackFrameBatchProcessor({
+  scheduler: budgetScheduler,
+  processBudgetMs: 2,
+  maxConsecutiveProcessBudgetMisses: 1,
+  nowMs: () => now
+});
+const budgetTrip = await budgetProcessor.process([
+  { id: "deck-budget", target: budgetTarget, channels: [[0.75, 0.25]] }
+]);
+assert(
+  budgetTrip.processBudgetExceeded === true &&
+    budgetTrip.processBudgetTripped === true &&
+    budgetTrip.processBudgetMisses === 1,
+  "live frame batch trips after repeated aggregate budget pressure"
+);
+assert(
+  budgetTrip.processedTargets === 0 &&
+    budgetTrip.skippedTargets === 1 &&
+    budgetTrip.dryTargets === 1 &&
+    budgetTrip.results[0].response.renderEngine === "frame-batch-process-budget-exceeded",
+  "live frame batch returns dry skipped results when the aggregate budget trips"
+);
+const budgetDry = await budgetProcessor.process([
+  { id: "deck-budget", target: budgetTarget, channels: [[0.5, 0.5]] }
+]);
+assert(
+  budgetTargetCalls === 1 &&
+    budgetDry.processedTargets === 0 &&
+    budgetDry.skippedTargets === 1 &&
+    budgetDry.processBudgetTripped === true,
+  "live frame batch stays dry while the aggregate budget trip is active"
+);
+assert(budgetProcessor.retry() === true, "live frame batch retry clears an aggregate budget trip");
+budgetDurationMs = 0;
+const budgetRecovered = await budgetProcessor.process([
+  { id: "deck-budget", target: budgetTarget, channels: [[0.25, 0.75]] }
+]);
+assert(
+  budgetTargetCalls === 2 &&
+    budgetRecovered.processedTargets === 1 &&
+    budgetRecovered.processBudgetTripped === false &&
+    budgetRecovered.healthy === true,
+  "live frame batch retry re-arms normal processing after budget pressure"
+);
+
 console.log("Live effect rack scheduler smoke checks passed.");
