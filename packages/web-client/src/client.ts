@@ -273,13 +273,13 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("setState", { instanceId, state });
   }
 
-  processAudioBlock(request: AudioBlockRequest): Promise<AudioBlockResponse> {
-    return this.request("processAudioBlock", request, true, 2000);
+  processAudioBlock(request: AudioBlockRequest, timeoutMs = 2000): Promise<AudioBlockResponse> {
+    return this.request("processAudioBlock", request, true, timeoutMs);
   }
 
-  processAudioBlockBinary(request: BinaryAudioBlockRequest): Promise<AudioBlockResponse> {
+  processAudioBlockBinary(request: BinaryAudioBlockRequest, timeoutMs = 2000): Promise<AudioBlockResponse> {
     const { channels, ...payload } = request;
-    return this.request("processAudioBlock", payload, true, 2000, channels);
+    return this.request("processAudioBlock", payload, true, timeoutMs, channels);
   }
 
   createAudioWorkletTransportConnection(options: AudioWorkletTransportOptions): AudioWorkletTransportConnection | undefined {

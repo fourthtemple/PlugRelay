@@ -168,13 +168,13 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("setState", { instanceId, state });
   }
 
-  processAudioBlock(request) {
-    return this.request("processAudioBlock", request, true, 2000);
+  processAudioBlock(request, timeoutMs = 2000) {
+    return this.request("processAudioBlock", request, true, timeoutMs);
   }
 
-  processAudioBlockBinary(request) {
+  processAudioBlockBinary(request, timeoutMs = 2000) {
     const { channels, ...payload } = request;
-    return this.request("processAudioBlock", payload, true, 2000, channels);
+    return this.request("processAudioBlock", payload, true, timeoutMs, channels);
   }
 
   createAudioWorkletTransportConnection(options) {
@@ -671,6 +671,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.sampleRate = context.sampleRate;
     this.maxInFlightBlocks = options.maxInFlightBlocks;
     this.audioTransport = options.audioTransport;
+    this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.inFlightBlocks = 0;
     this.destroyed = false;
     this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
@@ -827,8 +828,11 @@ export class SoundBridgeAudioNode extends EventTarget {
     };
     const processed =
       this.audioTransport === "binary"
-        ? this.client.processAudioBlockBinary(request)
-        : this.client.processAudioBlock({ ...request, channels: binaryChannels.map((channel) => Array.from(channel)) });
+        ? this.client.processAudioBlockBinary(request, this.audioRequestTimeoutMs)
+        : this.client.processAudioBlock(
+            { ...request, channels: binaryChannels.map((channel) => Array.from(channel)) },
+            this.audioRequestTimeoutMs
+          );
 
     processed
       .then((response) => {

@@ -199,6 +199,56 @@ assert(
   "createLivePerformance connects the worklet to the worker transport"
 );
 
+const fallbackCalls = [];
+const fallbackClient = {
+  createAudioWorkletTransportConnection() {
+    return undefined;
+  },
+  processAudioBlockBinary(request, timeoutMs) {
+    fallbackCalls.push({ request, timeoutMs });
+    return Promise.resolve({
+      blockId: request.blockId,
+      channels: [Float32Array.from([0.25, 0.125])],
+      latencySamples: 0,
+      tailSamples: 0,
+      infiniteTail: false
+    });
+  },
+  processAudioBlock(request, timeoutMs) {
+    fallbackCalls.push({ request, timeoutMs });
+    return Promise.resolve({
+      blockId: request.blockId,
+      channels: request.channels,
+      latencySamples: 0,
+      tailSamples: 0,
+      infiniteTail: false
+    });
+  }
+};
+await SoundBridgeAudioNode.createLivePerformance(fakeContext, fallbackClient, {
+  instanceId: "inst-fallback",
+  inputChannels: 1,
+  outputChannels: 1,
+  workletUrl: "/soundbridge-worklet.js"
+});
+const fallbackPort = FakeAudioWorkletNode.last.port;
+fallbackPort.onmessage({
+  data: {
+    type: "process",
+    blockId: 77,
+    frames: 2,
+    channels: [Float32Array.from([0.1, 0.2])]
+  }
+});
+await Promise.resolve();
+await Promise.resolve();
+assert(fallbackCalls[0]?.timeoutMs === 250, "live AudioNode page fallback uses the live audio timeout");
+assert(fallbackCalls[0]?.request.instanceId === "inst-fallback", "live AudioNode fallback forwards instance id");
+assert(
+  fallbackPort.messages.some((message) => message.type === "processed" && message.blockId === 77),
+  "live AudioNode fallback posts processed blocks"
+);
+
 console.log("Web client worker transport smoke checks passed.");
 
 function responsePayload(command, payload) {

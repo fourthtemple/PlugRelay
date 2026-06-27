@@ -89,6 +89,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private destroyed = false;
   private readonly maxInFlightBlocks: number;
   private readonly audioTransport: "binary" | "json";
+  private readonly audioRequestTimeoutMs: number;
 
   private constructor(context: AudioContext, client: SoundBridgeClient, options: Required<SoundBridgeAudioNodeOptions>) {
     super();
@@ -97,6 +98,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.sampleRate = context.sampleRate;
     this.maxInFlightBlocks = options.maxInFlightBlocks;
     this.audioTransport = options.audioTransport;
+    this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
       numberOfInputs: 1,
       numberOfOutputs: 1,
@@ -312,8 +314,11 @@ export class SoundBridgeAudioNode extends EventTarget {
     };
     const processed =
       this.audioTransport === "binary"
-        ? this.client.processAudioBlockBinary(request)
-        : this.client.processAudioBlock({ ...request, channels: binaryChannels.map((channel) => Array.from(channel)) });
+        ? this.client.processAudioBlockBinary(request, this.audioRequestTimeoutMs)
+        : this.client.processAudioBlock(
+            { ...request, channels: binaryChannels.map((channel) => Array.from(channel)) },
+            this.audioRequestTimeoutMs
+          );
 
     processed
       .then((response: AudioBlockResponse) => {
