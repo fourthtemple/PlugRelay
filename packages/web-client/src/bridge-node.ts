@@ -20,6 +20,7 @@ export interface SoundBridgeAudioNodeOptions {
   audioTransferMode?: "auto" | "message" | "shared";
   sharedBufferBlocks?: number;
   maxBlockFrames?: number;
+  maxConsecutiveRenderBudgetMisses?: number;
   bypassed?: boolean;
   workletUrl?: string;
 }
@@ -62,9 +63,11 @@ export interface SoundBridgeAudioNodeHealth {
   lastRenderBudgetMs?: number;
   renderBudgetExceeded: boolean;
   renderBudgetMisses: number;
+  maxConsecutiveRenderBudgetMisses: number;
+  renderBudgetAutoBypassed: boolean;
   audioErrors: number;
   lastAudioError?: unknown;
-  unhealthyReason?: "audio-error" | "destroyed";
+  unhealthyReason?: "audio-error" | "render-budget-exceeded" | "destroyed";
 }
 
 const LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS = 4;
@@ -124,7 +127,8 @@ export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAu
     audioRequestTimeoutMs: boundedInteger(options.audioRequestTimeoutMs, LIVE_AUDIO_NODE_AUDIO_REQUEST_TIMEOUT_MS, 0, 60000),
     audioTransferMode: options.audioTransferMode ?? "auto",
     sharedBufferBlocks,
-    maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192)
+    maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192),
+    maxConsecutiveRenderBudgetMisses: boundedInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024)
   };
 }
 
@@ -169,6 +173,8 @@ export class SoundBridgeAudioNode extends EventTarget {
   private lastRenderBudgetMs?: number;
   private renderBudgetExceeded = false;
   private renderBudgetMisses = 0;
+  private maxConsecutiveRenderBudgetMisses: number;
+  private renderBudgetAutoBypassed = false;
   private audioErrors = 0;
   private lastAudioError?: unknown;
   private unhealthyReason?: SoundBridgeAudioNodeHealth["unhealthyReason"];
@@ -181,6 +187,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.maxInFlightBlocks = options.maxInFlightBlocks;
     this.audioTransport = options.audioTransport;
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
+    this.maxConsecutiveRenderBudgetMisses = options.maxConsecutiveRenderBudgetMisses;
     this.bypassed = options.bypassed;
     this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
       numberOfInputs: 1,
@@ -249,6 +256,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       audioTransferMode: options.audioTransferMode ?? "auto",
       sharedBufferBlocks: boundedInteger(options.sharedBufferBlocks, 8, 2, 64),
       maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192),
+      maxConsecutiveRenderBudgetMisses: boundedInteger(options.maxConsecutiveRenderBudgetMisses, 0, 0, 1024),
       bypassed: options.bypassed === true,
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
@@ -287,9 +295,16 @@ export class SoundBridgeAudioNode extends EventTarget {
   }
 
   setBypassed(bypassed: boolean): void {
-    if (this.destroyed || this.bypassed === bypassed) {
+    if (this.destroyed) {
       return;
     }
+    if (!bypassed && this.renderBudgetAutoBypassed) {
+      this.renderBudgetAutoBypassed = false;
+      this.renderBudgetExceeded = false;
+      this.renderBudgetMisses = 0;
+      if (this.unhealthyReason === "render-budget-exceeded") this.unhealthyReason = undefined;
+    }
+    if (this.bypassed === bypassed) return;
     this.bypassed = bypassed;
     this.bypassEvents = Math.min(1024, this.bypassEvents + 1);
     this.node.port.postMessage({ type: "set-bypassed", bypassed });
@@ -370,6 +385,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       lastRenderBudgetMs: this.lastRenderBudgetMs,
       renderBudgetExceeded: this.renderBudgetExceeded,
       renderBudgetMisses: this.renderBudgetMisses,
+      maxConsecutiveRenderBudgetMisses: this.maxConsecutiveRenderBudgetMisses,
+      renderBudgetAutoBypassed: this.renderBudgetAutoBypassed,
       audioErrors: this.audioErrors,
       lastAudioError: this.lastAudioError,
       unhealthyReason: this.unhealthyReason
@@ -670,16 +687,24 @@ export class SoundBridgeAudioNode extends EventTarget {
     renderBudgetMs?: unknown;
     renderBudgetExceeded?: unknown;
   }): void {
+    const exceeded = diagnostics.renderBudgetExceeded === true;
+    if (this.renderBudgetAutoBypassed && !exceeded) return;
     this.clearAudioError();
     if (typeof diagnostics.renderEngine === "string") {
       this.lastRenderEngine = diagnostics.renderEngine;
     }
     this.lastRenderDurationMs = boundedOptionalNumber(diagnostics.renderDurationMs, 0, 60000);
     this.lastRenderBudgetMs = boundedOptionalNumber(diagnostics.renderBudgetMs, 0, 60000);
-    this.renderBudgetExceeded = diagnostics.renderBudgetExceeded === true;
+    this.renderBudgetExceeded = exceeded;
     this.renderBudgetMisses = this.renderBudgetExceeded ? Math.min(1024, this.renderBudgetMisses + 1) : 0;
     if (this.renderBudgetExceeded) {
       this.dispatchEvent(new CustomEvent("render-budget-exceeded", { detail: { diagnostics, health: this.health } }));
+      if (this.maxConsecutiveRenderBudgetMisses > 0 && this.renderBudgetMisses >= this.maxConsecutiveRenderBudgetMisses && !this.bypassed && !this.renderBudgetAutoBypassed) {
+        this.renderBudgetAutoBypassed = true;
+        this.unhealthyReason = "render-budget-exceeded";
+        this.setBypassed(true);
+        this.dispatchEvent(new CustomEvent("render-budget-auto-bypassed", { detail: { diagnostics, health: this.health } }));
+      }
     }
   }
 

@@ -177,6 +177,7 @@ assert(liveNodeOptions.latencyRecoveryBlocks === 128, "live AudioNode preset rec
 assert(liveNodeOptions.latencyPressureThresholdBlocks === 2, "live AudioNode preset reacts to deadline pressure quickly");
 assert(liveNodeOptions.sharedBufferBlocks === 8, "live AudioNode preset derives shared ring depth from in-flight and latency bounds");
 assert(liveNodeOptions.maxBlockFrames === 128, "live AudioNode preset keeps 128-frame block metadata");
+assert(liveNodeOptions.maxConsecutiveRenderBudgetMisses === 2, "live AudioNode preset fails dry after repeated budget misses");
 
 const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
   instanceId: "inst-override",
@@ -193,7 +194,8 @@ const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
   latencyRecoveryBlocks: 64,
   latencyPressureThresholdBlocks: 5,
   sharedBufferBlocks: 7,
-  maxBlockFrames: 256
+  maxBlockFrames: 256,
+  maxConsecutiveRenderBudgetMisses: 5
 });
 assert(overriddenLiveNodeOptions.audioTransport === "json", "live AudioNode preset preserves explicit transport overrides");
 assert(overriddenLiveNodeOptions.audioRequestTimeoutMs === 333, "live AudioNode preset preserves explicit timeout overrides");
@@ -207,6 +209,7 @@ assert(overriddenLiveNodeOptions.latencyRecoveryBlocks === 64, "live AudioNode p
 assert(overriddenLiveNodeOptions.latencyPressureThresholdBlocks === 5, "live AudioNode preset preserves explicit pressure overrides");
 assert(overriddenLiveNodeOptions.sharedBufferBlocks === 7, "live AudioNode preset preserves explicit shared-ring overrides");
 assert(overriddenLiveNodeOptions.maxBlockFrames === 256, "live AudioNode preset preserves explicit block-frame overrides");
+assert(overriddenLiveNodeOptions.maxConsecutiveRenderBudgetMisses === 5, "live AudioNode preset preserves budget miss overrides");
 
 const addedModules = [];
 const fakeContext = {
@@ -249,6 +252,7 @@ liveNode.addEventListener("healthchange", (event) => {
   healthChangeDetail = event.detail;
 });
 assert(liveNode.health.bypassed === false, "SoundBridgeAudioNode health starts unbypassed");
+assert(liveNode.health.maxConsecutiveRenderBudgetMisses === 2, "SoundBridgeAudioNode health reports the render-budget miss threshold");
 liveNode.setBypassed(true);
 assert(liveNode.health.bypassed === true, "SoundBridgeAudioNode health tracks manual bypass");
 assert(liveNode.health.bypassEvents === 1, "SoundBridgeAudioNode health counts bypass changes");
@@ -366,9 +370,15 @@ assert(latencyEvents === 3 && latencyDetail?.direction === "changed", "refreshLa
 assert(healthChangeEvents === 3 && healthChangeDetail?.reportedLatencySamples === 224, "refreshLatency emits healthchange with reported latency");
 let renderPressureEvents = 0;
 let renderPressureDetail;
+let autoBypassEvents = 0;
+let autoBypassDetail;
 liveNode.addEventListener("render-budget-exceeded", (event) => {
   renderPressureEvents += 1;
   renderPressureDetail = event.detail;
+});
+liveNode.addEventListener("render-budget-auto-bypassed", (event) => {
+  autoBypassEvents += 1;
+  autoBypassDetail = event.detail;
 });
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
@@ -387,18 +397,47 @@ assert(liveNode.health.renderBudgetExceeded === true, "SoundBridgeAudioNode heal
 assert(liveNode.health.renderBudgetMisses === 1, "SoundBridgeAudioNode health counts render-budget misses");
 assert(renderPressureEvents === 1, "SoundBridgeAudioNode emits render-budget pressure events");
 assert(renderPressureDetail?.health?.renderBudgetMisses === 1, "render-budget pressure events include health");
+assert(liveNode.health.renderBudgetAutoBypassed === false, "first render-budget miss stays wet");
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
     type: "process-diagnostics",
     blockId: 89,
+    renderEngine: "native-vst3",
+    renderDurationMs: 3.25,
+    renderBudgetMs: 2.667,
+    renderBudgetExceeded: true
+  }
+});
+assert(liveNode.health.bypassed === true, "repeated render-budget misses auto-bypass the AudioNode");
+assert(liveNode.health.healthy === false, "render-budget auto-bypass marks AudioNode unhealthy");
+assert(liveNode.health.unhealthyReason === "render-budget-exceeded", "render-budget auto-bypass records a recoverable reason");
+assert(liveNode.health.renderBudgetAutoBypassed === true, "SoundBridgeAudioNode health reports render-budget auto-bypass");
+assert(liveNode.health.renderBudgetMisses === 2, "SoundBridgeAudioNode keeps the miss count that tripped auto-bypass");
+assert(renderPressureEvents === 2, "SoundBridgeAudioNode emits every render-budget pressure event");
+assert(autoBypassEvents === 1, "SoundBridgeAudioNode emits render-budget auto-bypass once");
+assert(autoBypassDetail?.health?.unhealthyReason === "render-budget-exceeded", "auto-bypass event includes unhealthy health");
+assert(
+  FakeAudioWorkletNode.last.port.messages.at(-1)?.type === "set-bypassed" &&
+    FakeAudioWorkletNode.last.port.messages.at(-1)?.bypassed === true,
+  "render-budget auto-bypass sends a dry command to the worklet"
+);
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    type: "process-diagnostics",
+    blockId: 90,
     renderEngine: "native-vst3",
     renderDurationMs: 1.5,
     renderBudgetMs: 2.667,
     renderBudgetExceeded: false
   }
 });
-assert(liveNode.health.renderBudgetMisses === 0, "SoundBridgeAudioNode clears render pressure after on-budget blocks");
-assert(liveNode.health.renderBudgetExceeded === false, "SoundBridgeAudioNode health records recovered render budget");
+assert(liveNode.health.renderBudgetAutoBypassed === true, "stale on-budget diagnostics do not clear auto-bypass");
+liveNode.setBypassed(false);
+assert(liveNode.health.bypassed === false, "manual unbypass retries after render-budget auto-bypass");
+assert(liveNode.health.healthy === true, "manual retry clears render-budget auto-bypass health");
+assert(liveNode.health.unhealthyReason === undefined, "manual retry clears the render-budget unhealthy reason");
+assert(liveNode.health.renderBudgetMisses === 0, "manual retry clears render-budget miss count");
+assert(liveNode.health.renderBudgetExceeded === false, "manual retry clears render-budget pressure state");
 let audioErrorEvents = 0;
 let audioErrorDetail;
 liveNode.addEventListener("audio-error", (event) => {
@@ -408,7 +447,7 @@ liveNode.addEventListener("audio-error", (event) => {
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
     type: "audio-error",
-    blockId: 90,
+    blockId: 91,
     error: "native render timeout"
   }
 });
@@ -420,7 +459,7 @@ assert(liveNode.health.unhealthyReason === "audio-error", "SoundBridgeAudioNode 
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
     type: "process-diagnostics",
-    blockId: 91,
+    blockId: 92,
     renderEngine: "native-vst3",
     renderDurationMs: 1.25,
     renderBudgetMs: 2.667,

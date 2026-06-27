@@ -667,6 +667,7 @@ export function createLivePerformanceAudioNodeOptions(options) {
     audioTransferMode: options.audioTransferMode ?? "auto",
     sharedBufferBlocks,
     maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192),
+    maxConsecutiveRenderBudgetMisses: boundedAudioNodeInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024),
     bypassed: options.bypassed === true
   };
 }
@@ -712,6 +713,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.lastRenderBudgetMs = undefined;
     this.renderBudgetExceeded = false;
     this.renderBudgetMisses = 0;
+    this.maxConsecutiveRenderBudgetMisses = options.maxConsecutiveRenderBudgetMisses;
+    this.renderBudgetAutoBypassed = false;
     this.audioErrors = 0;
     this.lastAudioError = undefined;
     this.unhealthyReason = undefined;
@@ -778,6 +781,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       audioTransferMode: options.audioTransferMode ?? "auto",
       sharedBufferBlocks: boundedAudioNodeInteger(options.sharedBufferBlocks, 8, 2, 64),
       maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192),
+      maxConsecutiveRenderBudgetMisses: boundedAudioNodeInteger(options.maxConsecutiveRenderBudgetMisses, 0, 0, 1024),
       bypassed: options.bypassed === true,
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
@@ -812,9 +816,16 @@ export class SoundBridgeAudioNode extends EventTarget {
   }
 
   setBypassed(bypassed) {
-    if (this.destroyed || this.bypassed === bypassed) {
+    if (this.destroyed) {
       return;
     }
+    if (!bypassed && this.renderBudgetAutoBypassed) {
+      this.renderBudgetAutoBypassed = false;
+      this.renderBudgetExceeded = false;
+      this.renderBudgetMisses = 0;
+      if (this.unhealthyReason === "render-budget-exceeded") this.unhealthyReason = undefined;
+    }
+    if (this.bypassed === bypassed) return;
     this.bypassed = bypassed;
     this.bypassEvents = Math.min(1024, this.bypassEvents + 1);
     this.node.port.postMessage({ type: "set-bypassed", bypassed });
@@ -895,6 +906,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       lastRenderBudgetMs: this.lastRenderBudgetMs,
       renderBudgetExceeded: this.renderBudgetExceeded,
       renderBudgetMisses: this.renderBudgetMisses,
+      maxConsecutiveRenderBudgetMisses: this.maxConsecutiveRenderBudgetMisses,
+      renderBudgetAutoBypassed: this.renderBudgetAutoBypassed,
       audioErrors: this.audioErrors,
       lastAudioError: this.lastAudioError,
       unhealthyReason: this.unhealthyReason
@@ -1107,16 +1120,24 @@ export class SoundBridgeAudioNode extends EventTarget {
   }
 
   recordProcessDiagnostics(diagnostics) {
+    const exceeded = diagnostics.renderBudgetExceeded === true;
+    if (this.renderBudgetAutoBypassed && !exceeded) return;
     this.clearAudioError();
     if (typeof diagnostics.renderEngine === "string") {
       this.lastRenderEngine = diagnostics.renderEngine;
     }
     this.lastRenderDurationMs = boundedAudioNodeOptionalNumber(diagnostics.renderDurationMs, 0, 60000);
     this.lastRenderBudgetMs = boundedAudioNodeOptionalNumber(diagnostics.renderBudgetMs, 0, 60000);
-    this.renderBudgetExceeded = diagnostics.renderBudgetExceeded === true;
+    this.renderBudgetExceeded = exceeded;
     this.renderBudgetMisses = this.renderBudgetExceeded ? Math.min(1024, this.renderBudgetMisses + 1) : 0;
     if (this.renderBudgetExceeded) {
       this.dispatchEvent(new CustomEvent("render-budget-exceeded", { detail: { diagnostics, health: this.health } }));
+      if (this.maxConsecutiveRenderBudgetMisses > 0 && this.renderBudgetMisses >= this.maxConsecutiveRenderBudgetMisses && !this.bypassed && !this.renderBudgetAutoBypassed) {
+        this.renderBudgetAutoBypassed = true;
+        this.unhealthyReason = "render-budget-exceeded";
+        this.setBypassed(true);
+        this.dispatchEvent(new CustomEvent("render-budget-auto-bypassed", { detail: { diagnostics, health: this.health } }));
+      }
     }
   }
 

@@ -110,6 +110,9 @@ Then create a plugin instance and put it in your Web Audio graph:
   pluginNode.addEventListener("render-budget-exceeded", () => {
     console.warn("Plugin render exceeded the live block budget.", pluginNode.health);
   });
+  pluginNode.addEventListener("render-budget-auto-bypassed", () => {
+    console.warn("Plugin was bypassed after repeated live render misses.", pluginNode.health);
+  });
   pluginNode.addEventListener("audio-error", () => {
     console.warn("Plugin audio path reported an error.", pluginNode.health);
   });
@@ -126,7 +129,7 @@ Then create a plugin instance and put it in your Web Audio graph:
 ```
 
 That is the core integration: scan, create an instance, connect `SoundBridgeAudioNode` with the live-performance Web Audio defaults.
-For live UIs, call `pluginNode.setBypassed(true)` for emergency fail-dry behavior, call `pluginNode.refreshLatency()` when transport latency changes or from your compensation loop, read `pluginNode.health`, and listen for `transport-pressure` to monitor deadline misses, stale output, dropped input, underruns, audio errors, and render-budget pressure.
+For live UIs, call `pluginNode.setBypassed(true)` for emergency fail-dry behavior, call `pluginNode.setBypassed(false)` for an explicit retry after an auto-bypass, call `pluginNode.refreshLatency()` when transport latency changes or from your compensation loop, read `pluginNode.health`, and listen for `transport-pressure` to monitor deadline misses, stale output, dropped input, underruns, audio errors, render-budget pressure, and render-budget auto-bypass.
 
 If your host owns the audio blocks directly, such as a browser DJ deck or live effects rack, use the live-performance rack defaults:
 
