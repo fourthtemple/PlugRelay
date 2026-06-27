@@ -138,6 +138,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   private recoveryDryBlocks = 0;
   private recoveryInProgress = false;
   private processTimeoutRecoveryAttempts = 0;
+  private outputStateVersion = 0;
   private inFlightEpoch = 0;
   private inFlightBlocks = 0;
   private droppedInputBlocks = 0;
@@ -218,6 +219,9 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   }
 
   setBypassed(bypassed: boolean): void {
+    if (this.bypassed !== bypassed) {
+      this.outputStateVersion += 1;
+    }
     this.bypassed = bypassed;
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
@@ -313,8 +317,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
             );
       this.inFlightBlocks += 1;
       const inFlightEpoch = this.inFlightEpoch;
+      const outputStateVersion = this.outputStateVersion;
       processed.then(() => this.releaseInFlightBlock(inFlightEpoch), () => this.releaseInFlightBlock(inFlightEpoch));
       const response = await withLiveEffectTimeout(processed, this.processTimeoutMs);
+      if (this.outputStateChanged(inFlightEpoch, outputStateVersion)) {
+        return this.dryResponse(request, undefined, this.bypassed ? "dry-bypass" : "dry-state-changed");
+      }
       if (this.isStaleInput(request.timestamp)) {
         this.staleOutputBlocks = Math.min(1024, this.staleOutputBlocks + 1);
         const dry = this.dryResponse(request, undefined, "dry-stale-output");
@@ -494,6 +502,17 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       return;
     }
     this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
+  }
+
+  private outputStateChanged(epoch: number, stateVersion: number): boolean {
+    return (
+      epoch !== this.inFlightEpoch ||
+      stateVersion !== this.outputStateVersion ||
+      this.destroyed ||
+      this.bypassed ||
+      !this.instanceId ||
+      !this.healthy
+    );
   }
 
   private finishResponse(response: LiveEffectBlockResponse): LiveEffectBlockResponse {

@@ -217,6 +217,17 @@ const bypassed = await rack.processBlock({ blockId: 2, channels: inputChannels }
 assert(bypassed.bypassed === true && bypassed.channels[0][0] === 1, "manual bypass returns dry audio");
 assert(client.processed.length === 2, "manual bypass avoids plugin processing");
 
+rack.setBypassed(false);
+client.processingDelayMs = 5;
+const processedBeforeInFlightBypass = client.processed.length;
+const inFlightBypass = rack.processBlock({ blockId: 3, channels: inputChannels });
+rack.setBypassed(true);
+const bypassedAfterStart = await inFlightBypass;
+assert(bypassedAfterStart.bypassed === true && bypassedAfterStart.renderEngine === "dry-bypass", "live rack drops wet output after in-flight bypass");
+assert(bypassedAfterStart.channels[0][0] === 1, "in-flight bypass preserves dry input");
+assert(client.processed.length === processedBeforeInFlightBypass + 1, "in-flight bypass can finish native rendering without returning it wet");
+client.processingDelayMs = 0;
+
 let errorEvents = 0;
 rack.addEventListener("effect-error", () => {
   errorEvents += 1;
