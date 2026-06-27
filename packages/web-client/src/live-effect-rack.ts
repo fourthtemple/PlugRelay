@@ -43,12 +43,13 @@ import type {
   LivePerformanceRackOptions
 } from "./live-effect-rack-types";
 import { createLiveEffectRackPolicy } from "./live-effect-rack-policy";
+import { shouldSkipLiveEffectDeadlinePressure } from "./live-effect-rack-scheduler";
+import type { LiveEffectRackScheduledBlock } from "./live-effect-rack-scheduler";
 export { calibrateLiveEffectRackPolicy, createLiveEffectRackPolicy } from "./live-effect-rack-policy";
 export type { LiveEffectRackCalibration, LiveEffectRackCalibrationOptions, LiveEffectRackPolicy, LiveEffectRackPolicyOptions } from "./live-effect-rack-policy";
 export { LiveEffectRackCalibrationWindow, LiveEffectRackChainCalibrationWindow, createLiveEffectRackCalibrationWindow, createLiveEffectRackChainCalibrationWindow, liveEffectRackPolicyOptionsFromCalibration, refreshLiveEffectRackLatencyFromCalibration } from "./live-effect-rack-calibration";
 export type { LiveEffectRackCalibrationHealthSample, LiveEffectRackCalibrationWindowOptions, LiveEffectRackCalibrationWindowSnapshot, LiveEffectRackChainCalibrationHealthSample, LiveEffectRackLatencyRefresher } from "./live-effect-rack-calibration";
 export type { LiveEffectBlockRequest, LiveEffectBlockResponse, LiveEffectRackDryOutputEventDetail, LiveEffectRackHealth, LiveEffectRackOptions, LiveEffectRackProcessOptions, LivePerformanceRackOptions } from "./live-effect-rack-types";
-import type { LiveEffectRackScheduledBlock } from "./live-effect-rack-scheduler";
 import { liveTransportForBlock } from "./live-transport";
 
 export function createLivePerformanceRackOptions(options: LivePerformanceRackOptions): LiveEffectRackOptions {
@@ -410,7 +411,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       this.dispatchEvent(new CustomEvent("stale-input", { detail: { response, health: this.health } }));
       return response;
     }
-    if (options.skipOnDeadlinePressure === true && scheduled.deadlinePressure.pressure) {
+    if (shouldSkipLiveEffectDeadlinePressure(scheduled.deadlinePressure, options)) {
       const response = this.dryResponse(scheduled.request, undefined, "dry-deadline-pressure");
       this.dispatchEvent(new CustomEvent("deadline-pressure", { detail: { response, health: this.health } }));
       return response;

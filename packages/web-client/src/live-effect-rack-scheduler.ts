@@ -34,6 +34,11 @@ export interface LiveEffectRackDeadlinePressure {
   transportLatencyBlocks: number;
 }
 
+export interface LiveEffectRackDeadlinePressureSkipOptions {
+  skipOnDeadlinePressure?: boolean;
+  skipOnDeadlinePressureReasons?: ArrayLike<LiveEffectRackDeadlinePressureReason>;
+}
+
 export interface LiveEffectRackBlockSchedulerOptions {
   sampleRate: number;
   maxBlockSize: number;
@@ -285,6 +290,21 @@ export class LiveEffectRackBlockScheduler {
 
 export function createLiveEffectRackBlockScheduler(options: LiveEffectRackBlockSchedulerOptions): LiveEffectRackBlockScheduler {
   return new LiveEffectRackBlockScheduler(options);
+}
+
+export function shouldSkipLiveEffectDeadlinePressure(
+  pressure: LiveEffectRackDeadlinePressure | undefined,
+  options: LiveEffectRackDeadlinePressureSkipOptions = {}
+): boolean {
+  if (options.skipOnDeadlinePressure !== true || pressure === undefined || pressure.pressure !== true) return false;
+  const reasons = options.skipOnDeadlinePressureReasons;
+  if (reasons === undefined || reasons === null) return true;
+  const length = boundedLiveEffectInteger(reasons.length, 0, 0, 16);
+  for (let index = 0; index < length; index += 1) {
+    const reason = reasons[index];
+    if (typeof reason === "string" && pressure.reasons.includes(reason)) return true;
+  }
+  return false;
 }
 
 function optionalSchedulerInteger(value: unknown, min: number, max: number): number | undefined {

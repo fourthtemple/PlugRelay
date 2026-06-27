@@ -2606,7 +2606,7 @@ export class LiveEffectRackChain extends EventTarget {
         this.chainOutputChannels(scheduled.request.channels)
       ));
     }
-    if (options.skipOnDeadlinePressure === true && scheduled.deadlinePressure.pressure) {
+    if (shouldSkipLiveEffectDeadlinePressure(scheduled.deadlinePressure, options)) {
       return Promise.resolve(this.chainDryResponse(
         scheduled.request,
         "chain-deadline-pressure",
@@ -3110,6 +3110,18 @@ export function createLiveEffectRackBlockScheduler(options) {
   return new LiveEffectRackBlockScheduler(options);
 }
 
+export function shouldSkipLiveEffectDeadlinePressure(pressure, options = {}) {
+  if (options.skipOnDeadlinePressure !== true || pressure === void 0 || pressure.pressure !== true) return false;
+  const reasons = options.skipOnDeadlinePressureReasons;
+  if (reasons === void 0 || reasons === null) return true;
+  const length = boundedLiveEffectInteger(reasons.length, 0, 0, 16);
+  for (let index = 0; index < length; index += 1) {
+    const reason = reasons[index];
+    if (typeof reason === "string" && pressure.reasons.includes(reason)) return true;
+  }
+  return false;
+}
+
 function optionalLiveEffectSchedulerInteger(value, min, max) {
   if (value === void 0 || value === null) return void 0;
   return boundedLiveEffectInteger(value, 0, min, max);
@@ -3524,7 +3536,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       this.dispatchEvent(new CustomEvent("stale-input", { detail: { response, health: this.health } }));
       return response;
     }
-    if (options.skipOnDeadlinePressure === true && scheduled.deadlinePressure.pressure) {
+    if (shouldSkipLiveEffectDeadlinePressure(scheduled.deadlinePressure, options)) {
       const response = this.dryResponse(scheduled.request, void 0, "dry-deadline-pressure");
       this.dispatchEvent(new CustomEvent("deadline-pressure", { detail: { response, health: this.health } }));
       return response;

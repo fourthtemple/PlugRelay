@@ -3,7 +3,8 @@ import { boundedLiveEffectChannels, dryChannels, outputTail, transitionOutputCha
 import { boundedLatencySamples, boundedLiveEffectInteger, boundedLiveEffectNumber, boundedOptionalNumber, liveEffectLatencyMilliseconds, liveEffectNowMs, liveEffectRackTiming } from "./live-effect-rack-metrics";
 import type { LiveEffectRackTiming } from "./live-effect-rack-metrics";
 import { createLiveEffectRackPolicy } from "./live-effect-rack-policy";
-import type { LiveEffectRackScheduledBlock } from "./live-effect-rack-scheduler";
+import { shouldSkipLiveEffectDeadlinePressure } from "./live-effect-rack-scheduler";
+import type { LiveEffectRackDeadlinePressureSkipOptions, LiveEffectRackScheduledBlock } from "./live-effect-rack-scheduler";
 
 const LIVE_EFFECT_CHAIN_MAX_STAGES = 16;
 
@@ -41,10 +42,9 @@ export interface LivePerformanceRackChainOptions extends LiveEffectRackChainOpti
   transitionFadeBlocks?: number;
 }
 
-export interface LiveEffectRackChainProcessOptions {
+export interface LiveEffectRackChainProcessOptions extends LiveEffectRackDeadlinePressureSkipOptions {
   wetMix?: number;
   stageWetMixes?: ArrayLike<number>;
-  skipOnDeadlinePressure?: boolean;
 }
 
 export interface LiveEffectRackChainStageResult {
@@ -308,7 +308,7 @@ export class LiveEffectRackChain extends EventTarget {
         this.chainOutputChannels(scheduled.request.channels)
       ));
     }
-    if (options.skipOnDeadlinePressure === true && scheduled.deadlinePressure.pressure) {
+    if (shouldSkipLiveEffectDeadlinePressure(scheduled.deadlinePressure, options)) {
       return Promise.resolve(this.chainDryResponse(
         scheduled.request,
         "chain-deadline-pressure",

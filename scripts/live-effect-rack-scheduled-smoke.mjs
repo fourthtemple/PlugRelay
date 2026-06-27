@@ -146,11 +146,16 @@ rack.addEventListener("deadline-pressure", () => {
 });
 const processedBeforePressure = client.processed.length;
 const pressureWet = await rack.processScheduledBlock(pressureScheduler.schedule(inputChannels));
+const pressureFilteredWet = await rack.processScheduledBlock(
+  pressureScheduler.schedule(inputChannels),
+  { skipOnDeadlinePressure: true, skipOnDeadlinePressureReasons: ["dry-output-pressure"] }
+);
 const pressureDry = await rack.processScheduledBlock(
   pressureScheduler.schedule(inputChannels),
-  { skipOnDeadlinePressure: true }
+  { skipOnDeadlinePressure: true, skipOnDeadlinePressureReasons: ["deadline-miss"] }
 );
 assert(pressureWet.bypassed === false, "live rack scheduled pressure blocks process unless the host opts into dry skip");
+assert(pressureFilteredWet.bypassed === false, "live rack scheduled pressure reason filters keep unmatched pressure wet");
 assert(
   pressureDry.bypassed === true &&
     pressureDry.renderEngine === "dry-deadline-pressure" &&
@@ -160,7 +165,7 @@ assert(
 );
 assert(
   deadlinePressureEvents === 1 &&
-    client.processed.length === processedBeforePressure + 1,
+    client.processed.length === processedBeforePressure + 2,
   "live rack deadline-pressure dry skips are host-visible and avoid plugin work"
 );
 assert(

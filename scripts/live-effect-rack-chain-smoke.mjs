@@ -586,23 +586,30 @@ deadlinePressureScheduler.updateDeadlinePressureFromHealth(
 const pressuredScheduledWet = deadlinePressureScheduler.schedule([[1, 1]]);
 const pressuredWetResponse = await deadlinePressureChain.processScheduledBlock(pressuredScheduledWet);
 assert(deadlinePressureDryOutputEvents.length === 0, "live rack chain does not emit dry-output for wet scheduled blocks");
+const pressuredScheduledFilteredWet = deadlinePressureScheduler.schedule([[3, 3]]);
+const pressuredFilteredWetResponse = await deadlinePressureChain.processScheduledBlock(pressuredScheduledFilteredWet, {
+  skipOnDeadlinePressure: true,
+  skipOnDeadlinePressureReasons: ["dry-output-pressure"]
+});
 const pressuredScheduledDry = deadlinePressureScheduler.schedule([[2, 2]]);
 const pressuredDryResponse = await deadlinePressureChain.processScheduledBlock(pressuredScheduledDry, {
-  skipOnDeadlinePressure: true
+  skipOnDeadlinePressure: true,
+  skipOnDeadlinePressureReasons: ["deadline-miss"]
 });
 assert(
   pressuredWetResponse.bypassed === false &&
     pressuredWetResponse.channels[0][0] === 7 &&
     deadlinePressureChain.health.dryOutputBlocks === 1 &&
-    deadlinePressureStage.requests.length === 1,
+    deadlinePressureStage.requests.length === 2,
   "live rack chain still processes deadline-pressure blocks unless the host opts into dry skip"
 );
+assert(pressuredFilteredWetResponse.bypassed === false, "live rack chain pressure reason filters keep unmatched pressure wet");
 assert(
   pressuredDryResponse.bypassed === true &&
     pressuredDryResponse.renderEngine === "chain-deadline-pressure" &&
     pressuredDryResponse.processedStages === 0 &&
     pressuredDryResponse.channels[0][0] === 2 &&
-    deadlinePressureStage.requests.length === 1,
+    deadlinePressureStage.requests.length === 2,
   "live rack chain can fail dry before processing scheduler deadline-pressure blocks"
 );
 assert(

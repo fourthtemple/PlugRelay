@@ -1,6 +1,7 @@
 import type { AudioBlockResponse, HostTransportState, PluginMetadata } from "../../protocol/src/messages";
 import type { SoundBridgeClient, BinaryAudioBlockRequest } from "./client";
 import type { LiveEffectDryReason } from "./live-effect-rack-metrics";
+import type { LiveEffectRackDeadlinePressureSkipOptions } from "./live-effect-rack-scheduler";
 
 export interface LiveEffectRackOptions {
   client: SoundBridgeClient;
@@ -54,9 +55,7 @@ export interface LiveEffectRackDryOutputEventDetail {
   reason?: LiveEffectDryReason;
 }
 
-export interface LiveEffectRackProcessOptions {
-  skipOnDeadlinePressure?: boolean;
-}
+export interface LiveEffectRackProcessOptions extends LiveEffectRackDeadlinePressureSkipOptions {}
 
 export interface LiveEffectRackHealth {
   bypassed: boolean;
