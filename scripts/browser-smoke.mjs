@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { chromium } = loadPlaywright();
 const PAIRING_TOKEN = process.env.SOUNDBRIDGE_PAIRING_TOKEN ?? "dev-token";
+const DEMO_URL = `http://${process.env.SOUNDBRIDGE_DEMO_HOST ?? "127.0.0.1"}:${process.env.SOUNDBRIDGE_DEMO_PORT ?? "5173"}`;
 
 const browser = await chromium.launch({
   channel: "chrome",
@@ -16,7 +17,7 @@ try {
     throw error;
   });
 
-  await page.goto("http://127.0.0.1:5173", { waitUntil: "networkidle" });
+  await page.goto(DEMO_URL, { waitUntil: "networkidle" });
   await page.locator("#pairingToken").fill(PAIRING_TOKEN);
   await page.getByRole("button", { name: "Connect" }).click();
   await page.waitForFunction(() => document.querySelector("#connectionStatus")?.textContent === "Paired");

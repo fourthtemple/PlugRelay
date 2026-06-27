@@ -22,7 +22,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   private readonly latencyRecoveryBlocks: number;
   private readonly targetResponseDeadlineLeadBlocks: number;
   private readonly latencyPressureThresholdBlocks: number;
-  private readonly statsIntervalBlocks: number;
+  private readonly responseJitterThresholdBlocks: number; private readonly statsIntervalBlocks: number;
   private blockId = 0;
   private lastFrames = 128;
   private underruns = 0;
@@ -92,6 +92,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.latencyRecoveryBlocks = this.boundedInteger(processorOptions.latencyRecoveryBlocks, 512, 32, 8192);
     this.targetResponseDeadlineLeadBlocks = this.boundedInteger(processorOptions.targetResponseDeadlineLeadBlocks, 1, 0, 16);
     this.latencyPressureThresholdBlocks = this.boundedInteger(processorOptions.latencyPressureThresholdBlocks, 4, 1, 64);
+    this.responseJitterThresholdBlocks = this.boundedInteger(processorOptions.responseJitterThresholdBlocks, 4, 0, 64);
     this.statsIntervalBlocks = this.boundedInteger(processorOptions.statsIntervalBlocks, 128, 8, 1024);
     this.maxRecycledOutputBuffers = this.outputChannels * Math.max(2, this.maxQueuedOutputBlocks + this.maxOutputLatencyBlocks);
     this.bypassed = processorOptions.bypassed === true;
@@ -138,6 +139,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       const leadMinBlocks = this.responseDeadlineLeadMinBlocks ?? 0;
       const leadMaxBlocks = this.responseDeadlineLeadMaxBlocks ?? 0;
       const jitterBlocks = this.responseBlocksSinceLastStats > 0 ? leadMaxBlocks - leadMinBlocks : 0;
+      if (this.responseJitterThresholdBlocks > 0 && jitterBlocks >= this.responseJitterThresholdBlocks) this.raiseOutputLatency(true);
       this.port.postMessage({
         type: "stats",
         processedBlocks: this.processedBlocks,
@@ -505,9 +507,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       outputAudio: new Float32Array(descriptor.outputAudio)
     };
   }
-
   private sharedSlotMetadataOffset(slotIndex: number): number { return SoundBridgeAudioProcessor.sharedHeaderInts + slotIndex * SoundBridgeAudioProcessor.sharedSlotInts; }
-
   private sharedAudioOffset(shared: NormalizedSharedAudio, slotIndex: number): number { return slotIndex * shared.channels * shared.frames; }
 
   private recordOutputTiming(onTime: boolean, targetBlockId: number): void {

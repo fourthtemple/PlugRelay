@@ -174,7 +174,7 @@ assert(liveNodeOptions.outputLatencyBlocks === 2, "live AudioNode preset starts 
 assert(liveNodeOptions.minOutputLatencyBlocks === 1, "live AudioNode preset can recover to one output block");
 assert(liveNodeOptions.maxOutputLatencyBlocks === 4, "live AudioNode preset bounds adaptive latency growth");
 assert(liveNodeOptions.latencyRecoveryBlocks === 128, "live AudioNode preset recovers faster than the generic default");
-assert(liveNodeOptions.latencyPressureThresholdBlocks === 2, "live AudioNode preset reacts to deadline pressure quickly");
+assert(liveNodeOptions.latencyPressureThresholdBlocks === 2 && liveNodeOptions.responseJitterThresholdBlocks === 2, "live AudioNode preset reacts to deadline and jitter pressure quickly");
 assert(liveNodeOptions.statsIntervalBlocks === 32, "live AudioNode preset reports stats quickly for live hosts");
 assert(liveNodeOptions.sharedBufferBlocks === 8, "live AudioNode preset derives shared ring depth from in-flight and latency bounds");
 assert(liveNodeOptions.maxBlockFrames === 128, "live AudioNode preset keeps 128-frame block metadata");
@@ -243,7 +243,7 @@ assert(processorOptions.maxQueuedOutputBlocks === 8, "createLivePerformance forw
 assert(processorOptions.outputLatencyBlocks === 2, "createLivePerformance forwards live output latency");
 assert(processorOptions.maxOutputLatencyBlocks === 4, "createLivePerformance forwards live adaptive latency bounds");
 assert(processorOptions.latencyRecoveryBlocks === 128, "createLivePerformance forwards live recovery timing");
-assert(processorOptions.statsIntervalBlocks === 32, "createLivePerformance forwards live stats cadence");
+assert(processorOptions.statsIntervalBlocks === 32 && processorOptions.responseJitterThresholdBlocks === 2, "createLivePerformance forwards live stats and jitter cadence");
 assert(processorOptions.bypassed === false, "createLivePerformance starts the worklet unbypassed by default");
 const liveAudioPortMessage = FakeWorker.last.messages.at(-1);
 assert(liveAudioPortMessage.type === "audio-port", "createLivePerformance registers a worker audio port");

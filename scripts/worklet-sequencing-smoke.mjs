@@ -362,6 +362,21 @@ pressureProcessor.process([[Float32Array.from([12])]], [[new Float32Array(1)]]);
 assert(pressureProcessor.latencySafetyInsertions === 1, "worklet inserts a controlled safety block to grow latency");
 assert(pressureProcessor.underruns === underrunsBeforeSafety, "worklet does not count safety latency growth as an underrun");
 
+const jitterProcessor = new processorCtor({
+  processorOptions: { outputChannels: 1, maxQueuedOutputBlocks: 8, outputLatencyBlocks: 1, maxOutputLatencyBlocks: 3, latencyMissThresholdBlocks: 32, targetResponseDeadlineLeadBlocks: 0, responseJitterThresholdBlocks: 2, statsIntervalBlocks: 8 }
+});
+const jitterMainPort = lastPort;
+const jitterTransportPort = new TestPort();
+jitterMainPort.onmessage({ data: { type: "connect-transport", port: jitterTransportPort } });
+jitterProcessor.process([[Float32Array.from([0])]], [[new Float32Array(1)]]);
+jitterTransportPort.onmessage({ data: { type: "processed", blockId: 4, channels: [Float32Array.from([4])] } });
+jitterTransportPort.onmessage({ data: { type: "processed", blockId: 0, channels: [Float32Array.from([0])] } });
+for (let blockIndex = 1; blockIndex < 8; blockIndex += 1) {
+  jitterProcessor.process([[Float32Array.from([blockIndex])]], [[new Float32Array(1)]]);
+}
+assert(jitterProcessor.outputLatencyBlocks === 2, "worklet raises latency when response jitter crosses the bounded threshold");
+assert(jitterProcessor.latencyIncreases === 1, "worklet counts jitter-driven adaptive latency raises");
+
 const statsProcessor = new processorCtor({
   processorOptions: {
     outputChannels: 1,
