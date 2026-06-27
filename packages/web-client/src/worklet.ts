@@ -320,12 +320,6 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.recycleInputBlock(channels, frames);
       return;
     }
-    if (sharedResult === "full") {
-      this.droppedInputBlocks += 1;
-      this.sharedInputDroppedBlocks += 1;
-      this.recycleInputBlock(channels, frames);
-      return;
-    }
     const processMessage = {
       type: "process",
       blockId,
@@ -346,20 +340,28 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
   }
 
-  private writeSharedInput(blockId: number, frames: number, channels: Float32Array[]): "sent" | "full" | "unsupported" {
+  private writeSharedInput(blockId: number, frames: number, channels: Float32Array[]): "sent" | "unsupported" {
     const shared = this.sharedAudio;
     if (!shared || frames > shared.frames || channels.length > shared.channels) {
       return "unsupported";
     }
     const available = Atomics.load(shared.inputControl, SoundBridgeAudioProcessor.sharedAvailable);
-    if (available >= shared.slots) {
+    const inputFull = available >= shared.slots;
+    if (inputFull) {
       Atomics.add(shared.inputControl, SoundBridgeAudioProcessor.sharedDropped, 1);
-      return "full";
+      this.droppedInputBlocks += 1;
+      this.sharedInputDroppedBlocks += 1;
     }
-    const writeIndex = Atomics.load(shared.inputControl, SoundBridgeAudioProcessor.sharedWriteIndex) % shared.slots;
+    const writeIndex = inputFull
+      ? Atomics.load(shared.inputControl, SoundBridgeAudioProcessor.sharedReadIndex) % shared.slots
+      : Atomics.load(shared.inputControl, SoundBridgeAudioProcessor.sharedWriteIndex) % shared.slots;
     this.writeSharedSlot(shared.inputControl, shared.inputAudio, writeIndex, blockId, frames, channels, shared);
     Atomics.store(shared.inputControl, SoundBridgeAudioProcessor.sharedWriteIndex, (writeIndex + 1) % shared.slots);
-    Atomics.add(shared.inputControl, SoundBridgeAudioProcessor.sharedAvailable, 1);
+    if (inputFull) {
+      Atomics.store(shared.inputControl, SoundBridgeAudioProcessor.sharedReadIndex, (writeIndex + 1) % shared.slots);
+    } else {
+      Atomics.add(shared.inputControl, SoundBridgeAudioProcessor.sharedAvailable, 1);
+    }
     Atomics.notify(shared.inputControl, SoundBridgeAudioProcessor.sharedAvailable, 1);
     return "sent";
   }

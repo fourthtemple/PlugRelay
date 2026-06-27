@@ -174,6 +174,16 @@ const sharedOutputReuse = [new Float32Array(2)];
 sharedProcessor.process([[Float32Array.from([9, 9])]], [sharedOutputReuse]);
 assert(equal(Array.from(sharedOutputReuse[0]), [71, 71]), "shared worklet transport plays reused output buffers");
 assert(sharedProcessor.outputBufferReuses === 1, "shared worklet transport reuses pooled output buffers");
+sharedProcessor.process([[Float32Array.from([10, 10])]], [[new Float32Array(2)]]);
+sharedProcessor.process([[Float32Array.from([11, 11])]], [[new Float32Array(2)]]);
+const sharedInputControl = new Int32Array(sharedAudio.inputControl);
+const sharedInputAudio = new Float32Array(sharedAudio.inputAudio);
+assert(Atomics.load(sharedInputControl, 2) === 4, "shared worklet transport keeps a full input ring bounded");
+assert(Atomics.load(sharedInputControl, 0) === 1 && Atomics.load(sharedInputControl, 1) === 1, "shared worklet transport advances a full input ring after overwrite");
+assert(Atomics.load(sharedInputControl, 3) === 1, "shared worklet transport records overwritten shared input blocks");
+assert(Atomics.load(sharedInputControl, 8) === 4, "shared worklet transport overwrites the oldest input slot with the newest block");
+assert(equal(Array.from(sharedInputAudio.subarray(0, 2)), [11, 11]), "shared worklet transport keeps the newest audio under input pressure");
+assert(sharedProcessor.sharedInputDroppedBlocks === 1, "shared worklet transport counts overwritten input pressure");
 
 const adaptiveProcessor = new processorCtor({
   processorOptions: {
