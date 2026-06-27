@@ -13,6 +13,11 @@ export interface LiveEffectRackCalibrationHealthSample {
   lastRenderDurationMs?: number;
   responseJitterBlocks?: number;
   lastResponseDeadlineLeadBlocks?: number;
+  droppedInputBlocks?: number;
+  staleInputBlocks?: number;
+  staleOutputBlocks?: number;
+  responseDeadlineMisses?: number;
+  renderTimeouts?: number;
 }
 
 export interface LiveEffectRackCalibrationWindowOptions extends LiveEffectRackPolicyOptions {
@@ -31,6 +36,14 @@ export interface LiveEffectRackLatencyRefresher<T = unknown> {
   refreshLatency(transportLatencySamples?: number): Promise<T>;
 }
 
+interface LiveEffectRackCalibrationPressureCounters {
+  droppedInputBlocks: number;
+  staleInputBlocks: number;
+  staleOutputBlocks: number;
+  responseDeadlineMisses: number;
+  renderTimeouts: number;
+}
+
 export class LiveEffectRackCalibrationWindow {
   readonly options: LiveEffectRackCalibrationWindowOptions;
   readonly maxSamples: number;
@@ -38,6 +51,12 @@ export class LiveEffectRackCalibrationWindow {
   private renderDurationsMs: number[] = [];
   private responseJitterBlocks: number[] = [];
   private deadlineLeadBlocks: number[] = [];
+  private droppedInputBlocks = 0;
+  private staleInputBlocks = 0;
+  private staleOutputBlocks = 0;
+  private responseDeadlineMisses = 0;
+  private renderTimeouts = 0;
+  private pressureBaseline?: LiveEffectRackCalibrationPressureCounters;
   private droppedSamples = 0;
 
   constructor(options: LiveEffectRackCalibrationWindowOptions) {
@@ -56,6 +75,7 @@ export class LiveEffectRackCalibrationWindow {
     if (renderDuration !== undefined) { dropped = this.append(this.renderDurationsMs, renderDuration) || dropped; accepted = true; }
     if (responseJitter !== undefined) { dropped = this.append(this.responseJitterBlocks, responseJitter) || dropped; accepted = true; }
     if (deadlineLead !== undefined) { dropped = this.append(this.deadlineLeadBlocks, deadlineLead) || dropped; accepted = true; }
+    this.recordPressure(health);
     if (accepted && dropped) this.droppedSamples += 1;
     return this.snapshot();
   }
@@ -65,6 +85,12 @@ export class LiveEffectRackCalibrationWindow {
     this.renderDurationsMs = [];
     this.responseJitterBlocks = [];
     this.deadlineLeadBlocks = [];
+    this.droppedInputBlocks = 0;
+    this.staleInputBlocks = 0;
+    this.staleOutputBlocks = 0;
+    this.responseDeadlineMisses = 0;
+    this.renderTimeouts = 0;
+    this.pressureBaseline = undefined;
     this.droppedSamples = 0;
   }
 
@@ -84,7 +110,12 @@ export class LiveEffectRackCalibrationWindow {
       processDurationsMs: this.processDurationsMs,
       renderDurationsMs: this.renderDurationsMs,
       responseJitterBlocks: this.responseJitterBlocks,
-      deadlineLeadBlocks: this.deadlineLeadBlocks
+      deadlineLeadBlocks: this.deadlineLeadBlocks,
+      droppedInputBlocks: this.droppedInputBlocks,
+      staleInputBlocks: this.staleInputBlocks,
+      staleOutputBlocks: this.staleOutputBlocks,
+      responseDeadlineMisses: this.responseDeadlineMisses,
+      renderTimeouts: this.renderTimeouts
     };
     return calibrateLiveEffectRackPolicy(options);
   }
@@ -102,6 +133,29 @@ export class LiveEffectRackCalibrationWindow {
     if (samples.length <= this.maxSamples) return false;
     samples.splice(0, samples.length - this.maxSamples);
     return true;
+  }
+
+  private recordPressure(health: LiveEffectRackCalibrationHealthSample): void {
+    const counters = this.pressureCounters(health);
+    if (this.pressureBaseline === undefined) {
+      this.pressureBaseline = counters;
+      return;
+    }
+    this.droppedInputBlocks = Math.max(this.droppedInputBlocks, pressureCounterDelta(counters.droppedInputBlocks, this.pressureBaseline.droppedInputBlocks));
+    this.staleInputBlocks = Math.max(this.staleInputBlocks, pressureCounterDelta(counters.staleInputBlocks, this.pressureBaseline.staleInputBlocks));
+    this.staleOutputBlocks = Math.max(this.staleOutputBlocks, pressureCounterDelta(counters.staleOutputBlocks, this.pressureBaseline.staleOutputBlocks));
+    this.responseDeadlineMisses = Math.max(this.responseDeadlineMisses, pressureCounterDelta(counters.responseDeadlineMisses, this.pressureBaseline.responseDeadlineMisses));
+    this.renderTimeouts = Math.max(this.renderTimeouts, pressureCounterDelta(counters.renderTimeouts, this.pressureBaseline.renderTimeouts));
+  }
+
+  private pressureCounters(health: LiveEffectRackCalibrationHealthSample): LiveEffectRackCalibrationPressureCounters {
+    return {
+      droppedInputBlocks: boundedLiveEffectInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      staleInputBlocks: boundedLiveEffectInteger(health.staleInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      staleOutputBlocks: boundedLiveEffectInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      responseDeadlineMisses: boundedLiveEffectInteger(health.responseDeadlineMisses, 0, 0, Number.MAX_SAFE_INTEGER),
+      renderTimeouts: boundedLiveEffectInteger(health.renderTimeouts, 0, 0, Number.MAX_SAFE_INTEGER)
+    };
   }
 }
 
@@ -148,4 +202,8 @@ export function refreshLiveEffectRackLatencyFromCalibration<T>(
   calibration: LiveEffectRackCalibration
 ): Promise<T> {
   return rack.refreshLatency(calibration.recommendedTransportLatencySamples);
+}
+
+function pressureCounterDelta(current: number, baseline: number): number {
+  return current >= baseline ? current - baseline : current;
 }

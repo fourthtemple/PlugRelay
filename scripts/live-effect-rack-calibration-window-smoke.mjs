@@ -43,6 +43,60 @@ assert(readySnapshot.recommendedPolicyOptions.transportLatencySamples === 256, "
 const unchangedSnapshot = readyWindow.record({ lastProcessDurationMs: Number.NaN });
 assert(unchangedSnapshot.samples === 1, "live rack calibration window ignores non-finite health samples");
 
+const baselineWindow = createLiveEffectRackCalibrationWindow({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processBudgetMs: 8,
+  processTimeoutMs: 12,
+  transportLatencySamples: 256,
+  safetyMarginBlocks: 0
+});
+
+const baselineSnapshot = baselineWindow.record({
+  lastProcessDurationMs: 0.5,
+  lastRenderDurationMs: 0.4,
+  responseJitterBlocks: 0.25,
+  lastResponseDeadlineLeadBlocks: 1,
+  droppedInputBlocks: 7,
+  staleInputBlocks: 3,
+  staleOutputBlocks: 2,
+  responseDeadlineMisses: 4,
+  renderTimeouts: 1
+});
+assert(baselineSnapshot.calibration.realtimeReady === true, "live rack calibration window treats first pressure counters as the baseline");
+assert(!baselineSnapshot.calibration.warnings.includes("dry-output-pressure"), "live rack calibration window ignores old dry-output pressure");
+assert(!baselineSnapshot.calibration.warnings.includes("deadline-miss"), "live rack calibration window ignores old deadline misses");
+assert(!baselineSnapshot.calibration.warnings.includes("process-timeout"), "live rack calibration window ignores old render timeouts");
+
+const deltaSnapshot = baselineWindow.record({
+  lastProcessDurationMs: 0.6,
+  lastRenderDurationMs: 0.4,
+  responseJitterBlocks: 0.25,
+  lastResponseDeadlineLeadBlocks: 1,
+  droppedInputBlocks: 8,
+  staleInputBlocks: 3,
+  staleOutputBlocks: 2,
+  responseDeadlineMisses: 5,
+  renderTimeouts: 2
+});
+assert(deltaSnapshot.calibration.warnings.includes("dry-output-pressure"), "live rack calibration window counts dry-output pressure deltas after the baseline");
+assert(deltaSnapshot.calibration.warnings.includes("deadline-miss"), "live rack calibration window counts deadline-miss deltas after the baseline");
+assert(deltaSnapshot.calibration.warnings.includes("process-timeout"), "live rack calibration window counts render-timeout deltas after the baseline");
+
+baselineWindow.reset();
+const resetBaselineSnapshot = baselineWindow.record({
+  lastProcessDurationMs: 0.5,
+  lastRenderDurationMs: 0.4,
+  responseJitterBlocks: 0.25,
+  lastResponseDeadlineLeadBlocks: 1,
+  droppedInputBlocks: 8,
+  staleInputBlocks: 3,
+  staleOutputBlocks: 2,
+  responseDeadlineMisses: 5,
+  renderTimeouts: 2
+});
+assert(resetBaselineSnapshot.calibration.realtimeReady === true, "live rack calibration window reset also resets the pressure baseline");
+
 const stressedWindow = createLiveEffectRackCalibrationWindow({
   sampleRate: 48000,
   maxBlockSize: 128,

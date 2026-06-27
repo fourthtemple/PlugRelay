@@ -44,6 +44,11 @@ export interface LiveEffectRackCalibrationOptions extends LiveEffectRackPolicyOp
   renderDurationsMs?: ArrayLike<number>;
   responseJitterBlocks?: ArrayLike<number>;
   deadlineLeadBlocks?: ArrayLike<number>;
+  droppedInputBlocks?: number;
+  staleInputBlocks?: number;
+  staleOutputBlocks?: number;
+  responseDeadlineMisses?: number;
+  renderTimeouts?: number;
   safetyMarginBlocks?: number;
 }
 
@@ -137,6 +142,9 @@ export function calibrateLiveEffectRackPolicy(options: LiveEffectRackCalibration
   const observedRenderP95Ms = percentileSample(options.renderDurationsMs, 0, 60000);
   const observedResponseJitterP95Blocks = percentileSample(options.responseJitterBlocks, 0, 64);
   const observedDeadlineLeadMinBlocks = minimumSample(options.deadlineLeadBlocks, -64, 64);
+  const hasDryOutputPressure = liveEffectDropPressure(options);
+  const hasResponseDeadlineMisses = boundedCalibrationCounter(options.responseDeadlineMisses) > 0;
+  const hasRenderTimeouts = boundedCalibrationCounter(options.renderTimeouts) > 0;
   const currentLatencyBlocks = liveEffectPolicyBlockUnits(policy.transportLatencySamples, policy.maxBlockSize);
   const jitterLatencyBlocks = Math.ceil(
     (observedResponseJitterP95Blocks ?? 0) +
@@ -180,7 +188,10 @@ export function calibrateLiveEffectRackPolicy(options: LiveEffectRackCalibration
     recommendedProcessBudgetMs,
     recommendedProcessTimeoutMs,
     recommendedTransportLatencyBlocks,
-    currentLatencyBlocks
+    currentLatencyBlocks,
+    hasDryOutputPressure,
+    hasResponseDeadlineMisses,
+    hasRenderTimeouts
   });
   return {
     policy,
@@ -235,11 +246,16 @@ function liveEffectCalibrationWarnings(calibration: {
   recommendedProcessTimeoutMs: number;
   recommendedTransportLatencyBlocks: number;
   currentLatencyBlocks: number;
+  hasDryOutputPressure: boolean;
+  hasResponseDeadlineMisses: boolean;
+  hasRenderTimeouts: boolean;
 }): string[] {
   const warnings: string[] = [];
+  if (calibration.hasDryOutputPressure) warnings.push("dry-output-pressure");
   if (exceedsPolicy(calibration.observedProcessP95Ms ?? 0, calibration.policy.processBudgetMs)) warnings.push("process-over-budget");
   if (exceedsPolicy(calibration.observedRenderP95Ms ?? 0, calibration.policy.blockDurationMs)) warnings.push("render-over-block-budget");
-  if ((calibration.observedDeadlineLeadMinBlocks ?? 0) < 0) warnings.push("deadline-miss");
+  if ((calibration.observedDeadlineLeadMinBlocks ?? 0) < 0 || calibration.hasResponseDeadlineMisses) warnings.push("deadline-miss");
+  if (calibration.hasRenderTimeouts) warnings.push("process-timeout");
   if ((calibration.observedResponseJitterP95Blocks ?? 0) > calibration.currentLatencyBlocks) warnings.push("response-jitter");
   if (exceedsPolicy(calibration.recommendedProcessBudgetMs, calibration.policy.processBudgetMs)) warnings.push("increase-process-budget");
   if (exceedsPolicy(calibration.recommendedProcessTimeoutMs, calibration.policy.processTimeoutMs)) warnings.push("increase-process-timeout");
@@ -253,4 +269,13 @@ function roundedPolicyNumber(value: number): number {
 
 function exceedsPolicy(value: number, policyValue: number): boolean {
   return value - policyValue > 0.001;
+}
+
+function liveEffectDropPressure(options: LiveEffectRackCalibrationOptions): boolean {
+  return [options.droppedInputBlocks, options.staleInputBlocks, options.staleOutputBlocks]
+    .some((value) => boundedCalibrationCounter(value) > 0);
+}
+
+function boundedCalibrationCounter(value: unknown): number {
+  return boundedLiveEffectInteger(value, 0, 0, Number.MAX_SAFE_INTEGER);
 }
