@@ -45,6 +45,8 @@ export interface SoundBridgeAudioNodeHealth {
   sharedAudioEnabled: boolean;
   sharedInputDroppedBlocks: number;
   sharedOutputDroppedBlocks: number;
+  transportPressureEvents: number;
+  lastTransportPressureReasons: string[];
   lastRenderEngine?: string;
   lastRenderDurationMs?: number;
   lastRenderBudgetMs?: number;
@@ -141,6 +143,8 @@ export class SoundBridgeAudioNode extends EventTarget {
   private sharedAudioEnabled = false;
   private sharedInputDroppedBlocks = 0;
   private sharedOutputDroppedBlocks = 0;
+  private transportPressureEvents = 0;
+  private lastTransportPressureReasons: string[] = [];
   private lastRenderEngine?: string;
   private lastRenderDurationMs?: number;
   private lastRenderBudgetMs?: number;
@@ -285,6 +289,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       sharedAudioEnabled: this.sharedAudioEnabled,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
       sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
+      transportPressureEvents: this.transportPressureEvents,
+      lastTransportPressureReasons: [...this.lastTransportPressureReasons],
       lastRenderEngine: this.lastRenderEngine,
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
@@ -476,6 +482,15 @@ export class SoundBridgeAudioNode extends EventTarget {
     sharedInputDroppedBlocks?: number;
     sharedOutputDroppedBlocks?: number;
   }): void {
+    const previous = {
+      responseDeadlineMisses: this.responseDeadlineMisses,
+      staleOutputBlocks: this.staleOutputBlocks,
+      droppedInputBlocks: this.droppedInputBlocks,
+      underruns: this.underruns,
+      sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
+      sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks
+    };
+
     this.workletInFlightBlocks = boundedInteger(stats.inFlightBlocks, this.workletInFlightBlocks ?? 0, 0, 64);
     this.queuedOutputBlocks = boundedInteger(stats.queuedOutputBlocks, this.queuedOutputBlocks, 0, 64);
     this.outputLatencyBlocks = boundedInteger(stats.outputLatencyBlocks, this.outputLatencyBlocks, 0, 64);
@@ -508,6 +523,33 @@ export class SoundBridgeAudioNode extends EventTarget {
     if (typeof stats.sharedAudioEnabled === "boolean") {
       this.sharedAudioEnabled = stats.sharedAudioEnabled;
     }
+    this.reportTransportPressure(previous, stats);
+  }
+
+  private reportTransportPressure(
+    previous: {
+      responseDeadlineMisses: number;
+      staleOutputBlocks: number;
+      droppedInputBlocks: number;
+      underruns: number;
+      sharedInputDroppedBlocks: number;
+      sharedOutputDroppedBlocks: number;
+    },
+    stats: unknown
+  ): void {
+    const reasons: string[] = [];
+    if (this.responseDeadlineMisses > previous.responseDeadlineMisses) reasons.push("deadline-miss");
+    if (this.staleOutputBlocks > previous.staleOutputBlocks) reasons.push("stale-output");
+    if (this.droppedInputBlocks > previous.droppedInputBlocks) reasons.push("dropped-input");
+    if (this.underruns > previous.underruns) reasons.push("underrun");
+    if (this.sharedInputDroppedBlocks > previous.sharedInputDroppedBlocks) reasons.push("shared-input-drop");
+    if (this.sharedOutputDroppedBlocks > previous.sharedOutputDroppedBlocks) reasons.push("shared-output-drop");
+    if (reasons.length === 0) {
+      return;
+    }
+    this.transportPressureEvents = Math.min(1024, this.transportPressureEvents + 1);
+    this.lastTransportPressureReasons = reasons;
+    this.dispatchEvent(new CustomEvent("transport-pressure", { detail: { reasons, stats, health: this.health } }));
   }
 
   private recordProcessDiagnostics(diagnostics: {

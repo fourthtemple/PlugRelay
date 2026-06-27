@@ -247,24 +247,31 @@ liveNode.addEventListener("stats", (event) => {
   statsEvents += 1;
   statsDetail = event.detail;
 });
+let transportPressureEvents = 0;
+let transportPressureDetail;
+liveNode.addEventListener("transport-pressure", (event) => {
+  transportPressureEvents += 1;
+  transportPressureDetail = event.detail;
+});
+const pressureStats = {
+  type: "stats",
+  inFlightBlocks: 3,
+  queuedOutputBlocks: 2,
+  outputLatencyBlocks: 2,
+  transportLatencySamples: 256,
+  responseDeadlineLeadSamples: -128,
+  responseJitterSamples: 384,
+  responseDeadlineMisses: 4,
+  responseDeadlineMissesSinceLastStats: 1,
+  staleOutputBlocks: 2,
+  droppedInputBlocks: 1,
+  underruns: 7,
+  sharedAudioEnabled: true,
+  sharedInputDroppedBlocks: 5,
+  sharedOutputDroppedBlocks: 6
+};
 FakeAudioWorkletNode.last.port.onmessage({
-  data: {
-    type: "stats",
-    inFlightBlocks: 3,
-    queuedOutputBlocks: 2,
-    outputLatencyBlocks: 2,
-    transportLatencySamples: 256,
-    responseDeadlineLeadSamples: -128,
-    responseJitterSamples: 384,
-    responseDeadlineMisses: 4,
-    responseDeadlineMissesSinceLastStats: 1,
-    staleOutputBlocks: 2,
-    droppedInputBlocks: 1,
-    underruns: 7,
-    sharedAudioEnabled: true,
-    sharedInputDroppedBlocks: 5,
-    sharedOutputDroppedBlocks: 6
-  }
+  data: pressureStats
 });
 assert(statsEvents === 1, "SoundBridgeAudioNode emits one stats event per worklet stats message");
 assert(statsDetail.transportLatencySamples === 256, "SoundBridgeAudioNode preserves stats event details");
@@ -282,6 +289,18 @@ assert(liveNode.health.underruns === 7, "SoundBridgeAudioNode health tracks unde
 assert(liveNode.health.sharedAudioEnabled === true, "SoundBridgeAudioNode health tracks shared audio mode");
 assert(liveNode.health.sharedInputDroppedBlocks === 5, "SoundBridgeAudioNode health tracks shared input drops");
 assert(liveNode.health.sharedOutputDroppedBlocks === 6, "SoundBridgeAudioNode health tracks shared output drops");
+assert(transportPressureEvents === 1, "SoundBridgeAudioNode emits transport-pressure on increased pressure counters");
+assert(
+  transportPressureDetail?.reasons?.join(",") === "deadline-miss,stale-output,dropped-input,underrun,shared-input-drop,shared-output-drop",
+  "transport-pressure reports bounded pressure reasons"
+);
+assert(transportPressureDetail?.health?.transportPressureEvents === 1, "transport-pressure includes updated health");
+assert(
+  liveNode.health.lastTransportPressureReasons.includes("deadline-miss"),
+  "SoundBridgeAudioNode health tracks the latest transport-pressure reason"
+);
+FakeAudioWorkletNode.last.port.onmessage({ data: pressureStats });
+assert(transportPressureEvents === 1, "SoundBridgeAudioNode does not repeat transport-pressure for unchanged counters");
 let renderPressureEvents = 0;
 let renderPressureDetail;
 liveNode.addEventListener("render-budget-exceeded", (event) => {

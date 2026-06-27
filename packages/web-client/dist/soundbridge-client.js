@@ -695,6 +695,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.sharedAudioEnabled = false;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.transportPressureEvents = 0;
+    this.lastTransportPressureReasons = [];
     this.lastRenderEngine = undefined;
     this.lastRenderDurationMs = undefined;
     this.lastRenderBudgetMs = undefined;
@@ -822,6 +824,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       sharedAudioEnabled: this.sharedAudioEnabled,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
       sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
+      transportPressureEvents: this.transportPressureEvents,
+      lastTransportPressureReasons: [...this.lastTransportPressureReasons],
       lastRenderEngine: this.lastRenderEngine,
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
@@ -945,6 +949,15 @@ export class SoundBridgeAudioNode extends EventTarget {
   }
 
   recordStats(stats) {
+    const previous = {
+      responseDeadlineMisses: this.responseDeadlineMisses,
+      staleOutputBlocks: this.staleOutputBlocks,
+      droppedInputBlocks: this.droppedInputBlocks,
+      underruns: this.underruns,
+      sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
+      sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks
+    };
+
     this.workletInFlightBlocks = boundedAudioNodeInteger(stats.inFlightBlocks, this.workletInFlightBlocks ?? 0, 0, 64);
     this.queuedOutputBlocks = boundedAudioNodeInteger(stats.queuedOutputBlocks, this.queuedOutputBlocks, 0, 64);
     this.outputLatencyBlocks = boundedAudioNodeInteger(stats.outputLatencyBlocks, this.outputLatencyBlocks, 0, 64);
@@ -982,6 +995,23 @@ export class SoundBridgeAudioNode extends EventTarget {
     if (typeof stats.sharedAudioEnabled === "boolean") {
       this.sharedAudioEnabled = stats.sharedAudioEnabled;
     }
+    this.reportTransportPressure(previous, stats);
+  }
+
+  reportTransportPressure(previous, stats) {
+    const reasons = [];
+    if (this.responseDeadlineMisses > previous.responseDeadlineMisses) reasons.push("deadline-miss");
+    if (this.staleOutputBlocks > previous.staleOutputBlocks) reasons.push("stale-output");
+    if (this.droppedInputBlocks > previous.droppedInputBlocks) reasons.push("dropped-input");
+    if (this.underruns > previous.underruns) reasons.push("underrun");
+    if (this.sharedInputDroppedBlocks > previous.sharedInputDroppedBlocks) reasons.push("shared-input-drop");
+    if (this.sharedOutputDroppedBlocks > previous.sharedOutputDroppedBlocks) reasons.push("shared-output-drop");
+    if (reasons.length === 0) {
+      return;
+    }
+    this.transportPressureEvents = Math.min(1024, this.transportPressureEvents + 1);
+    this.lastTransportPressureReasons = reasons;
+    this.dispatchEvent(new CustomEvent("transport-pressure", { detail: { reasons, stats, health: this.health } }));
   }
 
   recordProcessDiagnostics(diagnostics) {
