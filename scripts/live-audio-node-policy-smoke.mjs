@@ -117,6 +117,38 @@ const resetBaselineSnapshot = baselineWindow.record({
 });
 assert(resetBaselineSnapshot.calibration.realtimeReady === true, "live AudioNode calibration window reset also resets the pressure baseline");
 
+const sharedQueueCalibration = calibrateLivePerformanceAudioNodePolicy({
+  instanceId: "inst-shared-queue",
+  sampleRate: 48000,
+  maxBlockFrames: 128,
+  sharedBufferBlocks: 8,
+  sharedInputQueuedBlocks: 7,
+  sharedOutputQueuedBlocks: 2,
+  safetyMarginBlocks: 1
+});
+assert(sharedQueueCalibration.observedSharedQueueMaxBlocks === 7, "live AudioNode calibration reports shared queue depth");
+assert(sharedQueueCalibration.recommendedSharedBufferBlocks === 9, "live AudioNode calibration recommends shared ring headroom before drops");
+assert(
+  includesAll(sharedQueueCalibration.warnings, ["shared-ring-pressure", "increase-shared-buffer"]),
+  "live AudioNode calibration warns on near-full shared rings"
+);
+
+const sharedQueueWindow = createLivePerformanceAudioNodeCalibrationWindow({
+  instanceId: "inst-shared-queue-window",
+  sampleRate: 48000,
+  maxBlockFrames: 128,
+  sharedBufferBlocks: 8,
+  safetyMarginBlocks: 1
+});
+const sharedQueueSnapshot = sharedQueueWindow.record({
+  lastRenderDurationMs: 0.5,
+  responseJitterBlocks: 0.25,
+  responseDeadlineLeadSamples: 128,
+  sharedInputQueuedBlocks: 7
+});
+assert(sharedQueueSnapshot.calibration.observedSharedQueueMaxBlocks === 7, "live AudioNode calibration window keeps shared queue gauges");
+assert(sharedQueueSnapshot.recommendedOptions.sharedBufferBlocks === 9, "live AudioNode calibration window recommends shared ring headroom");
+
 const stressedCalibration = calibrateLivePerformanceAudioNodePolicy({
   instanceId: "inst-stress",
   sampleRate: 48000,

@@ -721,6 +721,7 @@ export function calibrateLivePerformanceAudioNodePolicy(options) {
   const observedRenderP95Ms = audioNodePercentileSample(options.renderDurationsMs, 0, 60000);
   const observedResponseJitterP95Blocks = audioNodePercentileSample(options.responseJitterBlocks, 0, 64);
   const observedDeadlineLeadMinBlocks = audioNodeMinimumSample(options.deadlineLeadBlocks, -64, 64);
+  const observedSharedQueueMaxBlocks = audioNodeSharedQueueMaxBlocks(options);
   const currentLatencyBlocks = audioNodeLatencyBlocks(policy.transportLatencySamples, policy.maxBlockFrames);
   const hasDropPressure = audioNodeDropPressure(options);
   const pressureBlocks =
@@ -740,7 +741,7 @@ export function calibrateLivePerformanceAudioNodePolicy(options) {
     policy.maxQueuedOutputBlocks
   );
   const recommendedSharedBufferBlocks = boundedAudioNodeInteger(
-    Math.max(policy.sharedBufferBlocks, policy.maxInFlightBlocks + recommendedMaxOutputLatencyBlocks),
+    Math.max(policy.sharedBufferBlocks, policy.maxInFlightBlocks + recommendedMaxOutputLatencyBlocks, (observedSharedQueueMaxBlocks ?? 0) + safetyBlocks + 1),
     policy.sharedBufferBlocks,
     2,
     64
@@ -761,6 +762,7 @@ export function calibrateLivePerformanceAudioNodePolicy(options) {
     observedRenderP95Ms,
     observedResponseJitterP95Blocks,
     observedDeadlineLeadMinBlocks,
+    observedSharedQueueMaxBlocks,
     recommendedOutputLatencyBlocks,
     recommendedMaxOutputLatencyBlocks,
     recommendedSharedBufferBlocks,
@@ -773,6 +775,7 @@ export function calibrateLivePerformanceAudioNodePolicy(options) {
     observedRenderP95Ms,
     observedResponseJitterP95Blocks,
     observedDeadlineLeadMinBlocks,
+    observedSharedQueueMaxBlocks,
     recommendedOutputLatencyBlocks,
     recommendedTransportLatencySamples,
     recommendedMaxOutputLatencyBlocks,
@@ -1423,6 +1426,13 @@ function audioNodeDropPressure(options) {
     .some((value) => boundedAudioNodeInteger(value, 0, 0, Number.MAX_SAFE_INTEGER) > 0);
 }
 
+function audioNodeSharedQueueMaxBlocks(options) {
+  const inputQueued = boundedAudioNodeOptionalNumber(options.sharedInputQueuedBlocks, 0, 64);
+  const outputQueued = boundedAudioNodeOptionalNumber(options.sharedOutputQueuedBlocks, 0, 64);
+  if (inputQueued === void 0 && outputQueued === void 0) return void 0;
+  return Math.max(boundedAudioNodeInteger(inputQueued, 0, 0, 64), boundedAudioNodeInteger(outputQueued, 0, 0, 64));
+}
+
 function audioNodeFallbackReason(reason) {
   return reason === "bypass" || reason === "latency-safety" || reason === "underrun" ? reason : undefined;
 }
@@ -1432,6 +1442,7 @@ function audioNodeCalibrationWarnings(calibration) {
   if (calibration.hasDropPressure) warnings.push("audio-drop-pressure");
   if ((calibration.observedDeadlineLeadMinBlocks ?? 0) < 0) warnings.push("deadline-miss");
   if ((calibration.observedResponseJitterP95Blocks ?? 0) > calibration.policy.responseJitterThresholdBlocks) warnings.push("response-jitter");
+  if ((calibration.observedSharedQueueMaxBlocks ?? 0) >= Math.max(1, calibration.policy.sharedBufferBlocks - 1)) warnings.push("shared-ring-pressure");
   if (exceedsAudioNodePolicy(calibration.observedRenderP95Ms ?? 0, calibration.policy.blockDurationMs)) warnings.push("render-over-block-budget");
   if (calibration.recommendedOutputLatencyBlocks > calibration.currentLatencyBlocks) warnings.push("increase-output-latency");
   if (calibration.recommendedMaxOutputLatencyBlocks > calibration.policy.maxOutputLatencyBlocks) warnings.push("increase-max-output-latency");
@@ -1459,6 +1470,8 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.sharedInputQueuedBlocks = 0;
+    this.sharedOutputQueuedBlocks = 0;
     this.pressureBaseline = void 0;
     this.droppedSamples = 0;
     this.options = { ...options };
@@ -1489,6 +1502,8 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.sharedInputQueuedBlocks = 0;
+    this.sharedOutputQueuedBlocks = 0;
     this.pressureBaseline = void 0;
     this.droppedSamples = 0;
   }
@@ -1514,7 +1529,9 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       droppedInputBlocks: this.droppedInputBlocks,
       staleOutputBlocks: this.staleOutputBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
-      sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks
+      sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
+      sharedInputQueuedBlocks: this.sharedInputQueuedBlocks,
+      sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks
     });
   }
 
@@ -1534,6 +1551,8 @@ export class LivePerformanceAudioNodeCalibrationWindow {
   }
 
   recordPressure(health) {
+    this.sharedInputQueuedBlocks = Math.max(this.sharedInputQueuedBlocks, boundedAudioNodeInteger(health.sharedInputQueuedBlocks, 0, 0, 64));
+    this.sharedOutputQueuedBlocks = Math.max(this.sharedOutputQueuedBlocks, boundedAudioNodeInteger(health.sharedOutputQueuedBlocks, 0, 0, 64));
     const counters = this.pressureCounters(health);
     if (this.pressureBaseline === void 0) {
       this.pressureBaseline = counters;
