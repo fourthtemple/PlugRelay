@@ -12,6 +12,8 @@ import { liveTransportForBlock } from "./live-transport";
 
 export { LivePerformanceAudioNodeCalibrationWindow, calibrateLivePerformanceAudioNodePolicy, createLivePerformanceAudioNodeCalibrationWindow, createLivePerformanceAudioNodeOptions, createLivePerformanceAudioNodePolicy, livePerformanceAudioNodeOptionsFromCalibration, refreshLivePerformanceAudioNodeLatencyFromCalibration } from "./bridge-node-options";
 export type { LivePerformanceAudioNodeCalibration, LivePerformanceAudioNodeCalibrationHealthSample, LivePerformanceAudioNodeCalibrationOptions, LivePerformanceAudioNodeCalibrationWindowOptions, LivePerformanceAudioNodeCalibrationWindowSnapshot, LivePerformanceAudioNodeLatencyRefresher, LivePerformanceAudioNodeOptions, LivePerformanceAudioNodePolicy, LivePerformanceAudioNodePolicyOptions, SoundBridgeAudioNodeFallbackOutputEventDetail, SoundBridgeAudioNodeFallbackReason, SoundBridgeAudioNodeHealth, SoundBridgeAudioNodeOptions } from "./bridge-node-options";
+export { LivePerformanceAudioNodeAdaptiveLatencyController, createLivePerformanceAudioNodeAdaptiveLatencyController } from "./live-audio-node-adaptive-latency";
+export type { LivePerformanceAudioNodeAdaptiveLatencyDirection, LivePerformanceAudioNodeAdaptiveLatencyOptions, LivePerformanceAudioNodeAdaptiveLatencySnapshot, LivePerformanceAudioNodeAdaptiveLatencyTarget } from "./live-audio-node-adaptive-latency";
 
 export class SoundBridgeAudioNode extends EventTarget {
   readonly node: AudioWorkletNode;

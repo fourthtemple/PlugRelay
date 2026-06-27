@@ -1,5 +1,6 @@
 import {
   calibrateLivePerformanceAudioNodePolicy,
+  createLivePerformanceAudioNodeAdaptiveLatencyController,
   createLivePerformanceAudioNodeCalibrationWindow,
   createLivePerformanceAudioNodePolicy,
   livePerformanceAudioNodeOptionsFromCalibration,
@@ -256,6 +257,58 @@ const refreshed = await refreshLivePerformanceAudioNodeLatencyFromCalibration({
 }, stressedSnapshot.calibration);
 assert(latencyRefreshes.length === 1 && latencyRefreshes[0] === 896, "live AudioNode calibration helper refreshes latency with recommended transport latency");
 assert(refreshed.transportLatencySamples === 896, "live AudioNode calibration helper returns the latency refresh result");
+
+const adaptiveNode = {
+  health: {
+    lastRenderDurationMs: 0.5,
+    responseJitterBlocks: 3,
+    responseDeadlineLeadSamples: -128,
+    transportLatencySamples: 128
+  },
+  refreshes: [],
+  async refreshLatency(transportLatencySamples) {
+    this.refreshes.push(transportLatencySamples);
+    this.health.transportLatencySamples = transportLatencySamples;
+    return { transportLatencySamples };
+  }
+};
+const adaptiveController = createLivePerformanceAudioNodeAdaptiveLatencyController({
+  node: adaptiveNode,
+  instanceId: "inst-audio-node-adaptive",
+  sampleRate: 48000,
+  maxBlockFrames: 128,
+  transportLatencySamples: 128,
+  minSamples: 2,
+  cooldownBlocks: 0,
+  maxLatencyIncreaseBlocks: 2,
+  latencyRecoveryBlocks: 2,
+  maxLatencyDecreaseBlocks: 1,
+  minTransportLatencyBlocks: 1,
+  safetyMarginBlocks: 1
+});
+const pressureNoApply = await adaptiveController.record();
+assert(pressureNoApply.applied === false && adaptiveNode.refreshes.length === 0, "live AudioNode adaptive latency waits for enough pressure samples");
+const pressureApplied = await adaptiveController.record();
+assert(pressureApplied.applied === true, "live AudioNode adaptive latency applies after sustained pressure");
+assert(pressureApplied.appliedDirection === "increase", "live AudioNode adaptive latency reports increase direction");
+assert(adaptiveNode.refreshes[0] === 384, "live AudioNode adaptive latency caps increase steps");
+assert(pressureApplied.refreshResult.transportLatencySamples === 384, "live AudioNode adaptive latency returns refresh results");
+adaptiveNode.health = {
+  lastRenderDurationMs: 0.4,
+  responseJitterBlocks: 0,
+  responseDeadlineLeadSamples: 256,
+  transportLatencySamples: adaptiveNode.health.transportLatencySamples
+};
+const stableOne = await adaptiveController.record();
+assert(stableOne.applied === false && stableOne.stableBlocks === 0, "live AudioNode adaptive latency waits for enough stable samples");
+const stableTwo = await adaptiveController.record();
+assert(stableTwo.applied === false && stableTwo.stableBlocks === 1, "live AudioNode adaptive latency waits through stable recovery blocks");
+const stableThree = await adaptiveController.record();
+assert(stableThree.applied === true && stableThree.appliedDirection === "decrease", "live AudioNode adaptive latency recovers after stable health");
+assert(adaptiveNode.refreshes.at(-1) === 256, "live AudioNode adaptive latency caps recovery steps");
+adaptiveController.reset();
+const resetStable = await adaptiveController.record();
+assert(resetStable.stableBlocks === 0, "live AudioNode adaptive latency reset clears stable recovery state");
 
 stressedWindow.reset();
 const resetSnapshot = stressedWindow.snapshot();
