@@ -64,6 +64,16 @@ export interface LiveEffectRackScheduledBlock {
   transport: HostTransportState;
 }
 
+export interface LiveEffectRackScheduledFrame {
+  blockId: number;
+  samplePosition?: number;
+  timestamp: number;
+  captureAgeMs: number;
+  stale: boolean;
+  deadlinePressure: LiveEffectRackDeadlinePressure;
+  transport: HostTransportState;
+}
+
 export interface LiveEffectRackScheduleOptions extends Omit<Partial<LiveEffectBlockRequest>, "channels"> {
   transportLatencySamples?: number;
   samplePosition?: number;
@@ -114,6 +124,10 @@ export class LiveEffectRackBlockScheduler {
   }
 
   schedule(channels: ArrayLike<number>[], options: LiveEffectRackScheduleOptions = {}): LiveEffectRackScheduledBlock {
+    return this.scheduleFromFrame(this.captureFrame(options), channels, options);
+  }
+
+  captureFrame(options: LiveEffectRackScheduleOptions = {}): LiveEffectRackScheduledFrame {
     const now = this.nowMs();
     const blockId = boundedLiveEffectInteger(options.blockId, this.nextBlockId, 0, LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID);
     const samplePosition = optionalSchedulerInteger(
@@ -134,18 +148,8 @@ export class LiveEffectRackBlockScheduler {
       compensateOutputLatency: this.compensateOutputLatency
     });
     this.advance(blockId, samplePosition);
-    const request: LiveEffectBlockRequest = {
-      blockId,
-      channels,
-      inputBuses: options.inputBuses,
-      sampleRate: options.sampleRate ?? this.sampleRate,
-      transport,
-      timestamp,
-      wetMix: options.wetMix
-    };
     const captureAgeMs = Math.max(0, now - timestamp);
     return {
-      request,
       blockId,
       samplePosition,
       timestamp,
@@ -153,6 +157,34 @@ export class LiveEffectRackBlockScheduler {
       stale: this.maxInputAgeMs > 0 && captureAgeMs > this.maxInputAgeMs,
       deadlinePressure: this.deadlinePressureSnapshot(transportLatencySamples),
       transport
+    };
+  }
+
+  scheduleFromFrame(
+    frame: LiveEffectRackScheduledFrame,
+    channels: ArrayLike<number>[],
+    options: LiveEffectRackScheduleOptions = {}
+  ): LiveEffectRackScheduledBlock {
+    const timestamp = finiteSchedulerNumber(options.timestamp, frame.timestamp);
+    const captureAgeMs = options.timestamp === undefined ? frame.captureAgeMs : Math.max(0, this.nowMs() - timestamp);
+    const request: LiveEffectBlockRequest = {
+      blockId: frame.blockId,
+      channels,
+      inputBuses: options.inputBuses,
+      sampleRate: options.sampleRate ?? this.sampleRate,
+      transport: options.transport ?? frame.transport,
+      timestamp,
+      wetMix: options.wetMix
+    };
+    return {
+      request,
+      blockId: frame.blockId,
+      samplePosition: frame.samplePosition,
+      timestamp,
+      captureAgeMs,
+      stale: options.timestamp === undefined ? frame.stale : this.maxInputAgeMs > 0 && captureAgeMs > this.maxInputAgeMs,
+      deadlinePressure: frame.deadlinePressure,
+      transport: request.transport
     };
   }
 

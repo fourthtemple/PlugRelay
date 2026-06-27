@@ -215,4 +215,48 @@ assert(reset.blockId === 4 && reset.samplePosition === 512, "live rack scheduler
 assert(scheduler.snapshot().nextBlockId === 5, "live rack scheduler snapshot reports the next block id");
 assert(scheduler.snapshot().transportLatencySamples === 768, "live rack scheduler snapshot reports current latency compensation");
 
+now = 2000;
+const frameScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  startBlockId: 100,
+  startSamplePosition: 12800,
+  transportLatencySamples: 256,
+  maxInputAgeMs: 4,
+  transport: { playing: true, tempo: 126 },
+  nowMs: () => now
+});
+const frame = frameScheduler.captureFrame();
+const deckA = frameScheduler.scheduleFromFrame(frame, [[1, 0]], { wetMix: 0.5 });
+now = 2010;
+const deckB = frameScheduler.scheduleFromFrame(frame, [[0, 1]], {
+  inputBuses: [{ index: 1, channels: [[0.25, 0.25]] }]
+});
+assert(
+  deckA.blockId === 100 &&
+    deckB.blockId === 100 &&
+    deckA.samplePosition === 12800 &&
+    deckB.samplePosition === 12800,
+  "live rack scheduler can reuse one frame across multiple live targets"
+);
+assert(
+  deckA.timestamp === 2000 &&
+    deckB.timestamp === 2000 &&
+    deckA.captureAgeMs === 0 &&
+    deckB.captureAgeMs === 0 &&
+    deckB.stale === false,
+  "live rack scheduler preserves shared frame freshness for multi-target processing"
+);
+assert(
+  deckA.transport === deckB.transport &&
+    deckA.transport.samplePosition === 13056 &&
+    deckA.transport.tempo === 126,
+  "live rack scheduler shares one latency-compensated transport across a frame"
+);
+assert(deckA.request.wetMix === 0.5, "live rack scheduler keeps per-target wet mix when reusing a frame");
+assert(deckB.request.inputBuses?.[0]?.index === 1, "live rack scheduler keeps per-target input buses when reusing a frame");
+assert(frameScheduler.snapshot().nextBlockId === 101, "live rack scheduler advances only once for a reusable frame");
+const nextFrameBlock = frameScheduler.schedule([[0.3]]);
+assert(nextFrameBlock.blockId === 101, "live rack scheduler resumes after the captured multi-target frame");
+
 console.log("Live effect rack scheduler smoke checks passed.");

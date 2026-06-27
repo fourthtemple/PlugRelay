@@ -3229,6 +3229,10 @@ export class LiveEffectRackBlockScheduler {
   }
 
   schedule(channels, options = {}) {
+    return this.scheduleFromFrame(this.captureFrame(options), channels, options);
+  }
+
+  captureFrame(options = {}) {
     const now = this.nowMs();
     const blockId = boundedLiveEffectInteger(options.blockId, this.nextBlockId, 0, LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID);
     const samplePosition = optionalLiveEffectSchedulerInteger(
@@ -3249,18 +3253,8 @@ export class LiveEffectRackBlockScheduler {
       compensateOutputLatency: this.compensateOutputLatency
     });
     this.advance(blockId, samplePosition);
-    const request = {
-      blockId,
-      channels,
-      inputBuses: options.inputBuses,
-      sampleRate: options.sampleRate ?? this.sampleRate,
-      transport,
-      timestamp,
-      wetMix: options.wetMix
-    };
     const captureAgeMs = Math.max(0, now - timestamp);
     return {
-      request,
       blockId,
       samplePosition,
       timestamp,
@@ -3268,6 +3262,30 @@ export class LiveEffectRackBlockScheduler {
       stale: this.maxInputAgeMs > 0 && captureAgeMs > this.maxInputAgeMs,
       deadlinePressure: this.deadlinePressureSnapshot(transportLatencySamples),
       transport
+    };
+  }
+
+  scheduleFromFrame(frame, channels, options = {}) {
+    const timestamp = finiteLiveEffectSchedulerNumber(options.timestamp, frame.timestamp);
+    const captureAgeMs = options.timestamp === void 0 ? frame.captureAgeMs : Math.max(0, this.nowMs() - timestamp);
+    const request = {
+      blockId: frame.blockId,
+      channels,
+      inputBuses: options.inputBuses,
+      sampleRate: options.sampleRate ?? this.sampleRate,
+      transport: options.transport ?? frame.transport,
+      timestamp,
+      wetMix: options.wetMix
+    };
+    return {
+      request,
+      blockId: frame.blockId,
+      samplePosition: frame.samplePosition,
+      timestamp,
+      captureAgeMs,
+      stale: options.timestamp === void 0 ? frame.stale : this.maxInputAgeMs > 0 && captureAgeMs > this.maxInputAgeMs,
+      deadlinePressure: frame.deadlinePressure,
+      transport: request.transport
     };
   }
 
