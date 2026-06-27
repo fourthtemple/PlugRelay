@@ -1,4 +1,7 @@
+import { SoundBridgeProtocolError } from "./client";
+
 const LIVE_EFFECT_MAX_LATENCY_SAMPLES = 1048576;
+export type LiveEffectFailureReason = "processing-error" | "process-timeout";
 
 export function boundedChannelCount(value: number): number {
   const channels = Math.floor(Number(value));
@@ -47,4 +50,49 @@ export function liveEffectLatencyMilliseconds(samples: number, sampleRate: numbe
   const boundedSamples = boundedLatencySamples(samples, 0);
   const boundedSampleRate = boundedLiveEffectInteger(sampleRate, 48000, 1, 384000);
   return Number(((boundedSamples / boundedSampleRate) * 1000).toFixed(3));
+}
+
+export async function withLiveEffectTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  if (timeoutMs <= 0) {
+    return promise;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(liveEffectTimeoutError()), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export function liveEffectFailureReason(error: unknown): LiveEffectFailureReason {
+  return (error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout") || isRenderDeadlineProtocolError(error)
+    ? "process-timeout"
+    : "processing-error";
+}
+
+export function isRenderDeadlineProtocolError(error: unknown): error is SoundBridgeProtocolError {
+  return error instanceof SoundBridgeProtocolError && (error.code === "render_timeout" || error.code === "render_quarantined");
+}
+
+export function renderDeadlineDetails(error: SoundBridgeProtocolError): Record<string, unknown> {
+  return typeof error.details === "object" && error.details !== null ? error.details as Record<string, unknown> : {};
+}
+
+export function isRecoverablePressureReason(reason: unknown): boolean {
+  return reason === "process-budget-exceeded" || reason === "render-budget-exceeded";
+}
+
+export function liveEffectNowMs(): number {
+  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+}
+
+function liveEffectTimeoutError(): Error {
+  const error = new Error("process_block_timeout");
+  error.name = "SoundBridgeLiveEffectTimeout";
+  return error;
 }

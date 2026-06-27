@@ -4,7 +4,7 @@ import type {
   HostTransportState,
   PluginMetadata
 } from "../../protocol/src/messages";
-import { SoundBridgeClient, SoundBridgeProtocolError } from "./client";
+import { SoundBridgeClient } from "./client";
 import type { BinaryAudioBlockRequest } from "./client";
 import {
   cloneBusBlocks,
@@ -21,9 +21,15 @@ import {
   boundedLiveEffectNumber,
   boundedOptionalNumber,
   combinedLatencySamples,
+  isRecoverablePressureReason,
+  isRenderDeadlineProtocolError,
   liveEffectBlockDurationMs,
   liveEffectBlockFrames,
-  liveEffectLatencyMilliseconds
+  liveEffectFailureReason,
+  liveEffectLatencyMilliseconds,
+  liveEffectNowMs,
+  renderDeadlineDetails,
+  withLiveEffectTimeout
 } from "./live-effect-rack-metrics";
 
 export interface LiveEffectRackOptions {
@@ -321,6 +327,24 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.wetMix = bounded;
     this.dispatchEvent(new CustomEvent("wetmixchange", { detail: this.health }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  retry(): boolean {
+    if (this.destroyed || !this.instanceId || !isRecoverablePressureReason(this.unhealthyReason)) {
+      return false;
+    }
+    this.healthy = true;
+    this.lastError = undefined;
+    this.unhealthyReason = undefined;
+    this.recoveryDryBlocks = 0;
+    this.recoveryInProgress = false;
+    this.processBudgetMisses = 0;
+    this.lastProcessBudgetExceeded = false;
+    this.renderBudgetMisses = 0;
+    this.lastRenderBudgetExceeded = false;
+    this.dispatchEvent(new CustomEvent("retry", { detail: { health: this.health } }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+    return true;
   }
 
   async recreate(): Promise<void> {
@@ -696,45 +720,4 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
 
 function boundedWetMix(value: unknown, fallback: number): number {
   return boundedLiveEffectNumber(value, fallback, 0, 1);
-}
-
-async function withLiveEffectTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  if (timeoutMs <= 0) {
-    return promise;
-  }
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(liveEffectTimeoutError()), timeoutMs);
-      })
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-function liveEffectTimeoutError(): Error {
-  const error = new Error("process_block_timeout");
-  error.name = "SoundBridgeLiveEffectTimeout";
-  return error;
-}
-
-function liveEffectFailureReason(error: unknown): LiveEffectRackHealth["unhealthyReason"] {
-  return (error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout") || isRenderDeadlineProtocolError(error)
-    ? "process-timeout"
-    : "processing-error";
-}
-
-function isRenderDeadlineProtocolError(error: unknown): error is SoundBridgeProtocolError {
-  return error instanceof SoundBridgeProtocolError && (error.code === "render_timeout" || error.code === "render_quarantined");
-}
-
-function renderDeadlineDetails(error: SoundBridgeProtocolError): Record<string, unknown> {
-  return typeof error.details === "object" && error.details !== null ? error.details as Record<string, unknown> : {};
-}
-
-function liveEffectNowMs(): number {
-  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
 }

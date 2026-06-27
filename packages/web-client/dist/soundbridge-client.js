@@ -1411,6 +1411,24 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
+  retry() {
+    if (this.destroyed || !this.instanceId || !isRecoverableLiveEffectPressureReason(this.unhealthyReason)) {
+      return false;
+    }
+    this.healthy = true;
+    this.lastError = void 0;
+    this.unhealthyReason = void 0;
+    this.recoveryDryBlocks = 0;
+    this.recoveryInProgress = false;
+    this.processBudgetMisses = 0;
+    this.lastProcessBudgetExceeded = false;
+    this.renderBudgetMisses = 0;
+    this.lastRenderBudgetExceeded = false;
+    this.dispatchEvent(new CustomEvent("retry", { detail: { health: this.health } }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+    return true;
+  }
+
   async recreate() {
     this.destroyed = false;
     this.recoveryInProgress = false;
@@ -1827,6 +1845,10 @@ function combinedLiveEffectLatencySamples(pluginLatencySamples, transportLatency
 
 function boundedLiveEffectWetMix(value, fallback) {
   return boundedLiveEffectNumber(value, fallback, 0, 1);
+}
+
+function isRecoverableLiveEffectPressureReason(reason) {
+  return reason === "process-budget-exceeded" || reason === "render-budget-exceeded";
 }
 
 function liveEffectLatencyMilliseconds(samples, sampleRate) {

@@ -402,6 +402,36 @@ const processRecovered = await processPressureRack.processBlock({ blockId: 19, c
 assert(processRecovered.bypassed === false && processPressureRack.health.processBudgetMisses === 0, "recovered process budget rack resumes wet processing");
 await processPressureRack.destroy();
 
+const manualRetryRack = await SoundBridgeLiveEffectRack.create({
+  client,
+  plugin,
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  maxConsecutiveRenderBudgetMisses: 1
+});
+let retryEvents = 0;
+manualRetryRack.addEventListener("retry", () => {
+  retryEvents += 1;
+});
+client.renderDurationMs = 5;
+client.renderBudgetMs = 2;
+client.renderBudgetExceeded = true;
+const retryPressure = await manualRetryRack.processBlock({ blockId: 20, channels: inputChannels });
+assert(retryPressure.bypassed === true && manualRetryRack.health.unhealthyReason === "render-budget-exceeded", "manual retry rack starts dry after recoverable pressure");
+assert(manualRetryRack.retry() === true, "manual retry clears recoverable live pressure without recreating");
+assert(manualRetryRack.health.healthy === true && manualRetryRack.health.renderBudgetMisses === 0, "manual retry clears pressure health");
+assert(retryEvents === 1, "manual retry emits a host-visible event");
+client.renderDurationMs = 0.5;
+client.renderBudgetMs = 2.667;
+client.renderBudgetExceeded = false;
+const retryWet = await manualRetryRack.processBlock({ blockId: 21, channels: inputChannels });
+assert(retryWet.bypassed === false, "manual retry resumes wet processing without replacing the instance");
+client.failProcessing = true;
+const retryFailure = await manualRetryRack.processBlock({ blockId: 22, channels: inputChannels });
+assert(retryFailure.bypassed === true && manualRetryRack.retry() === false, "manual retry refuses non-recoverable processing errors");
+client.failProcessing = false;
+await manualRetryRack.destroy();
+
 const backpressureRack = await SoundBridgeLiveEffectRack.create({
   client,
   plugin,
