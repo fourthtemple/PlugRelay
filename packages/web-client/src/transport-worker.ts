@@ -32,6 +32,11 @@ interface SharedAudioPort {
   slots: number;
   channels: number;
   frames: number;
+  pooledInputBuffers: number;
+  inputBufferAllocations: number;
+  inputBufferReuses: number;
+  maxRecycledInputBuffers: number;
+  inputBufferPool: Map<number, Float32Array[]>;
   inputControl: Int32Array;
   inputAudio: Float32Array;
   outputControl: Int32Array;
@@ -283,6 +288,7 @@ function sendSharedAudioProcess(
   block: { blockId: number; frames: number; channels: Float32Array[] }
 ): void {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
+    recycleSharedInputBlock(shared, block.channels, block.frames);
     shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: "SoundBridge worker transport is not connected." });
     return;
   }
@@ -306,8 +312,10 @@ function sendSharedAudioProcess(
   try {
     pendingSharedAudio.set(envelope.id, shared);
     socket.send(binary ? encodeBinaryAudioEnvelope(envelope, block.channels) : JSON.stringify(envelope));
+    recycleSharedInputBlock(shared, block.channels, block.frames);
   } catch (error) {
     pendingSharedAudio.delete(envelope.id);
+    recycleSharedInputBlock(shared, block.channels, block.frames);
     shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: String(error instanceof Error ? error.message : error) });
   }
 }
@@ -321,9 +329,48 @@ function readSharedInputBlock(shared: SharedAudioPort, slotIndex: number): { blo
   const base = sharedAudioOffset(shared, slotIndex);
   for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
     const offset = base + channelIndex * shared.frames;
-    channels.push(Float32Array.from(shared.inputAudio.subarray(offset, offset + frames)));
+    const channel = takeSharedInputBuffer(shared, frames);
+    channel.set(shared.inputAudio.subarray(offset, offset + frames));
+    channels.push(channel);
   }
   return { blockId, frames, channels };
+}
+
+function takeSharedInputBuffer(shared: SharedAudioPort, frames: number): Float32Array {
+  const pool = shared.inputBufferPool.get(frames);
+  const recycled = pool?.pop();
+  if (recycled) {
+    shared.pooledInputBuffers = Math.max(0, shared.pooledInputBuffers - 1);
+    if (recycled.length === frames && recycled.buffer.byteLength >= frames * Float32Array.BYTES_PER_ELEMENT) {
+      shared.inputBufferReuses += 1;
+      return recycled;
+    }
+  }
+  shared.inputBufferAllocations += 1;
+  return new Float32Array(frames);
+}
+
+function recycleSharedInputBlock(shared: SharedAudioPort, channels: Float32Array[], frames: number): void {
+  const pool = shared.inputBufferPool.get(frames) ?? [];
+  const seenBuffers = new Set<ArrayBufferLike>();
+  for (const channel of channels) {
+    if (
+      shared.pooledInputBuffers >= shared.maxRecycledInputBuffers ||
+      channel.length !== frames ||
+      channel.byteOffset !== 0 ||
+      !(channel.buffer instanceof ArrayBuffer) ||
+      channel.byteLength !== channel.buffer.byteLength ||
+      seenBuffers.has(channel.buffer)
+    ) {
+      continue;
+    }
+    seenBuffers.add(channel.buffer);
+    pool.push(channel);
+    shared.pooledInputBuffers += 1;
+  }
+  if (pool.length > 0) {
+    shared.inputBufferPool.set(frames, pool);
+  }
 }
 
 function writeSharedOutputBlock(shared: SharedAudioPort, blockId: number, channels: ArrayLike<number>[]): void {
@@ -393,6 +440,11 @@ function normalizeSharedAudioPort(port: MessagePort, value: unknown): SharedAudi
     slots,
     channels,
     frames,
+    pooledInputBuffers: 0,
+    inputBufferAllocations: 0,
+    inputBufferReuses: 0,
+    maxRecycledInputBuffers: channels * Math.max(2, slots),
+    inputBufferPool: new Map(),
     inputControl: new Int32Array(descriptor.inputControl),
     inputAudio: new Float32Array(descriptor.inputAudio),
     outputControl: new Int32Array(descriptor.outputControl),

@@ -11,6 +11,7 @@ const encodeBinaryAudioEnvelope = globalThis.encodeBinaryAudioEnvelope;
 `
 );
 const postedMessages = [];
+const encodedBinaryChannels = [];
 let waitAsyncCalls = 0;
 const testAtomics = {
   add: Atomics.add.bind(Atomics),
@@ -100,7 +101,8 @@ const context = {
   decodeBinaryAudioEnvelope() {
     throw new Error("binary response decoding is not used by this smoke test");
   },
-  encodeBinaryAudioEnvelope() {
+  encodeBinaryAudioEnvelope(_envelope, channels = []) {
+    encodedBinaryChannels.push(channels);
     return new ArrayBuffer(8);
   },
   performance: {
@@ -172,6 +174,7 @@ assert(
 
 const sharedAudio = createSharedAudio(2, 1, 2);
 writeSharedInput(sharedAudio, 13, [Float32Array.from([0.1, 0.2])]);
+writeSharedInput(sharedAudio, 14, [Float32Array.from([0.3, 0.4])]);
 const sharedPort = new TestPort();
 self.onmessage({
   data: {
@@ -188,9 +191,13 @@ assert(
   sharedPort.messages.some((message) => message.type === "shared-audio-status" && message.wakeMode === "atomics"),
   "transport worker reports atomic shared-audio wakeups"
 );
-assert(socket.sent.length === 2, "transport worker drains shared input blocks after registration");
+assert(socket.sent.length === 3, "transport worker drains shared input blocks after registration");
 assert(Atomics.load(new Int32Array(sharedAudio.inputControl), 2) === 0, "transport worker consumes shared input slots");
 assert(waitAsyncCalls === 1, "transport worker waits on shared input after draining queued blocks");
+assert(
+  encodedBinaryChannels[1]?.[0] === encodedBinaryChannels[2]?.[0],
+  "transport worker reuses shared input buffers after binary send"
+);
 socket.emit("message", {
   data: JSON.stringify({
     type: "response",
