@@ -156,6 +156,7 @@ const rack = await SoundBridgeLiveEffectRack.create({
 
 assert(rack.instanceId === "inst-live-1", "live effect rack creates a plugin instance");
 assert(rack.health.healthy === true && rack.health.latencySamples === 12, "live effect rack starts healthy");
+assert(rack.health.wetMix === 1, "live effect rack starts fully wet");
 assert(
   rack.health.pluginLatencySamples === 12 &&
     rack.health.transportLatencySamples === 0 &&
@@ -176,6 +177,10 @@ assert(
 let latencyEvents = 0;
 rack.addEventListener("latencychange", () => {
   latencyEvents += 1;
+});
+let wetMixEvents = 0;
+rack.addEventListener("wetmixchange", () => {
+  wetMixEvents += 1;
 });
 const refreshedTransportLatency = await rack.refreshLatency(256.9);
 assert(client.latencyRequests.at(-1) === 256, "live rack bounds transport latency before requesting compensation");
@@ -216,10 +221,22 @@ assert(
 assert(latencyEvents === 2, "live rack emits a latencychange event when render latency changes");
 client.latencySamples = 12;
 
+const processedBeforeMix = client.processed.length;
+rack.setWetMix(0.25);
+const mixed = await rack.processBlock({ blockId: 3, channels: inputChannels });
+assert(rack.health.wetMix === 0.25 && wetMixEvents === 1, "setWetMix updates bounded live rack mix health");
+assert(mixed.bypassed === false && near(mixed.channels[0][0], 0.875), "live rack blends wet plugin output with dry input");
+const dryMixed = await rack.processBlock({ blockId: 4, channels: inputChannels, wetMix: 0 });
+assert(dryMixed.bypassed === false && dryMixed.channels[0][0] === 1, "per-block wetMix zero outputs dry audio without bypassing");
+assert(client.processed.length === processedBeforeMix + 2, "wetMix still allows plugin processing for state continuity");
+rack.setWetMix(4);
+assert(rack.health.wetMix === 1 && wetMixEvents === 2, "setWetMix clamps over-range mix values");
+
 rack.setBypassed(true);
+const processedBeforeBypass = client.processed.length;
 const bypassed = await rack.processBlock({ blockId: 2, channels: inputChannels });
 assert(bypassed.bypassed === true && bypassed.channels[0][0] === 1, "manual bypass returns dry audio");
-assert(client.processed.length === 2, "manual bypass avoids plugin processing");
+assert(client.processed.length === processedBeforeBypass, "manual bypass avoids plugin processing");
 
 rack.setBypassed(false);
 client.processingDelayMs = 5;

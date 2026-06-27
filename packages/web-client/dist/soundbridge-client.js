@@ -1292,6 +1292,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastOutputTail = void 0;
     this.transportLatencySamples = 0;
     this.reportedLatencySamples = 0;
+    this.wetMix = 1;
     this.client = options.client;
     this.plugin = options.plugin;
     this.sampleRate = options.sampleRate;
@@ -1307,6 +1308,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.renderBudgetRecoveryBlocks = boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, 0, 0, 4096);
     this.processTimeoutRecoveryBlocks = boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, 0, 0, 4096);
     this.maxProcessTimeoutRecoveries = boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, 0, 0, 32);
+    this.wetMix = boundedLiveEffectWetMix(options.wetMix, 1);
   }
 
   static async create(options) {
@@ -1361,7 +1363,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       droppedInputBlocks: this.droppedInputBlocks,
       staleInputBlocks: this.staleInputBlocks,
       staleOutputBlocks: this.staleOutputBlocks,
-      transitionFadeSamples: this.transitionFadeSamples
+      transitionFadeSamples: this.transitionFadeSamples,
+      wetMix: this.wetMix
     };
   }
 
@@ -1370,6 +1373,16 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       this.outputStateVersion += 1;
     }
     this.bypassed = bypassed;
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  setWetMix(wetMix) {
+    const bounded = boundedLiveEffectWetMix(wetMix, this.wetMix);
+    if (bounded === this.wetMix) {
+      return;
+    }
+    this.wetMix = bounded;
+    this.dispatchEvent(new CustomEvent("wetmixchange", { detail: this.health }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
@@ -1484,7 +1497,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
         this.failClosed(error, "render-budget-exceeded");
         return this.dryResponse(request, error);
       }
-      return this.finishResponse({ ...response, bypassed: false, healthy: true });
+      return this.finishResponse({ ...response, bypassed: false, healthy: true }, request.channels, request.wetMix);
     } catch (error) {
       if (this.outputStateChanged(inFlightEpoch, outputStateVersion)) {
         return this.dryResponse(request, void 0, this.bypassed ? "dry-bypass" : "dry-state-changed");
@@ -1692,9 +1705,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     );
   }
 
-  finishResponse(response) {
+  finishResponse(response, dryInput, wetMixOverride) {
     const outputPath = response.bypassed ? "dry" : "wet";
-    const channels = transitionLiveEffectOutputChannels(response.channels, this.lastOutputTail, this.lastOutputPath, outputPath, this.transitionFadeSamples);
+    const mixed = response.bypassed ? response.channels : wetMixedLiveEffectChannels(response.channels, dryInput, this.outputChannels, boundedLiveEffectWetMix(wetMixOverride, this.wetMix));
+    const channels = transitionLiveEffectOutputChannels(mixed, this.lastOutputTail, this.lastOutputPath, outputPath, this.transitionFadeSamples);
     this.lastOutputTail = liveEffectOutputTail(channels, this.outputChannels);
     this.lastOutputPath = outputPath;
     return channels === response.channels ? response : { ...response, channels };
@@ -1742,6 +1756,10 @@ function boundedLiveEffectLatencySamples(value, fallback) {
 
 function combinedLiveEffectLatencySamples(pluginLatencySamples, transportLatencySamples) {
   return Math.min(LIVE_EFFECT_MAX_LATENCY_SAMPLES, pluginLatencySamples + transportLatencySamples);
+}
+
+function boundedLiveEffectWetMix(value, fallback) {
+  return boundedLiveEffectNumber(value, fallback, 0, 1);
 }
 
 function liveEffectLatencyMilliseconds(samples, sampleRate) {
@@ -1804,6 +1822,22 @@ function transitionLiveEffectOutputChannels(channels, previousTail, previousPath
       output[frame] = previous * (1 - wet) + output[frame] * wet;
     }
     return output;
+  });
+}
+
+function wetMixedLiveEffectChannels(wetChannels, dryInput, outputChannels, wetMix) {
+  if (wetMix >= 1) {
+    return wetChannels;
+  }
+  const dry = dryLiveEffectChannels(dryInput ?? [], outputChannels);
+  if (wetMix <= 0) {
+    return dry;
+  }
+  return Array.from({ length: outputChannels }, (_, channelIndex) => {
+    const wet = wetChannels.length > 0 ? wetChannels[channelIndex % wetChannels.length] : [];
+    const dryChannel = dry[channelIndex];
+    const frames = Math.max(wet.length, dryChannel.length);
+    return Array.from({ length: frames }, (_unused, frame) => Number(dryChannel[frame] ?? 0) * (1 - wetMix) + Number(wet[frame] ?? 0) * wetMix);
   });
 }
 

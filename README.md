@@ -148,9 +148,10 @@ const rack = await SoundBridgeLiveEffectRack.createLivePerformance({
   sampleRate: audioContext.sampleRate,
   maxBlockSize: 128
 });
+rack.setWetMix(0.35);
 ```
 
-That preset uses binary audio, one in-flight block, bounded audio request timeouts, block-time input freshness and processing deadlines, wet/dry transition fades, bounded recovery after render pressure, render-response latency updates plus `refreshLatency()` health for plugin and transport latency compensation in samples and milliseconds, and `render_timeout`/`render_quarantined` handling with deadline-budget health details when a native worker misses the live render deadline.
+That preset uses binary audio, one in-flight block, bounded audio request timeouts, block-time input freshness and processing deadlines, bounded host-side wet/dry mix, wet/dry transition fades, bounded recovery after render pressure, render-response latency updates plus `refreshLatency()` health for plugin and transport latency compensation in samples and milliseconds, and `render_timeout`/`render_quarantined` handling with deadline-budget health details when a native worker misses the live render deadline.
 
 ## Try The Demo
 

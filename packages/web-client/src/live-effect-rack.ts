@@ -20,6 +20,7 @@ export interface LiveEffectRackOptions {
   maxInFlightBlocks?: number;
   processTimeoutMs?: number;
   transitionFadeSamples?: number;
+  wetMix?: number;
   maxConsecutiveRenderBudgetMisses?: number;
   renderBudgetRecoveryBlocks?: number;
   processTimeoutRecoveryBlocks?: number;
@@ -39,6 +40,7 @@ export interface LiveEffectBlockRequest {
   inputBuses?: BinaryAudioBlockRequest["inputBuses"];
   transport?: HostTransportState;
   timestamp?: number;
+  wetMix?: number;
 }
 
 export interface LiveEffectBlockResponse extends Omit<AudioBlockResponse, "channels"> {
@@ -86,6 +88,7 @@ export interface LiveEffectRackHealth {
   staleInputBlocks: number;
   staleOutputBlocks: number;
   transitionFadeSamples: number;
+  wetMix: number;
 }
 
 const LIVE_PERFORMANCE_INPUT_AGE_BLOCKS = 4;
@@ -139,6 +142,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   readonly processTimeoutRecoveryBlocks: number;
   readonly maxProcessTimeoutRecoveries: number;
 
+  private wetMix: number;
   private created?: CreateInstanceResponse;
   private destroyed = false;
   private bypassed = false;
@@ -186,6 +190,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.renderBudgetRecoveryBlocks = boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, 0, 0, 4096);
     this.processTimeoutRecoveryBlocks = boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, 0, 0, 4096);
     this.maxProcessTimeoutRecoveries = boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, 0, 0, 32);
+    this.wetMix = boundedWetMix(options.wetMix, 1);
   }
 
   static async create(options: LiveEffectRackOptions): Promise<SoundBridgeLiveEffectRack> {
@@ -240,7 +245,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       droppedInputBlocks: this.droppedInputBlocks,
       staleInputBlocks: this.staleInputBlocks,
       staleOutputBlocks: this.staleOutputBlocks,
-      transitionFadeSamples: this.transitionFadeSamples
+      transitionFadeSamples: this.transitionFadeSamples,
+      wetMix: this.wetMix
     };
   }
 
@@ -249,6 +255,16 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       this.outputStateVersion += 1;
     }
     this.bypassed = bypassed;
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  setWetMix(wetMix: number): void {
+    const bounded = boundedWetMix(wetMix, this.wetMix);
+    if (bounded === this.wetMix) {
+      return;
+    }
+    this.wetMix = bounded;
+    this.dispatchEvent(new CustomEvent("wetmixchange", { detail: this.health }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
@@ -363,7 +379,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
         this.failClosed(error, "render-budget-exceeded");
         return this.dryResponse(request, error);
       }
-      return this.finishResponse({ ...response, bypassed: false, healthy: true });
+      return this.finishResponse({ ...response, bypassed: false, healthy: true }, request.channels, request.wetMix);
     } catch (error) {
       if (this.outputStateChanged(inFlightEpoch, outputStateVersion)) {
         return this.dryResponse(request, undefined, this.bypassed ? "dry-bypass" : "dry-state-changed");
@@ -571,9 +587,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     );
   }
 
-  private finishResponse(response: LiveEffectBlockResponse): LiveEffectBlockResponse {
+  private finishResponse(response: LiveEffectBlockResponse, dryInput?: ArrayLike<number>[], wetMixOverride?: number): LiveEffectBlockResponse {
     const outputPath = response.bypassed ? "dry" : "wet";
-    const channels = transitionOutputChannels(response.channels, this.lastOutputTail, this.lastOutputPath, outputPath, this.transitionFadeSamples);
+    const mixed = response.bypassed ? response.channels : wetMixedChannels(response.channels, dryInput, this.outputChannels, boundedWetMix(wetMixOverride, this.wetMix));
+    const channels = transitionOutputChannels(mixed, this.lastOutputTail, this.lastOutputPath, outputPath, this.transitionFadeSamples);
     this.lastOutputTail = outputTail(channels, this.outputChannels);
     this.lastOutputPath = outputPath;
     return channels === response.channels ? response : { ...response, channels };
@@ -621,6 +638,10 @@ function boundedLatencySamples(value: unknown, fallback: number): number {
 
 function combinedLatencySamples(pluginLatencySamples: number, transportLatencySamples: number): number {
   return Math.min(LIVE_EFFECT_MAX_LATENCY_SAMPLES, pluginLatencySamples + transportLatencySamples);
+}
+
+function boundedWetMix(value: unknown, fallback: number): number {
+  return boundedLiveEffectNumber(value, fallback, 0, 1);
 }
 
 function liveEffectLatencyMilliseconds(samples: number, sampleRate: number): number {
@@ -683,6 +704,22 @@ function transitionOutputChannels(channels: ArrayLike<number>[], previousTail: n
       output[frame] = previous * (1 - wet) + output[frame] * wet;
     }
     return output;
+  });
+}
+
+function wetMixedChannels(wetChannels: ArrayLike<number>[], dryInput: ArrayLike<number>[] | undefined, outputChannels: number, wetMix: number): ArrayLike<number>[] {
+  if (wetMix >= 1) {
+    return wetChannels;
+  }
+  const dry = dryChannels(dryInput ?? [], outputChannels);
+  if (wetMix <= 0) {
+    return dry;
+  }
+  return Array.from({ length: outputChannels }, (_, channelIndex) => {
+    const wet = wetChannels.length > 0 ? wetChannels[channelIndex % wetChannels.length] : [];
+    const dryChannel = dry[channelIndex];
+    const frames = Math.max(wet.length, dryChannel.length);
+    return Array.from({ length: frames }, (_unused, frame) => Number(dryChannel[frame] ?? 0) * (1 - wetMix) + Number(wet[frame] ?? 0) * wetMix);
   });
 }
 
