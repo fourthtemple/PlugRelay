@@ -2265,8 +2265,11 @@ export class LiveEffectRackFrameBatchCalibrationWindow {
     return this.window.record({
       lastProcessDurationMs: health.totalDurationMs,
       lastRenderDurationMs: health.maxDurationMs,
+      responseJitterBlocks: health.responseJitterBlocks,
+      lastResponseDeadlineLeadBlocks: health.lastResponseDeadlineLeadBlocks,
       latencySamples: health.latencySamples ?? health.reportedLatencySamples,
-      dryOutputBlocks: this.dryOutputBlocks
+      dryOutputBlocks: this.dryOutputBlocks,
+      responseDeadlineMisses: health.responseDeadlineMisses
     });
   }
 
