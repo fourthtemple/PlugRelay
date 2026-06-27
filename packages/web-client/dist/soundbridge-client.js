@@ -2808,22 +2808,21 @@ export class LiveEffectRackFrameBatchSchedulerAdaptiveLatencyController {
     );
     let applied = false;
     let appliedDirection = "none";
-    const pressureHealth = {};
     if (this.shouldApply(snapshot, targetTransportLatencySamples, currentTransportLatencySamples)) {
       this.scheduler.updateLatency(targetTransportLatencySamples);
-      this.scheduler.updateDeadlinePressureFromHealth(pressureHealth, snapshot.calibration);
+      this.scheduler.updateDeadlinePressureFromHealth(health, snapshot.calibration);
       applied = true;
       appliedDirection = "increase";
       this.cooldownBlocksRemaining = this.cooldownBlocks;
       this.stableBlocks = 0;
       this.window.reset();
     } else {
-      this.scheduler.updateDeadlinePressureFromHealth(pressureHealth, snapshot.calibration);
+      this.scheduler.updateDeadlinePressureFromHealth(health, snapshot.calibration);
       this.recordStableBlock(snapshot);
       targetTransportLatencySamples = this.recoveryTarget(currentTransportLatencySamples, batchLatencySamples, maxBlockSize);
       if (this.shouldRecover(snapshot, targetTransportLatencySamples, currentTransportLatencySamples)) {
         this.scheduler.updateLatency(targetTransportLatencySamples);
-        this.scheduler.updateDeadlinePressureFromHealth(pressureHealth, snapshot.calibration);
+        this.scheduler.updateDeadlinePressureFromHealth(health, snapshot.calibration);
         applied = true;
         appliedDirection = "decrease";
         this.cooldownBlocksRemaining = this.cooldownBlocks;

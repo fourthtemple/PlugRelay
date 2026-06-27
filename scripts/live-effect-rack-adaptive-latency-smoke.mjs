@@ -410,6 +410,9 @@ const batchController = createLiveEffectRackFrameBatchSchedulerAdaptiveLatencyCo
 const batchReady = batchController.record({
   totalDurationMs: 1,
   maxDurationMs: 0.5,
+  responseJitterBlocks: 0,
+  lastResponseDeadlineLeadBlocks: 1,
+  responseDeadlineMisses: 0,
   latencySamples: 128,
   dryTargets: 0,
   skippedTargets: 0,
@@ -423,6 +426,9 @@ assert(batchReady.targetTransportLatencySamples === 128, "adaptive frame batch s
 const batchRaise = batchController.record({
   totalDurationMs: 1,
   maxDurationMs: 0.5,
+  responseJitterBlocks: 0.25,
+  lastResponseDeadlineLeadBlocks: -0.5,
+  responseDeadlineMisses: 1,
   latencySamples: 128,
   dryTargets: 1,
   skippedTargets: 1,
@@ -431,20 +437,25 @@ const batchRaise = batchController.record({
 });
 assert(batchRaise.applied === true, "adaptive frame batch scheduler latency applies dry-pressure recommendations");
 assert(batchRaise.appliedDirection === "increase", "adaptive frame batch scheduler latency reports upward changes");
-assert(batchRaise.targetTransportLatencySamples === 256, "adaptive frame batch scheduler latency adds one dry-pressure safety block");
-assert(batchScheduler.snapshot().transportLatencySamples === 256, "adaptive frame batch scheduler latency updates the scheduler");
+assert(batchRaise.targetTransportLatencySamples === 384, "adaptive frame batch scheduler latency adds aggregate deadline headroom");
+assert(batchScheduler.snapshot().transportLatencySamples === 384, "adaptive frame batch scheduler latency updates the scheduler");
 assert(
   batchScheduler.snapshot().deadlinePressure.reasons.includes("dry-output-pressure"),
   "adaptive frame batch scheduler latency keeps batch dry pressure observable"
 );
 assert(
-  batchRaise.deadlinePressure?.reasons.includes("increase-transport-latency"),
-  "adaptive frame batch scheduler latency snapshots include latency pressure reasons"
+  batchRaise.deadlinePressure?.reasons.includes("deadline-miss") &&
+    batchRaise.deadlinePressure?.reasons.includes("low-deadline-lead") &&
+    batchRaise.deadlinePressure?.reasons.includes("increase-transport-latency"),
+  "adaptive frame batch scheduler latency snapshots include aggregate deadline pressure reasons"
 );
 
 const batchCooldown = batchController.record({
   totalDurationMs: 1,
   maxDurationMs: 0.5,
+  responseJitterBlocks: 0,
+  lastResponseDeadlineLeadBlocks: 1,
+  responseDeadlineMisses: 0,
   latencySamples: 128,
   dryTargets: 1,
   skippedTargets: 0,
@@ -456,6 +467,9 @@ batchController.reset();
 batchController.record({
   totalDurationMs: 1,
   maxDurationMs: 0.5,
+  responseJitterBlocks: 0,
+  lastResponseDeadlineLeadBlocks: 1,
+  responseDeadlineMisses: 0,
   latencySamples: 128,
   dryTargets: 0,
   skippedTargets: 0,
@@ -464,6 +478,9 @@ batchController.record({
 const batchStable = batchController.record({
   totalDurationMs: 1,
   maxDurationMs: 0.5,
+  responseJitterBlocks: 0,
+  lastResponseDeadlineLeadBlocks: 1,
+  responseDeadlineMisses: 0,
   latencySamples: 128,
   dryTargets: 0,
   skippedTargets: 0,
@@ -473,6 +490,9 @@ assert(batchStable.applied === false && batchStable.stableBlocks === 1, "adaptiv
 const batchRecovery = batchController.record({
   totalDurationMs: 1,
   maxDurationMs: 0.5,
+  responseJitterBlocks: 0,
+  lastResponseDeadlineLeadBlocks: 1,
+  responseDeadlineMisses: 0,
   latencySamples: 128,
   dryTargets: 0,
   skippedTargets: 0,
@@ -480,8 +500,8 @@ const batchRecovery = batchController.record({
 });
 assert(batchRecovery.applied === true, "adaptive frame batch scheduler latency recovers downward after stable batch health");
 assert(batchRecovery.appliedDirection === "decrease", "adaptive frame batch scheduler latency reports downward scheduler changes");
-assert(batchRecovery.targetTransportLatencySamples === 128, "adaptive frame batch scheduler latency recovers to aggregate batch latency");
-assert(batchScheduler.snapshot().transportLatencySamples === 128, "adaptive frame batch scheduler latency applies the recovery target");
+assert(batchRecovery.targetTransportLatencySamples === 256, "adaptive frame batch scheduler latency recovers in bounded one-block steps");
+assert(batchScheduler.snapshot().transportLatencySamples === 256, "adaptive frame batch scheduler latency applies the recovery target");
 assert(batchRecovery.deadlinePressure?.pressure === false, "adaptive frame batch scheduler latency snapshots show recovered pressure");
 
 console.log("Live effect rack adaptive latency smoke checks passed.");
