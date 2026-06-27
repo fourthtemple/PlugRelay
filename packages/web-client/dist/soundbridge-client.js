@@ -2459,6 +2459,32 @@ export function createLiveEffectRackChain(options) {
   return new LiveEffectRackChain(options);
 }
 
+export function createLivePerformanceRackChainOptions(options) {
+  const { processBudgetBlocks, transitionFadeBlocks, ...chainOptions } = options;
+  const sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
+  const maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
+  const policy = createLiveEffectRackPolicy({
+    ...options,
+    sampleRate,
+    maxBlockSize,
+    processBudgetBlocks,
+    transitionFadeBlocks
+  });
+  return {
+    ...chainOptions,
+    sampleRate: policy.sampleRate,
+    maxBlockSize: policy.maxBlockSize,
+    processBudgetMs: policy.processBudgetMs,
+    maxConsecutiveProcessBudgetMisses: policy.maxConsecutiveProcessBudgetMisses,
+    processBudgetRecoveryBlocks: policy.processBudgetRecoveryBlocks,
+    transitionFadeSamples: policy.transitionFadeSamples
+  };
+}
+
+export function createLivePerformanceRackChain(options) {
+  return createLiveEffectRackChain(createLivePerformanceRackChainOptions(options));
+}
+
 function liveEffectChainStageWetMix(stageWetMixes, index, fallback) {
   return stageWetMixes && index < stageWetMixes.length ? Number(stageWetMixes[index]) : fallback;
 }

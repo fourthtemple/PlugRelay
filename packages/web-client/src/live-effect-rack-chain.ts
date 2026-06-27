@@ -2,6 +2,7 @@ import type { LiveEffectBlockRequest, LiveEffectBlockResponse, LiveEffectRackHea
 import { boundedLiveEffectChannels, dryChannels, outputTail, transitionOutputChannels, wetMixedChannels } from "./live-effect-rack-audio";
 import { boundedLatencySamples, boundedLiveEffectInteger, boundedLiveEffectNumber, boundedOptionalNumber, liveEffectLatencyMilliseconds, liveEffectNowMs, liveEffectRackTiming } from "./live-effect-rack-metrics";
 import type { LiveEffectRackTiming } from "./live-effect-rack-metrics";
+import { createLiveEffectRackPolicy } from "./live-effect-rack-policy";
 import type { LiveEffectRackScheduledBlock } from "./live-effect-rack-scheduler";
 
 const LIVE_EFFECT_CHAIN_MAX_STAGES = 16;
@@ -32,6 +33,11 @@ export interface LiveEffectRackChainOptions {
   processBudgetRecoveryBlocks?: number;
   transitionFadeSamples?: number;
   nowMs?: () => number;
+}
+
+export interface LivePerformanceRackChainOptions extends LiveEffectRackChainOptions {
+  processBudgetBlocks?: number;
+  transitionFadeBlocks?: number;
 }
 
 export interface LiveEffectRackChainProcessOptions {
@@ -511,6 +517,34 @@ export class LiveEffectRackChain extends EventTarget {
 
 export function createLiveEffectRackChain(options: LiveEffectRackChainOptions): LiveEffectRackChain {
   return new LiveEffectRackChain(options);
+}
+
+export function createLivePerformanceRackChainOptions(
+  options: LivePerformanceRackChainOptions
+): LiveEffectRackChainOptions {
+  const { processBudgetBlocks, transitionFadeBlocks, ...chainOptions } = options;
+  const sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
+  const maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
+  const policy = createLiveEffectRackPolicy({
+    ...options,
+    sampleRate,
+    maxBlockSize,
+    processBudgetBlocks,
+    transitionFadeBlocks
+  });
+  return {
+    ...chainOptions,
+    sampleRate: policy.sampleRate,
+    maxBlockSize: policy.maxBlockSize,
+    processBudgetMs: policy.processBudgetMs,
+    maxConsecutiveProcessBudgetMisses: policy.maxConsecutiveProcessBudgetMisses,
+    processBudgetRecoveryBlocks: policy.processBudgetRecoveryBlocks,
+    transitionFadeSamples: policy.transitionFadeSamples
+  };
+}
+
+export function createLivePerformanceRackChain(options: LivePerformanceRackChainOptions): LiveEffectRackChain {
+  return createLiveEffectRackChain(createLivePerformanceRackChainOptions(options));
 }
 
 function stageWetMix(stageWetMixes: ArrayLike<number> | undefined, index: number, fallback: number | undefined): number | undefined {

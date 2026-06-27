@@ -1,6 +1,8 @@
 import {
   createLiveEffectRackBlockScheduler,
-  createLiveEffectRackChain
+  createLiveEffectRackChain,
+  createLivePerformanceRackChain,
+  createLivePerformanceRackChainOptions
 } from "../packages/web-client/dist/soundbridge-client.js";
 
 function assert(condition, message) {
@@ -78,6 +80,40 @@ assert(response.stageCount === 2 && response.processedStages === 2, "live rack c
 assert(response.stageResults[0].instanceId === "inst-left", "live rack chain reports stage instance ids");
 assert(left.requests[0].wetMix === 0.25 && right.requests[0].wetMix === 0.75, "live rack chain applies per-stage wet mix overrides");
 assert(response.chainProcessBudgetExceeded === false && response.chainProcessBudgetMisses === 0, "live rack chain starts without chain budget pressure");
+
+const liveChainOptions = createLivePerformanceRackChainOptions({
+  stages: [new FakeStage("live-option", 1)],
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processBudgetBlocks: 2,
+  transitionFadeBlocks: 1
+});
+assert(
+  near(liveChainOptions.processBudgetMs, (128 / 48000) * 1000 * 2) &&
+    liveChainOptions.maxConsecutiveProcessBudgetMisses === 3 &&
+    liveChainOptions.processBudgetRecoveryBlocks === 16 &&
+    liveChainOptions.transitionFadeSamples === 128,
+  "live rack chain preset converts block policies into bounded chain options"
+);
+
+fakeNowMs = 0;
+const liveDefaultChain = createLivePerformanceRackChain({
+  stages: [new FakeStage("live-default", 1, 0, 0, 3)],
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  outputChannels: 1,
+  maxConsecutiveProcessBudgetMisses: 1,
+  nowMs: () => fakeNowMs
+});
+const liveDefaultTrip = await liveDefaultChain.processBlock({ blockId: 58, channels: [[1, 1]], sampleRate: 48000 });
+assert(
+  liveDefaultTrip.bypassed === true &&
+    liveDefaultTrip.renderEngine === "chain-process-budget-exceeded" &&
+    liveDefaultChain.health.processBudgetTripped === true &&
+    liveDefaultChain.health.processBudgetRecoveryBlocks === 16 &&
+    liveDefaultChain.health.transitionFadeSamples === 64,
+  "live rack chain preset creates fail-dry live chain defaults"
+);
 
 const mixStage = new FakeStage("chain-mix", 5);
 const mixChain = createLiveEffectRackChain({
