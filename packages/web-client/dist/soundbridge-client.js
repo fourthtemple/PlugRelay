@@ -637,10 +637,17 @@ export function createLivePerformanceAudioNodeOptions(options) {
     outputLatencyBlocks,
     maxQueuedOutputBlocks
   );
+  const maxInFlightBlocks = boundedAudioNodeInteger(options.maxInFlightBlocks, LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS, 1, 64);
+  const sharedBufferBlocks = boundedAudioNodeInteger(
+    options.sharedBufferBlocks,
+    Math.max(LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS, maxInFlightBlocks + maxOutputLatencyBlocks),
+    2,
+    64
+  );
 
   return {
     ...options,
-    maxInFlightBlocks: boundedAudioNodeInteger(options.maxInFlightBlocks, LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS, 1, 64),
+    maxInFlightBlocks,
     maxQueuedOutputBlocks,
     outputLatencyBlocks,
     minOutputLatencyBlocks: boundedAudioNodeInteger(options.minOutputLatencyBlocks, 1, 1, outputLatencyBlocks),
@@ -658,7 +665,7 @@ export function createLivePerformanceAudioNodeOptions(options) {
     audioTransport: options.audioTransport === "json" ? "json" : "binary",
     audioRequestTimeoutMs: boundedAudioNodeInteger(options.audioRequestTimeoutMs, LIVE_AUDIO_NODE_AUDIO_REQUEST_TIMEOUT_MS, 0, 60000),
     audioTransferMode: options.audioTransferMode ?? "auto",
-    sharedBufferBlocks: boundedAudioNodeInteger(options.sharedBufferBlocks, LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS, 2, 64),
+    sharedBufferBlocks,
     maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192)
   };
 }

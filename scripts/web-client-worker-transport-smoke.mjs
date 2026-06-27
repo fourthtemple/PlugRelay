@@ -134,7 +134,7 @@ assert(liveNodeOptions.minOutputLatencyBlocks === 1, "live AudioNode preset can 
 assert(liveNodeOptions.maxOutputLatencyBlocks === 4, "live AudioNode preset bounds adaptive latency growth");
 assert(liveNodeOptions.latencyRecoveryBlocks === 128, "live AudioNode preset recovers faster than the generic default");
 assert(liveNodeOptions.latencyPressureThresholdBlocks === 2, "live AudioNode preset reacts to deadline pressure quickly");
-assert(liveNodeOptions.sharedBufferBlocks === 4, "live AudioNode preset uses a compact shared audio ring");
+assert(liveNodeOptions.sharedBufferBlocks === 8, "live AudioNode preset derives shared ring depth from in-flight and latency bounds");
 assert(liveNodeOptions.maxBlockFrames === 128, "live AudioNode preset keeps 128-frame block metadata");
 
 const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
@@ -195,7 +195,7 @@ assert(liveAudioPortMessage.type === "audio-port", "createLivePerformance regist
 assert(liveAudioPortMessage.maxInFlightBlocks === 4, "createLivePerformance forwards live in-flight limits to the worker");
 assert(liveAudioPortMessage.audioRequestTimeoutMs === 250, "createLivePerformance forwards live audio timeouts to the worker");
 assert(liveAudioPortMessage.audioTransport === "binary", "createLivePerformance registers binary worker audio");
-assert(liveAudioPortMessage.sharedAudio?.slots === 4, "createLivePerformance registers the live shared ring depth");
+assert(liveAudioPortMessage.sharedAudio?.slots === 8, "createLivePerformance registers the live shared ring depth");
 assert(
   FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "connect-transport"),
   "createLivePerformance connects the worklet to the worker transport"
