@@ -121,14 +121,15 @@ pressureScheduler.updateFromChainCalibration(
   },
   {
     recommendedTransportLatencySamples: 512,
-    warnings: ["deadline-miss", "response-jitter", "increase-transport-latency"]
+    warnings: ["deadline-miss", "dry-output-pressure", "response-jitter", "increase-transport-latency"]
   }
 );
 const pressuredSnapshot = pressureScheduler.snapshot();
 assert(
   pressuredSnapshot.transportLatencyBlocks === 4 &&
+    pressuredSnapshot.deadlinePressure.reasons.includes("dry-output-pressure") &&
     pressuredSnapshot.deadlinePressure.reasons.includes("increase-transport-latency"),
-  "live rack scheduler exposes calibrated deadline-pressure recommendations"
+  "live rack scheduler exposes calibrated dry-output and latency pressure recommendations"
 );
 pressureScheduler.updateFromChainHealth({
   latencySamples: 512,

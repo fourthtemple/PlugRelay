@@ -18,6 +18,7 @@ const LIVE_EFFECT_SCHEDULER_DEADLINE_LEAD_TARGET_BLOCKS = 1;
 
 export type LiveEffectRackDeadlinePressureReason =
   | "deadline-miss"
+  | "dry-output-pressure"
   | "increase-transport-latency"
   | "low-deadline-lead"
   | "response-jitter";
@@ -249,6 +250,7 @@ export class LiveEffectRackBlockScheduler {
     if (this.responseJitterBlocks > this.transportLatencyBlocks(transportLatencySamples) + this.responseJitterThresholdBlocks || warnings.includes("response-jitter")) {
       reasons.push("response-jitter");
     }
+    if (warnings.includes("dry-output-pressure")) reasons.push("dry-output-pressure");
     if (warnings.includes("increase-transport-latency")) reasons.push("increase-transport-latency");
     return Array.from(new Set(reasons));
   }

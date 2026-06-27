@@ -3072,6 +3072,7 @@ export class LiveEffectRackBlockScheduler {
     if (this.responseJitterBlocks > this.transportLatencyBlocks(transportLatencySamples) + this.responseJitterThresholdBlocks || warnings.includes("response-jitter")) {
       reasons.push("response-jitter");
     }
+    if (warnings.includes("dry-output-pressure")) reasons.push("dry-output-pressure");
     if (warnings.includes("increase-transport-latency")) reasons.push("increase-transport-latency");
     return Array.from(new Set(reasons));
   }
