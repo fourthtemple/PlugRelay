@@ -3571,6 +3571,21 @@ export class LiveEffectRackBlockScheduler {
     return this.transportLatencySamples;
   }
 
+  updateFromFrameBatchHealth(health) {
+    this.updateLatency(liveEffectFrameBatchLatencySamples(health));
+    this.updateDeadlinePressure(health);
+    return this.transportLatencySamples;
+  }
+
+  updateFromFrameBatchCalibration(health, calibration) {
+    this.updateLatency(combinedLiveEffectLatencySamples(
+      liveEffectFrameBatchLatencySamples(health),
+      boundedLiveEffectLatencySamples(calibration.recommendedTransportLatencySamples, 0)
+    ));
+    this.updateDeadlinePressure(health, calibration);
+    return this.transportLatencySamples;
+  }
+
   updateDeadlinePressureFromHealth(health, calibration) {
     return this.updateDeadlinePressure(health, calibration);
   }
@@ -4044,6 +4059,10 @@ export function createLivePerformanceFrameBatchProcessor(options) {
 
 function maxLiveEffectFrameBatchLatency(results, key) {
   return results.reduce((max, result) => Math.max(max, result[key]), 0);
+}
+
+function liveEffectFrameBatchLatencySamples(health) {
+  return boundedLiveEffectLatencySamples(health.latencySamples ?? health.reportedLatencySamples, 0);
 }
 
 export function shouldSkipLiveEffectDeadlinePressure(pressure, options = {}) {
