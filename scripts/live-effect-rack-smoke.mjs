@@ -128,9 +128,11 @@ const failed = await rack.processBlock({ blockId: 3, channels: inputChannels });
 assert(failed.bypassed === true && failed.healthy === false, "processing failure fails closed to dry audio");
 assert(failed.channels[1][2] === 0.75, "failure fallback preserves dry input");
 assert(errorEvents === 1, "processing failure emits one effect-error event");
+assert(rack.health.unhealthyReason === "processing-error", "processing failure records a non-recoverable reason");
 
 const stillDry = await rack.processBlock({ blockId: 4, channels: inputChannels });
 assert(stillDry.bypassed === true && client.processed.length === 2, "unhealthy rack stays dry until recreated");
+assert(rack.health.healthy === false, "processing-error rack does not auto-recover");
 
 client.failProcessing = false;
 await rack.recreate();
@@ -150,11 +152,16 @@ const pressureRack = await SoundBridgeLiveEffectRack.create({
   plugin,
   sampleRate: 48000,
   maxBlockSize: 128,
-  maxConsecutiveRenderBudgetMisses: 2
+  maxConsecutiveRenderBudgetMisses: 2,
+  renderBudgetRecoveryBlocks: 2
 });
 let budgetEvents = 0;
+let recoveredEvents = 0;
 pressureRack.addEventListener("render-budget-exceeded", () => {
   budgetEvents += 1;
+});
+pressureRack.addEventListener("render-budget-recovered", () => {
+  recoveredEvents += 1;
 });
 client.renderDurationMs = 5;
 client.renderBudgetMs = 2;
@@ -164,11 +171,19 @@ assert(pressured.bypassed === false && pressureRack.health.renderBudgetMisses ==
 const overloaded = await pressureRack.processBlock({ blockId: 8, channels: inputChannels });
 assert(overloaded.bypassed === true && overloaded.healthy === false, "repeated render budget misses fail closed to dry audio");
 assert(overloaded.channels[0][0] === 1, "render budget fallback preserves dry input");
+assert(pressureRack.health.unhealthyReason === "render-budget-exceeded", "render pressure records a recoverable reason");
 assert(budgetEvents === 2, "render budget misses emit host-visible events");
-await pressureRack.destroy();
+const cooldownOne = await pressureRack.processBlock({ blockId: 9, channels: inputChannels });
+assert(cooldownOne.bypassed === true && pressureRack.health.recoveryDryBlocks === 1, "render pressure recovery waits through dry cooldown blocks");
+const cooldownTwo = await pressureRack.processBlock({ blockId: 10, channels: inputChannels });
+assert(cooldownTwo.bypassed === true && cooldownTwo.healthy === false, "final cooldown block is still dry");
+assert(pressureRack.health.healthy === true && recoveredEvents === 1, "render pressure rack recovers after bounded dry cooldown");
 client.renderDurationMs = 0.5;
 client.renderBudgetMs = 2.667;
 client.renderBudgetExceeded = false;
+const pressureRecovered = await pressureRack.processBlock({ blockId: 11, channels: inputChannels });
+assert(pressureRecovered.bypassed === false && pressureRack.health.renderBudgetMisses === 0, "recovered render pressure rack resumes wet processing");
+await pressureRack.destroy();
 
 const jsonRack = await SoundBridgeLiveEffectRack.create({
   client,
@@ -191,6 +206,7 @@ await jsonRack.destroy();
 
 await rack.destroy();
 assert(client.destroyed.includes("inst-live-2"), "destroy tears down the live effect instance");
+assert(rack.health.unhealthyReason === "destroyed", "destroy records a distinct health reason");
 
 console.log("Live effect rack smoke checks passed.");
 

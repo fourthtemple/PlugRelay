@@ -817,6 +817,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.bypassed = false;
     this.healthy = true;
     this.lastError = void 0;
+    this.unhealthyReason = void 0;
+    this.recoveryDryBlocks = 0;
     this.renderBudgetMisses = 0;
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
@@ -829,6 +831,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.outputChannels = boundedLiveEffectChannelCount(options.outputChannels ?? options.plugin.outputs ?? this.inputChannels);
     this.audioTransport = options.audioTransport === "json" ? "json" : "binary";
     this.maxConsecutiveRenderBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 3, 0, 1024);
+    this.renderBudgetRecoveryBlocks = boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, 0, 0, 4096);
   }
 
   static async create(options) {
@@ -851,7 +854,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       renderBudgetMisses: this.renderBudgetMisses,
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
-      renderBudgetExceeded: this.lastRenderBudgetExceeded
+      renderBudgetExceeded: this.lastRenderBudgetExceeded,
+      unhealthyReason: this.unhealthyReason,
+      recoveryDryBlocks: this.recoveryDryBlocks,
+      renderBudgetRecoveryBlocks: this.renderBudgetRecoveryBlocks
     };
   }
 
@@ -868,6 +874,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   async destroy() {
     await this.destroyInstance();
     this.healthy = false;
+    this.unhealthyReason = "destroyed";
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
@@ -885,7 +892,9 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
 
   async processBlock(request) {
     if (this.bypassed || !this.instanceId || !this.healthy) {
-      return this.dryResponse(request, void 0);
+      const response = this.dryResponse(request, void 0);
+      this.maybeRecoverFromRenderPressure();
+      return response;
     }
 
     try {
@@ -908,12 +917,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
             });
       if (this.recordRenderBudget(response)) {
         const error = new Error("render_budget_exceeded");
-        this.failClosed(error);
+        this.failClosed(error, "render-budget-exceeded");
         return this.dryResponse(request, error);
       }
       return { ...response, bypassed: false, healthy: true };
     } catch (error) {
-      this.failClosed(error);
+      this.failClosed(error, "processing-error");
       return this.dryResponse(request, error);
     }
   }
@@ -929,6 +938,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     });
     this.healthy = true;
     this.lastError = void 0;
+    this.unhealthyReason = void 0;
+    this.recoveryDryBlocks = 0;
     this.renderBudgetMisses = 0;
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
@@ -969,9 +980,29 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     return this.maxConsecutiveRenderBudgetMisses > 0 && this.renderBudgetMisses >= this.maxConsecutiveRenderBudgetMisses;
   }
 
-  failClosed(error) {
+  maybeRecoverFromRenderPressure() {
+    if (this.healthy || this.unhealthyReason !== "render-budget-exceeded" || this.renderBudgetRecoveryBlocks <= 0) {
+      return;
+    }
+    this.recoveryDryBlocks = Math.min(4096, this.recoveryDryBlocks + 1);
+    if (this.recoveryDryBlocks < this.renderBudgetRecoveryBlocks) {
+      return;
+    }
+    this.healthy = true;
+    this.lastError = void 0;
+    this.unhealthyReason = void 0;
+    this.recoveryDryBlocks = 0;
+    this.renderBudgetMisses = 0;
+    this.lastRenderBudgetExceeded = false;
+    this.dispatchEvent(new CustomEvent("render-budget-recovered", { detail: { health: this.health } }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  failClosed(error, reason) {
     this.healthy = false;
     this.lastError = error;
+    this.unhealthyReason = reason;
+    this.recoveryDryBlocks = 0;
     this.dispatchEvent(new CustomEvent("effect-error", { detail: { error, health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
