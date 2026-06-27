@@ -250,12 +250,38 @@ liveNode.addEventListener("stats", (event) => {
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
     type: "stats",
+    inFlightBlocks: 3,
+    queuedOutputBlocks: 2,
+    outputLatencyBlocks: 2,
     transportLatencySamples: 256,
-    responseDeadlineMissesSinceLastStats: 1
+    responseDeadlineLeadSamples: -128,
+    responseJitterSamples: 384,
+    responseDeadlineMisses: 4,
+    responseDeadlineMissesSinceLastStats: 1,
+    staleOutputBlocks: 2,
+    droppedInputBlocks: 1,
+    underruns: 7,
+    sharedAudioEnabled: true,
+    sharedInputDroppedBlocks: 5,
+    sharedOutputDroppedBlocks: 6
   }
 });
 assert(statsEvents === 1, "SoundBridgeAudioNode emits one stats event per worklet stats message");
 assert(statsDetail.transportLatencySamples === 256, "SoundBridgeAudioNode preserves stats event details");
+assert(liveNode.health.inFlightBlocks === 3, "SoundBridgeAudioNode health tracks worklet in-flight blocks");
+assert(liveNode.health.queuedOutputBlocks === 2, "SoundBridgeAudioNode health tracks queued output blocks");
+assert(liveNode.health.outputLatencyBlocks === 2, "SoundBridgeAudioNode health tracks output latency blocks");
+assert(liveNode.health.transportLatencySamples === 256, "SoundBridgeAudioNode health tracks transport latency samples");
+assert(liveNode.health.responseDeadlineLeadSamples === -128, "SoundBridgeAudioNode health tracks deadline lead");
+assert(liveNode.health.responseJitterSamples === 384, "SoundBridgeAudioNode health tracks response jitter");
+assert(liveNode.health.responseDeadlineMisses === 4, "SoundBridgeAudioNode health tracks deadline misses");
+assert(liveNode.health.responseDeadlineMissesSinceLastStats === 1, "SoundBridgeAudioNode health tracks recent deadline misses");
+assert(liveNode.health.staleOutputBlocks === 2, "SoundBridgeAudioNode health tracks stale output blocks");
+assert(liveNode.health.droppedInputBlocks === 1, "SoundBridgeAudioNode health tracks dropped input blocks");
+assert(liveNode.health.underruns === 7, "SoundBridgeAudioNode health tracks underruns");
+assert(liveNode.health.sharedAudioEnabled === true, "SoundBridgeAudioNode health tracks shared audio mode");
+assert(liveNode.health.sharedInputDroppedBlocks === 5, "SoundBridgeAudioNode health tracks shared input drops");
+assert(liveNode.health.sharedOutputDroppedBlocks === 6, "SoundBridgeAudioNode health tracks shared output drops");
 let renderPressureEvents = 0;
 let renderPressureDetail;
 liveNode.addEventListener("render-budget-exceeded", (event) => {

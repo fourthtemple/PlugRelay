@@ -681,6 +681,20 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.inFlightBlocks = 0;
     this.destroyed = false;
+    this.workletInFlightBlocks = undefined;
+    this.queuedOutputBlocks = 0;
+    this.outputLatencyBlocks = 0;
+    this.transportLatencySamples = 0;
+    this.responseDeadlineLeadSamples = 0;
+    this.responseJitterSamples = 0;
+    this.responseDeadlineMisses = 0;
+    this.responseDeadlineMissesSinceLastStats = 0;
+    this.staleOutputBlocks = 0;
+    this.droppedInputBlocks = 0;
+    this.underruns = 0;
+    this.sharedAudioEnabled = false;
+    this.sharedInputDroppedBlocks = 0;
+    this.sharedOutputDroppedBlocks = 0;
     this.lastRenderEngine = undefined;
     this.lastRenderDurationMs = undefined;
     this.lastRenderBudgetMs = undefined;
@@ -793,8 +807,21 @@ export class SoundBridgeAudioNode extends EventTarget {
       instanceId: this.instanceId,
       audioTransport: this.audioTransport,
       audioRequestTimeoutMs: this.audioRequestTimeoutMs,
-      inFlightBlocks: this.inFlightBlocks,
+      inFlightBlocks: this.workletInFlightBlocks ?? this.inFlightBlocks,
       maxInFlightBlocks: this.maxInFlightBlocks,
+      queuedOutputBlocks: this.queuedOutputBlocks,
+      outputLatencyBlocks: this.outputLatencyBlocks,
+      transportLatencySamples: this.transportLatencySamples,
+      responseDeadlineLeadSamples: this.responseDeadlineLeadSamples,
+      responseJitterSamples: this.responseJitterSamples,
+      responseDeadlineMisses: this.responseDeadlineMisses,
+      responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats,
+      staleOutputBlocks: this.staleOutputBlocks,
+      droppedInputBlocks: this.droppedInputBlocks,
+      underruns: this.underruns,
+      sharedAudioEnabled: this.sharedAudioEnabled,
+      sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
+      sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
       lastRenderEngine: this.lastRenderEngine,
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
@@ -819,6 +846,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     }
 
     if (message.type === "stats") {
+      this.recordStats(message);
       this.dispatchEvent(new CustomEvent("stats", { detail: message }));
       return;
     }
@@ -914,6 +942,46 @@ export class SoundBridgeAudioNode extends EventTarget {
       .finally(() => {
         this.inFlightBlocks -= 1;
       });
+  }
+
+  recordStats(stats) {
+    this.workletInFlightBlocks = boundedAudioNodeInteger(stats.inFlightBlocks, this.workletInFlightBlocks ?? 0, 0, 64);
+    this.queuedOutputBlocks = boundedAudioNodeInteger(stats.queuedOutputBlocks, this.queuedOutputBlocks, 0, 64);
+    this.outputLatencyBlocks = boundedAudioNodeInteger(stats.outputLatencyBlocks, this.outputLatencyBlocks, 0, 64);
+    this.transportLatencySamples = boundedAudioNodeInteger(stats.transportLatencySamples, this.transportLatencySamples, 0, 1048576);
+    this.responseDeadlineLeadSamples =
+      boundedAudioNodeOptionalNumber(stats.responseDeadlineLeadSamples, -1048576, 1048576) ?? this.responseDeadlineLeadSamples;
+    this.responseJitterSamples = boundedAudioNodeInteger(stats.responseJitterSamples, this.responseJitterSamples, 0, 1048576);
+    this.responseDeadlineMisses = boundedAudioNodeInteger(
+      stats.responseDeadlineMisses,
+      this.responseDeadlineMisses,
+      0,
+      Number.MAX_SAFE_INTEGER
+    );
+    this.responseDeadlineMissesSinceLastStats = boundedAudioNodeInteger(
+      stats.responseDeadlineMissesSinceLastStats,
+      this.responseDeadlineMissesSinceLastStats,
+      0,
+      Number.MAX_SAFE_INTEGER
+    );
+    this.staleOutputBlocks = boundedAudioNodeInteger(stats.staleOutputBlocks, this.staleOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
+    this.droppedInputBlocks = boundedAudioNodeInteger(stats.droppedInputBlocks, this.droppedInputBlocks, 0, Number.MAX_SAFE_INTEGER);
+    this.underruns = boundedAudioNodeInteger(stats.underruns, this.underruns, 0, Number.MAX_SAFE_INTEGER);
+    this.sharedInputDroppedBlocks = boundedAudioNodeInteger(
+      stats.sharedInputDroppedBlocks,
+      this.sharedInputDroppedBlocks,
+      0,
+      Number.MAX_SAFE_INTEGER
+    );
+    this.sharedOutputDroppedBlocks = boundedAudioNodeInteger(
+      stats.sharedOutputDroppedBlocks,
+      this.sharedOutputDroppedBlocks,
+      0,
+      Number.MAX_SAFE_INTEGER
+    );
+    if (typeof stats.sharedAudioEnabled === "boolean") {
+      this.sharedAudioEnabled = stats.sharedAudioEnabled;
+    }
   }
 
   recordProcessDiagnostics(diagnostics) {
