@@ -43,6 +43,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   private readonly maxRecycledInputBuffers: number;
   private transportPort?: MessagePort;
   private sharedAudio?: NormalizedSharedAudio;
+  private sharedAudioWakeMode: "none" | "pending" | "atomics" | "timer" = "none";
 
   constructor(options: AudioWorkletNodeOptions) {
     super();
@@ -116,6 +117,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         latencyIncreases: this.latencyIncreases,
         latencyDecreases: this.latencyDecreases,
         sharedAudioEnabled: Boolean(this.sharedAudio),
+        sharedAudioWakeMode: this.sharedAudioWakeMode,
         sharedInputQueuedBlocks: this.sharedAudio ? Atomics.load(this.sharedAudio.inputControl, SoundBridgeAudioProcessor.sharedAvailable) : 0,
         sharedOutputQueuedBlocks: this.sharedAudio ? Atomics.load(this.sharedAudio.outputControl, SoundBridgeAudioProcessor.sharedAvailable) : 0,
         sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
@@ -144,6 +146,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       channels?: ArrayLike<number>[];
       port?: MessagePort;
       sharedAudio?: unknown;
+      wakeMode?: unknown;
       renderEngine?: string;
       error?: unknown;
     };
@@ -152,6 +155,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.inputBufferPool.clear();
       this.pooledInputBuffers = 0;
       this.sharedAudio = undefined;
+      this.sharedAudioWakeMode = "none";
       this.transportPort?.postMessage({ type: "destroy" });
       this.transportPort = undefined;
       return;
@@ -161,6 +165,14 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.transportPort = typed.port;
       this.transportPort.onmessage = (event) => this.handleMessage(event.data);
       this.sharedAudio = this.normalizeSharedAudio(typed.sharedAudio);
+      this.sharedAudioWakeMode = this.sharedAudio ? "pending" : "none";
+      return;
+    }
+
+    if (typed.type === "shared-audio-status") {
+      if (typed.wakeMode === "atomics" || typed.wakeMode === "timer") {
+        this.sharedAudioWakeMode = typed.wakeMode;
+      }
       return;
     }
 

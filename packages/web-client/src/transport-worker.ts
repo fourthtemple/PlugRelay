@@ -16,6 +16,7 @@ const SHARED_DROPPED = 3;
 const SHARED_BLOCK_ID_OFFSET = 0;
 const SHARED_BLOCK_FRAMES_OFFSET = 1;
 const SHARED_BLOCK_CHANNELS_OFFSET = 2;
+const SHARED_AUDIO_WAIT_TIMEOUT_MS = 100;
 
 interface AudioPortConfig {
   instanceId: string;
@@ -27,6 +28,7 @@ interface AudioPortConfig {
 interface SharedAudioPort {
   port: MessagePort;
   closed: boolean;
+  wakeMode: "atomics" | "timer";
   slots: number;
   channels: number;
   frames: number;
@@ -105,6 +107,8 @@ function connectAudioPort(port: MessagePort, config: AudioPortConfig, sharedAudi
     }
   };
   if (sharedAudio) {
+    sharedAudio.wakeMode = sharedAudioWakeMode();
+    port.postMessage({ type: "shared-audio-status", wakeMode: sharedAudio.wakeMode });
     pumpSharedAudio(config, sharedAudio);
   }
 }
@@ -243,7 +247,24 @@ function pumpSharedAudio(config: AudioPortConfig, shared: SharedAudioPort): void
     return;
   }
   drainSharedAudio(config, shared);
-  setTimeout(() => pumpSharedAudio(config, shared), 1);
+  scheduleSharedAudioPump(config, shared);
+}
+
+function scheduleSharedAudioPump(config: AudioPortConfig, shared: SharedAudioPort): void {
+  if (shared.closed) {
+    return;
+  }
+  if (shared.wakeMode === "atomics" && Atomics.load(shared.inputControl, SHARED_AVAILABLE) === 0) {
+    const waitResult = Atomics.waitAsync(shared.inputControl, SHARED_AVAILABLE, 0, SHARED_AUDIO_WAIT_TIMEOUT_MS);
+    if (waitResult.async) {
+      waitResult.value.then(
+        () => pumpSharedAudio(config, shared),
+        () => pumpSharedAudio(config, shared)
+      );
+      return;
+    }
+  }
+  setTimeout(() => pumpSharedAudio(config, shared), Atomics.load(shared.inputControl, SHARED_AVAILABLE) > 0 ? 0 : 1);
 }
 
 function drainSharedAudio(config: AudioPortConfig, shared: SharedAudioPort): void {
@@ -368,6 +389,7 @@ function normalizeSharedAudioPort(port: MessagePort, value: unknown): SharedAudi
   return {
     port,
     closed: false,
+    wakeMode: "timer",
     slots,
     channels,
     frames,
@@ -376,6 +398,10 @@ function normalizeSharedAudioPort(port: MessagePort, value: unknown): SharedAudi
     outputControl: new Int32Array(descriptor.outputControl),
     outputAudio: new Float32Array(descriptor.outputAudio)
   };
+}
+
+function sharedAudioWakeMode(): "atomics" | "timer" {
+  return typeof Atomics.waitAsync === "function" ? "atomics" : "timer";
 }
 
 function sharedSlotMetadataOffset(slotIndex: number): number {

@@ -11,6 +11,20 @@ const encodeBinaryAudioEnvelope = globalThis.encodeBinaryAudioEnvelope;
 `
 );
 const postedMessages = [];
+let waitAsyncCalls = 0;
+const testAtomics = {
+  add: Atomics.add.bind(Atomics),
+  exchange: Atomics.exchange.bind(Atomics),
+  load: Atomics.load.bind(Atomics),
+  notify: Atomics.notify.bind(Atomics),
+  store: Atomics.store.bind(Atomics),
+  sub: Atomics.sub.bind(Atomics),
+  waitAsync(_typedArray, _index, _value, timeoutMs) {
+    waitAsyncCalls += 1;
+    assert(timeoutMs === 100, "transport worker uses a bounded shared-audio wait timeout");
+    return { async: true, value: new Promise(() => {}) };
+  }
+};
 
 class FakeSocket {
   static OPEN = 1;
@@ -71,7 +85,7 @@ const self = {
 const context = {
   Array,
   ArrayBuffer,
-  Atomics,
+  Atomics: testAtomics,
   Float32Array,
   Int32Array,
   JSON,
@@ -170,8 +184,13 @@ self.onmessage({
     sharedAudio
   }
 });
+assert(
+  sharedPort.messages.some((message) => message.type === "shared-audio-status" && message.wakeMode === "atomics"),
+  "transport worker reports atomic shared-audio wakeups"
+);
 assert(socket.sent.length === 2, "transport worker drains shared input blocks after registration");
 assert(Atomics.load(new Int32Array(sharedAudio.inputControl), 2) === 0, "transport worker consumes shared input slots");
+assert(waitAsyncCalls === 1, "transport worker waits on shared input after draining queued blocks");
 socket.emit("message", {
   data: JSON.stringify({
     type: "response",

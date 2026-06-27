@@ -144,6 +144,8 @@ const sharedMainPort = lastPort;
 const sharedTransportPort = new TestPort();
 const sharedAudio = createSharedAudio(4, 1, 2);
 sharedMainPort.onmessage({ data: { type: "connect-transport", port: sharedTransportPort, sharedAudio } });
+sharedTransportPort.onmessage({ data: { type: "shared-audio-status", wakeMode: "atomics" } });
+assert(sharedProcessor.sharedAudioWakeMode === "atomics", "shared worklet transport records the worker wake mode");
 const sharedWarmup = [new Float32Array(2)];
 sharedProcessor.process([[Float32Array.from([7, 7])]], [sharedWarmup]);
 assert(sharedTransportPort.messages.length === 0, "shared worklet transport avoids per-block port messages");
@@ -189,6 +191,7 @@ assert(typeof statsMessage?.transportLatencySamples === "number", "worklet stats
 assert(typeof statsMessage?.latencyIncreases === "number", "worklet stats report adaptive latency increases");
 assert(typeof statsMessage?.latencyDecreases === "number", "worklet stats report adaptive latency decreases");
 assert(typeof statsMessage?.sharedAudioEnabled === "boolean", "worklet stats report shared audio enablement");
+assert(typeof statsMessage?.sharedAudioWakeMode === "string", "worklet stats report shared audio wake mode");
 assert(typeof statsMessage?.sharedInputDroppedBlocks === "number", "worklet stats report shared input drops");
 assert(typeof statsMessage?.sharedOutputDroppedBlocks === "number", "worklet stats report shared output drops");
 assert(typeof statsMessage?.inputBufferAllocations === "number", "worklet stats report input buffer allocations");

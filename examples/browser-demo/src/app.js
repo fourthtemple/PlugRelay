@@ -383,7 +383,12 @@ async function doEnsureBridgeInstance(recreate = false) {
     elements.transportLatencySamples.textContent = String(stats.transportLatencySamples ?? 0);
     latestTransportLatencySamples = Number(stats.transportLatencySamples ?? latestTransportLatencySamples) || 0;
     elements.latencyIncreases.textContent = String(stats.latencyIncreases ?? 0);
-    elements.sharedAudioEnabled.textContent = stats.sharedAudioEnabled ? "On" : "Off";
+    const wakeMode = typeof stats.sharedAudioWakeMode === "string" ? stats.sharedAudioWakeMode : "";
+    elements.sharedAudioEnabled.textContent = stats.sharedAudioEnabled
+      ? wakeMode && wakeMode !== "none"
+        ? `On (${wakeMode})`
+        : "On"
+      : "Off";
     elements.sharedQueuedBlocks.textContent = `${stats.sharedInputQueuedBlocks ?? 0}/${stats.sharedOutputQueuedBlocks ?? 0}`;
     elements.inputBufferAllocations.textContent = String(stats.inputBufferAllocations ?? 0);
     elements.inputBufferReuses.textContent = String(stats.inputBufferReuses ?? 0);

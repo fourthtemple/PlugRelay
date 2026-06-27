@@ -46,6 +46,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.maxInFlightBlocks = this.boundedInteger(processorOptions.maxInFlightBlocks, 8, 1, 64);
     this.maxRecycledInputBuffers = this.outputChannels * Math.max(2, this.maxInFlightBlocks);
     this.sharedAudio = void 0;
+    this.sharedAudioWakeMode = "none";
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
 
@@ -90,6 +91,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         latencyIncreases: this.latencyIncreases,
         latencyDecreases: this.latencyDecreases,
         sharedAudioEnabled: Boolean(this.sharedAudio),
+        sharedAudioWakeMode: this.sharedAudioWakeMode,
         sharedInputQueuedBlocks: this.sharedAudio ? Atomics.load(this.sharedAudio.inputControl, SoundBridgeAudioProcessor.sharedAvailable) : 0,
         sharedOutputQueuedBlocks: this.sharedAudio ? Atomics.load(this.sharedAudio.outputControl, SoundBridgeAudioProcessor.sharedAvailable) : 0,
         sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
@@ -116,6 +118,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.inputBufferPool.clear();
       this.pooledInputBuffers = 0;
       this.sharedAudio = void 0;
+      this.sharedAudioWakeMode = "none";
       this.transportPort?.postMessage({ type: "destroy" });
       this.transportPort = void 0;
       return;
@@ -125,6 +128,14 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.transportPort = message.port;
       this.transportPort.onmessage = (event) => this.handleMessage(event.data);
       this.sharedAudio = this.normalizeSharedAudio(message.sharedAudio);
+      this.sharedAudioWakeMode = this.sharedAudio ? "pending" : "none";
+      return;
+    }
+
+    if (message.type === "shared-audio-status") {
+      if (message.wakeMode === "atomics" || message.wakeMode === "timer") {
+        this.sharedAudioWakeMode = message.wakeMode;
+      }
       return;
     }
 

@@ -149,6 +149,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       latencyIncreases?: number;
       latencyDecreases?: number;
       sharedAudioEnabled?: boolean;
+      sharedAudioWakeMode?: string;
       sharedInputQueuedBlocks?: number;
       sharedOutputQueuedBlocks?: number;
       sharedInputDroppedBlocks?: number;

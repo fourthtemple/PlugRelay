@@ -14,7 +14,7 @@ The SDK is a small TypeScript package that gives Web DAWs:
 - protocol message types shared with daemon implementations
 - format-aware plugin metadata for VST3, AU, LV2, and mock/test plugins
 
-The `AudioWorkletProcessor` never blocks. It copies input blocks, posts them over an optional direct `MessagePort` to the web client's transport worker, and consumes returned processed blocks by `blockId` at a configured block latency so out-of-order WebSocket responses cannot reshuffle audio during live effects processing. The page thread sets up transport, while live blocks use `SharedArrayBuffer` input/output rings when cross-origin isolation is available and fall back to the direct `MessagePort` path otherwise. The fallback path recycles transferred input buffers after worker send and queues transferred binary output buffers without cloning them again. Both paths can adapt output latency within bounded min/max blocks when repeated misses show worker/daemon jitter. If the target block is missing or stale, the worklet falls back to dry audio and reports underrun, stale-output, dropped-input, shared-ring, input-buffer, queue-depth, latency-block, and transport-latency sample stats.
+The `AudioWorkletProcessor` never blocks. It copies input blocks, posts them over an optional direct `MessagePort` to the web client's transport worker, and consumes returned processed blocks by `blockId` at a configured block latency so out-of-order WebSocket responses cannot reshuffle audio during live effects processing. The page thread sets up transport, while live blocks use `SharedArrayBuffer` input/output rings when cross-origin isolation is available and fall back to the direct `MessagePort` path otherwise. The shared path wakes the transport worker with `Atomics.waitAsync`/`notify` where supported, with a bounded timer fallback. The fallback path recycles transferred input buffers after worker send and queues transferred binary output buffers without cloning them again. Both paths can adapt output latency within bounded min/max blocks when repeated misses show worker/daemon jitter. If the target block is missing or stale, the worklet falls back to dry audio and reports underrun, stale-output, dropped-input, shared-ring, shared wake-mode, input-buffer, queue-depth, latency-block, and transport-latency sample stats.
 
 ### Local Bridge Daemon
 
@@ -104,9 +104,10 @@ The MVP prioritizes correctness over ultra-low latency. Binary WebSocket audio b
 - round-trip jitter
 - browser-specific limitations, especially Safari
 
-The production path should add:
+The production path should keep improving:
 
 - `SharedArrayBuffer` ring buffers where available
+- atomic shared-ring worker wakeups where supported, with measured fallback behavior
 - adaptive buffering and latency compensation
 - daemon-side plugin worker processes
 - a transport abstraction that can support WebRTC data channels or shared-memory helpers later
