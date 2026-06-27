@@ -41,6 +41,10 @@ const elements = {
   processedBlocks: document.querySelector("#processedBlocks"),
   underruns: document.querySelector("#underruns"),
   queuedBlocks: document.querySelector("#queuedBlocks"),
+  staleOutputBlocks: document.querySelector("#staleOutputBlocks"),
+  droppedInputBlocks: document.querySelector("#droppedInputBlocks"),
+  inFlightBlocks: document.querySelector("#inFlightBlocks"),
+  outputLatencyBlocks: document.querySelector("#outputLatencyBlocks"),
   renderEngine: document.querySelector("#renderEngine"),
   log: document.querySelector("#log"),
   scope: document.querySelector("#scope")
@@ -345,7 +349,7 @@ async function doEnsureBridgeInstance(recreate = false) {
     inputChannels,
     outputChannels,
     maxInFlightBlocks: 8,
-    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260610e"
+    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627a"
   });
 
   analyser = audioContext.createAnalyser();
@@ -358,6 +362,10 @@ async function doEnsureBridgeInstance(recreate = false) {
     elements.processedBlocks.textContent = String(stats.processedBlocks ?? 0);
     elements.underruns.textContent = String(stats.underruns ?? 0);
     elements.queuedBlocks.textContent = String(stats.queuedOutputBlocks ?? 0);
+    elements.staleOutputBlocks.textContent = String(stats.staleOutputBlocks ?? 0);
+    elements.droppedInputBlocks.textContent = String(stats.droppedInputBlocks ?? 0);
+    elements.inFlightBlocks.textContent = String(stats.inFlightBlocks ?? 0);
+    elements.outputLatencyBlocks.textContent = String(stats.outputLatencyBlocks ?? 0);
   });
   bridge.addEventListener("audio-error", (event) => {
     logError(event.detail);

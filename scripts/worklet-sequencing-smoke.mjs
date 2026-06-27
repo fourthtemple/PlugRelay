@@ -95,19 +95,38 @@ directMainPort.onmessage({ data: { type: "connect-transport", port: directTransp
 directProcessor.process([[Float32Array.from([5, 5])]], [[new Float32Array(2)]]);
 assert(directTransportPort.messages[0]?.type === "process", "direct worklet transport posts process blocks to the transport port");
 assert(!directMainPort.messages.some((message) => message.type === "process"), "direct worklet transport avoids page-thread process messages");
+const transferredOutput = Float32Array.from([50, 50]);
 directTransportPort.onmessage({
   data: {
     type: "processed",
     blockId: 0,
-    channels: [[50, 50]],
+    channels: [transferredOutput],
     renderEngine: "direct-worker"
   }
 });
 assert(directProcessor.inFlightBlocks === 0, "direct worklet transport releases in-flight blocks on response");
 assert(
+  directProcessor.outputBlocks.get(0)?.[0] === transferredOutput,
+  "direct worklet transport queues transferred Float32Array output without an extra copy"
+);
+assert(
   directMainPort.messages.some((message) => message.type === "process-diagnostics" && message.renderEngine === "direct-worker"),
   "direct worklet transport forwards render diagnostics to the page port"
 );
+
+const statsProcessor = new processorCtor({
+  processorOptions: {
+    outputChannels: 1,
+    maxQueuedOutputBlocks: 4,
+    outputLatencyBlocks: 1
+  }
+});
+const statsPort = lastPort;
+for (let index = 0; index < 128; index += 1) {
+  statsProcessor.process([[Float32Array.from([index])]], [[new Float32Array(1)]]);
+}
+const statsMessage = statsPort.messages.find((message) => message.type === "stats");
+assert(typeof statsMessage?.inFlightBlocks === "number", "worklet stats report in-flight blocks");
 
 console.log("Worklet sequencing smoke checks passed.");
 

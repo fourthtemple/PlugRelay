@@ -66,7 +66,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         queuedOutputBlocks: this.outputBlocks.size,
         outputLatencyBlocks: this.outputLatencyBlocks,
         staleOutputBlocks: this.staleOutputBlocks,
-        droppedInputBlocks: this.droppedInputBlocks
+        droppedInputBlocks: this.droppedInputBlocks,
+        inFlightBlocks: this.inFlightBlocks
       });
     }
 
@@ -121,7 +122,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.dropOldestOutputBlock();
     }
 
-    this.outputBlocks.set(blockId, message.channels.slice(0, this.outputChannels).map((channel) => Float32Array.from(channel)));
+    this.outputBlocks.set(blockId, message.channels.slice(0, this.outputChannels).map((channel) => this.outputChannelBlock(channel)));
     if (typeof message.renderEngine === "string") {
       this.port.postMessage({ type: "process-diagnostics", blockId, renderEngine: message.renderEngine });
     }
@@ -153,6 +154,10 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         destination.fill(0);
       }
     }
+  }
+
+  outputChannelBlock(channel) {
+    return channel instanceof Float32Array ? channel : Float32Array.from(channel);
   }
 
   dropOldestOutputBlock() {

@@ -72,7 +72,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         queuedOutputBlocks: this.outputBlocks.size,
         outputLatencyBlocks: this.outputLatencyBlocks,
         staleOutputBlocks: this.staleOutputBlocks,
-        droppedInputBlocks: this.droppedInputBlocks
+        droppedInputBlocks: this.droppedInputBlocks,
+        inFlightBlocks: this.inFlightBlocks
       });
     }
 
@@ -84,7 +85,14 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    const typed = message as { type?: string; blockId?: number; channels?: number[][]; port?: MessagePort; renderEngine?: string; error?: unknown };
+    const typed = message as {
+      type?: string;
+      blockId?: number;
+      channels?: ArrayLike<number>[];
+      port?: MessagePort;
+      renderEngine?: string;
+      error?: unknown;
+    };
     if (typed.type === "destroy") {
       this.outputBlocks.clear();
       this.transportPort?.postMessage({ type: "destroy" });
@@ -128,7 +136,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.dropOldestOutputBlock();
     }
 
-    this.outputBlocks.set(blockId, typed.channels.slice(0, this.outputChannels).map((channel) => Float32Array.from(channel)));
+    this.outputBlocks.set(blockId, typed.channels.slice(0, this.outputChannels).map((channel) => this.outputChannelBlock(channel)));
     if (typeof typed.renderEngine === "string") {
       this.port.postMessage({ type: "process-diagnostics", blockId, renderEngine: typed.renderEngine });
     }
@@ -160,6 +168,10 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         destination.fill(0);
       }
     }
+  }
+
+  private outputChannelBlock(channel: ArrayLike<number>): Float32Array {
+    return channel instanceof Float32Array ? channel : Float32Array.from(channel);
   }
 
   private dropOldestOutputBlock(): void {

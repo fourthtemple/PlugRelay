@@ -110,6 +110,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       outputLatencyBlocks?: number;
       staleOutputBlocks?: number;
       droppedInputBlocks?: number;
+      inFlightBlocks?: number;
       renderEngine?: string;
       error?: unknown;
     };
