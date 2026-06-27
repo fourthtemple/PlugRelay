@@ -81,36 +81,34 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     if (this.destroyed) { this.writeBlock(output, [], frames); return false; }
     this.lastFrames = frames;
     const outgoing = this.copyInputBlock(input, frames);
-    if (this.bypassed) { this.blockId += 1; this.writeFallbackBlock(output, outgoing, frames, "bypass"); return true; }
-    this.drainSharedOutput();
-    const currentBlockId = this.blockId++;
-    const insertingSafetyBlock = this.latencySafetyBlocks > 0;
-    const targetBlockId = insertingSafetyBlock ? -1 : currentBlockId - this.outputLatencyBlocks;
-    const queued = targetBlockId >= 0 ? this.outputBlocks.get(targetBlockId) : undefined;
+    if (this.bypassed) { this.blockId += 1; this.writeFallbackBlock(output, outgoing, frames, "bypass"); } else {
+      this.drainSharedOutput();
+      const currentBlockId = this.blockId++;
+      const insertingSafetyBlock = this.latencySafetyBlocks > 0;
+      const targetBlockId = insertingSafetyBlock ? -1 : currentBlockId - this.outputLatencyBlocks;
+      const queued = targetBlockId >= 0 ? this.outputBlocks.get(targetBlockId) : undefined;
 
-    if (queued) {
-      this.outputBlocks.delete(targetBlockId);
-      this.writeBlock(output, queued, frames);
-      this.lastFallbackReason = "none";
-      this.recycleOutputBlock(queued, frames);
-      this.processedBlocks += 1;
-    } else if (insertingSafetyBlock) {
-      this.writeFallbackBlock(output, outgoing, frames, "latency-safety");
-      this.latencySafetyBlocks -= 1;
-      this.latencySafetyInsertions += 1;
-    } else {
-      this.writeFallbackBlock(output, outgoing, frames, "underrun");
-      this.underruns += 1;
-    }
-    if (!insertingSafetyBlock) {
-      this.recordOutputTiming(Boolean(queued), targetBlockId);
-      const staleDropped = this.dropStaleOutputBlocks(targetBlockId);
-      if (staleDropped > 0) {
-        this.recordLateOutput();
+      if (queued) {
+        this.outputBlocks.delete(targetBlockId);
+        this.writeBlock(output, queued, frames);
+        this.lastFallbackReason = "none";
+        this.recycleOutputBlock(queued, frames);
+        this.processedBlocks += 1;
+      } else if (insertingSafetyBlock) {
+        this.writeFallbackBlock(output, outgoing, frames, "latency-safety");
+        this.latencySafetyBlocks -= 1;
+        this.latencySafetyInsertions += 1;
+      } else {
+        this.writeFallbackBlock(output, outgoing, frames, "underrun");
+        this.underruns += 1;
       }
+      if (!insertingSafetyBlock) {
+        this.recordOutputTiming(Boolean(queued), targetBlockId);
+        const staleDropped = this.dropStaleOutputBlocks(targetBlockId);
+        if (staleDropped > 0) this.recordLateOutput();
+      }
+      this.postProcessBlock(currentBlockId, frames, outgoing);
     }
-
-    this.postProcessBlock(currentBlockId, frames, outgoing);
 
     if (this.blockId % this.statsIntervalBlocks === 0) {
       const leadMinBlocks = this.responseDeadlineLeadMinBlocks ?? 0;

@@ -179,6 +179,7 @@ const bypassProcessor = new processorCtor({
     outputChannels: 1,
     maxQueuedOutputBlocks: 4,
     outputLatencyBlocks: 1,
+    statsIntervalBlocks: 8,
     bypassed: true
   }
 });
@@ -190,6 +191,9 @@ bypassProcessor.process([[Float32Array.from([30, 31])]], [bypassOutput]);
 assert(equal(Array.from(bypassOutput[0]), [30, 31]), "bypassed worklet outputs dry input");
 assert(bypassProcessor.fallbackOutputBlocks === 1 && bypassProcessor.lastFallbackReason === "bypass", "bypassed worklet counts dry fallback output");
 assert(bypassTransportPort.messages.length === 0, "bypassed worklet does not post render work");
+for (let index = 0; index < 7; index += 1) bypassProcessor.process([[Float32Array.from([30])]], [[new Float32Array(1)]]);
+assert(bypassMainPort.messages.some((message) => message.type === "stats" && message.fallbackOutputBlocks === 8 && message.lastFallbackReason === "bypass"), "bypassed worklet emits fallback stats at bounded cadence");
+assert(bypassTransportPort.messages.length === 0, "bypassed worklet still avoids render work while reporting stats");
 bypassTransportPort.onmessage({ data: { type: "processed", blockId: 0, channels: [Float32Array.from([300, 300])] } });
 assert(bypassProcessor.outputBlocks.size === 0, "bypassed worklet ignores late wet responses");
 bypassMainPort.onmessage({ data: { type: "set-bypassed", bypassed: false } });
