@@ -378,6 +378,51 @@ assert(
   "live scheduler applies frame-batch calibration to shared-frame pressure"
 );
 
+now = 3500;
+let telemetryDurationMs = 10;
+const telemetryScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 1000,
+  maxBlockSize: 10,
+  startBlockId: 275,
+  startSamplePosition: 2750,
+  nowMs: () => now
+});
+const telemetryTarget = {
+  async processScheduledBlock(scheduled) {
+    now += telemetryDurationMs;
+    return {
+      blockId: scheduled.blockId,
+      channels: scheduled.request.channels,
+      latencySamples: 0,
+      renderEngine: "deadline-telemetry",
+      bypassed: false,
+      healthy: true
+    };
+  }
+};
+const telemetryProcessor = createLiveEffectRackFrameBatchProcessor({
+  scheduler: telemetryScheduler,
+  processBudgetMs: 20,
+  nowMs: () => now
+});
+const leadBatch = await telemetryProcessor.process([{ target: telemetryTarget, channels: [Array(10).fill(1)] }]);
+telemetryDurationMs = 30;
+const missedBatch = await telemetryProcessor.process([{ target: telemetryTarget, channels: [Array(10).fill(1)] }]);
+telemetryScheduler.updateFromFrameBatchHealth(telemetryProcessor.health);
+assert(
+  leadBatch.lastResponseDeadlineLeadBlocks === 1 &&
+    missedBatch.lastResponseDeadlineLeadMs === -10 &&
+    missedBatch.lastResponseDeadlineLeadBlocks === -1 &&
+    missedBatch.responseJitterBlocks === 2 &&
+    telemetryProcessor.health.responseDeadlineMisses === 1,
+  "live frame batch exposes aggregate deadline lead and jitter telemetry"
+);
+assert(
+  telemetryScheduler.snapshot().deadlinePressure.reasons.includes("deadline-miss") &&
+    telemetryScheduler.snapshot().deadlinePressure.reasons.includes("low-deadline-lead"),
+  "live scheduler consumes frame-batch deadline telemetry as pressure"
+);
+
 const badBatch = await batchProcessor.process([
   { id: "bad-slot", target: {}, channels: [[0]] }
 ]);

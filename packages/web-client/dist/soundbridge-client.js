@@ -3694,6 +3694,12 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     this.lastError = void 0;
     this.lastResult = void 0;
     this.lastHealthKey = "";
+    this.lastResponseDeadlineLeadMs = void 0;
+    this.lastResponseDeadlineLeadBlocks = void 0;
+    this.responseDeadlineLeadMinBlocks = void 0;
+    this.responseDeadlineLeadMaxBlocks = void 0;
+    this.responseJitterBlocks = 0;
+    this.responseDeadlineMisses = 0;
   }
 
   get health() {
@@ -3814,6 +3820,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   recordProcessBudget(frame, results, totalDurationMs) {
     const boundedDurationMs = boundedLiveEffectOptionalNumber(totalDurationMs, 0, 60000) ?? 0;
     const processBudgetExceeded = this.processBudgetMs > 0 && boundedDurationMs > this.processBudgetMs;
+    this.recordResponseDeadlineLead(results, boundedDurationMs);
     this.processBudgetMisses = processBudgetExceeded ? Math.min(1024, this.processBudgetMisses + 1) : 0;
     if (
       processBudgetExceeded &&
@@ -3854,6 +3861,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     const results = Array.from({ length: targetCount }, (_unused, index) =>
       this.dryTargetResult(frame, targets[index], index, error, "frame-batch-process-timeout")
     );
+    this.recordResponseDeadlineLead(results, boundedDurationMs);
     const result = this.result(frame, results, boundedDurationMs, false, true, error);
     this.dispatchEvent(new CustomEvent("frame-batch-process-timeout", { detail: { result, health: this.health } }));
     this.dispatchEvent(new CustomEvent("frame-batch-process-timeout-tripped", { detail: { result, health: this.health } }));
@@ -3955,6 +3963,10 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       reportedLatencySamples: maxLiveEffectFrameBatchLatency(results, "reportedLatencySamples"),
       maxDurationMs: results.reduce((max, result) => Math.max(max, result.durationMs), 0),
       totalDurationMs: boundedLiveEffectOptionalNumber(totalDurationMs, 0, 60000) ?? 0,
+      lastResponseDeadlineLeadMs: this.lastResponseDeadlineLeadMs,
+      lastResponseDeadlineLeadBlocks: this.lastResponseDeadlineLeadBlocks,
+      responseJitterBlocks: this.responseJitterBlocks,
+      responseDeadlineMisses: this.responseDeadlineMisses,
       processBudgetMs: this.processBudgetMs > 0 ? this.processBudgetMs : void 0,
       processTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : void 0,
       processBudgetExceeded,
@@ -3986,6 +3998,10 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       reportedLatencySamples: boundedLiveEffectLatencySamples(result?.reportedLatencySamples, 0),
       maxDurationMs: boundedLiveEffectOptionalNumber(result?.maxDurationMs, 0, 60000) ?? 0,
       totalDurationMs: boundedLiveEffectOptionalNumber(result?.totalDurationMs, 0, 60000) ?? 0,
+      lastResponseDeadlineLeadMs: this.lastResponseDeadlineLeadMs,
+      lastResponseDeadlineLeadBlocks: this.lastResponseDeadlineLeadBlocks,
+      responseJitterBlocks: this.responseJitterBlocks,
+      responseDeadlineMisses: this.responseDeadlineMisses,
       processBudgetMs: this.processBudgetMs > 0 ? this.processBudgetMs : void 0,
       processTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : void 0,
       processBudgetExceeded: result?.processBudgetExceeded === true,
@@ -4014,13 +4030,35 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       health.dryTargets,
       health.skippedTargets,
       health.latencySamples,
-      health.reportedLatencySamples
+      health.reportedLatencySamples,
+      health.lastResponseDeadlineLeadBlocks,
+      health.responseJitterBlocks,
+      health.responseDeadlineMisses
     ].join(":");
     if (key === this.lastHealthKey) {
       return;
     }
     this.lastHealthKey = key;
     this.dispatchEvent(new CustomEvent("healthchange", { detail: health }));
+  }
+
+  recordResponseDeadlineLead(results, totalDurationMs) {
+    if (this.processBudgetMs <= 0) return;
+    const blockDurationMs = liveEffectFrameBatchBlockDurationMs(results);
+    this.lastResponseDeadlineLeadMs = boundedLiveEffectOptionalNumber(this.processBudgetMs - totalDurationMs, -60000, 60000);
+    this.lastResponseDeadlineLeadBlocks = this.lastResponseDeadlineLeadMs === void 0 || blockDurationMs <= 0
+      ? void 0
+      : Number((this.lastResponseDeadlineLeadMs / blockDurationMs).toFixed(3));
+    this.responseDeadlineLeadMinBlocks = Math.min(
+      this.responseDeadlineLeadMinBlocks ?? this.lastResponseDeadlineLeadBlocks ?? 0,
+      this.lastResponseDeadlineLeadBlocks ?? 0
+    );
+    this.responseDeadlineLeadMaxBlocks = Math.max(
+      this.responseDeadlineLeadMaxBlocks ?? this.lastResponseDeadlineLeadBlocks ?? 0,
+      this.lastResponseDeadlineLeadBlocks ?? 0
+    );
+    this.responseJitterBlocks = Number(((this.responseDeadlineLeadMaxBlocks ?? 0) - (this.responseDeadlineLeadMinBlocks ?? 0)).toFixed(3));
+    if ((this.lastResponseDeadlineLeadMs ?? 0) < 0) this.responseDeadlineMisses = Math.min(1024, this.responseDeadlineMisses + 1);
   }
 }
 
@@ -4059,6 +4097,18 @@ export function createLivePerformanceFrameBatchProcessor(options) {
 
 function maxLiveEffectFrameBatchLatency(results, key) {
   return results.reduce((max, result) => Math.max(max, result[key]), 0);
+}
+
+function liveEffectFrameBatchBlockDurationMs(results) {
+  const firstRate = results.find((result) => result.scheduled.request.sampleRate !== void 0)?.scheduled.request.sampleRate;
+  const sampleRate = boundedLiveEffectInteger(firstRate, 48000, 1, 384000);
+  const frames = boundedLiveEffectInteger(
+    results.reduce((max, result) => Math.max(max, ...result.scheduled.request.channels.map((channel) => channel.length)), 0),
+    128,
+    1,
+    8192
+  );
+  return liveEffectBlockDurationMs(sampleRate, frames);
 }
 
 function liveEffectFrameBatchLatencySamples(health) {
