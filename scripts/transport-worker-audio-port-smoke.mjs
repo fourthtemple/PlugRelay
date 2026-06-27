@@ -368,6 +368,7 @@ assert(
 );
 assert(socket.sent.length === sentBeforeSharedTimeout + 2, "shared timeout releases capacity and drains the next queued block");
 
+clearTimersWithDelay(1);
 const timerFallbackAudio = createSharedAudio(2, 1, 2);
 const timerFallbackPort = new TestPort();
 testAtomics.waitAsync = undefined;
@@ -387,7 +388,10 @@ assert(
   "transport worker reports timer shared-audio wakeups when atomics wait is unavailable"
 );
 assert([...timers.values()].some((timer) => timer.ms === 1), "transport worker polls timer shared-audio fallback at live-safe cadence");
+const timerPollsBeforeDestroy = countTimersWithDelay(1);
 timerFallbackPort.onmessage({ data: { type: "destroy" } });
+runTimerWithDelay(1);
+assert(countTimersWithDelay(1) === timerPollsBeforeDestroy - 1, "destroyed timer shared-audio fallback stops polling");
 testAtomics.waitAsync = originalWaitAsync;
 
 const genericEnvelope = {
@@ -435,6 +439,27 @@ socket.emit("message", {
 });
 assert(postedMessages.length === postedBeforeLateGeneric, "transport worker suppresses late generic responses after timeout");
 
+clearTimersWithDelay(1);
+const closeFallbackAudio = createSharedAudio(2, 1, 2);
+const closeFallbackPort = new TestPort();
+testAtomics.waitAsync = undefined;
+self.onmessage({
+  data: {
+    type: "audio-port",
+    port: closeFallbackPort,
+    instanceId: "inst-close-fallback",
+    sampleRate: 48000,
+    sessionToken: "session-1",
+    audioTransport: "binary",
+    sharedAudio: closeFallbackAudio
+  }
+});
+const timerPollsBeforeClose = countTimersWithDelay(1);
+socket.close();
+runTimerWithDelay(1);
+assert(countTimersWithDelay(1) === timerPollsBeforeClose - 1, "timer shared-audio fallback stops polling after socket close");
+testAtomics.waitAsync = originalWaitAsync;
+
 console.log("Transport worker audio port smoke checks passed.");
 
 function createSharedAudio(slots, channels, frames) {
@@ -479,4 +504,16 @@ function runTimerWithDelay(ms) {
   const [id, timer] = entry;
   timers.delete(id);
   timer.callback();
+}
+
+function countTimersWithDelay(ms) {
+  return [...timers.values()].filter((timer) => timer.ms === ms).length;
+}
+
+function clearTimersWithDelay(ms) {
+  for (const [id, timer] of timers) {
+    if (timer.ms === ms) {
+      timers.delete(id);
+    }
+  }
 }

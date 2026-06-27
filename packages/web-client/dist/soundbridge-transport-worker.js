@@ -9,6 +9,7 @@ const pendingRequests = /* @__PURE__ */ new Map();
 const staleRequestIds = /* @__PURE__ */ new Set();
 const pendingAudioPorts = /* @__PURE__ */ new Map();
 const pendingSharedAudio = /* @__PURE__ */ new Map();
+const sharedAudioPorts = /* @__PURE__ */ new Map();
 const SHARED_AUDIO_HEADER_INTS = 8;
 const SHARED_AUDIO_SLOT_INTS = 4;
 const SHARED_WRITE_INDEX = 0;
@@ -56,6 +57,7 @@ function connect(url) {
   socket.binaryType = "arraybuffer";
   socket.addEventListener("open", () => {
     post({ type: "connected" });
+    resumeSharedAudioPumps();
   });
   socket.addEventListener("error", () => {
     post({ type: "connect-error", message: `Unable to connect to ${url}` });
@@ -88,6 +90,7 @@ function connectAudioPort(port, config, sharedAudioDescriptor) {
     if (message?.type === "destroy") {
       if (sharedAudio) {
         sharedAudio.closed = true;
+        sharedAudioPorts.delete(sharedAudio);
       }
       port.close();
       return;
@@ -98,6 +101,7 @@ function connectAudioPort(port, config, sharedAudioDescriptor) {
   };
   if (sharedAudio) {
     sharedAudio.wakeMode = sharedAudioWakeMode();
+    sharedAudioPorts.set(sharedAudio, config);
     port.postMessage({ type: "shared-audio-status", wakeMode: sharedAudio.wakeMode });
     pumpSharedAudio(config, sharedAudio);
   }
@@ -250,7 +254,7 @@ function transferableChannelBuffers(channels) {
 }
 
 function pumpSharedAudio(config, shared) {
-  if (shared.closed) {
+  if (shared.closed || !isSocketOpen()) {
     return;
   }
   drainSharedAudio(config, shared);
@@ -258,10 +262,10 @@ function pumpSharedAudio(config, shared) {
 }
 
 function scheduleSharedAudioPump(config, shared) {
-  if (shared.closed) {
+  if (shared.closed || !isSocketOpen()) {
     return;
   }
-  if (shared.wakeMode === "atomics" && Atomics.load(shared.inputControl, SHARED_AVAILABLE) === 0) {
+  if (shared.wakeMode === "atomics" && typeof Atomics.waitAsync === "function" && Atomics.load(shared.inputControl, SHARED_AVAILABLE) === 0) {
     const waitResult = Atomics.waitAsync(shared.inputControl, SHARED_AVAILABLE, 0, SHARED_AUDIO_WAIT_TIMEOUT_MS);
     if (waitResult.async) {
       waitResult.value.then(
@@ -273,6 +277,16 @@ function scheduleSharedAudioPump(config, shared) {
   }
   const queued = Atomics.load(shared.inputControl, SHARED_AVAILABLE);
   setTimeout(() => pumpSharedAudio(config, shared), queued > 0 && shared.inFlightBlocks < config.maxInFlightBlocks ? 0 : SHARED_AUDIO_TIMER_POLL_MS);
+}
+
+function resumeSharedAudioPumps() {
+  for (const [shared, config] of sharedAudioPorts) {
+    pumpSharedAudio(config, shared);
+  }
+}
+
+function isSocketOpen() {
+  return socket?.readyState === WebSocket.OPEN;
 }
 
 function drainSharedAudio(config, shared) {
