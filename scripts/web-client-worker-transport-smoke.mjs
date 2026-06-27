@@ -62,12 +62,53 @@ class FakeAudioPort {
   }
 }
 
+class FakeMainSocket {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSED = 3;
+  static instances = [];
+
+  constructor(url) {
+    this.url = String(url);
+    this.readyState = FakeMainSocket.CONNECTING;
+    this.sent = [];
+    this.listeners = new Map();
+    FakeMainSocket.instances.push(this);
+  }
+
+  addEventListener(type, handler) {
+    const handlers = this.listeners.get(type) ?? [];
+    handlers.push(handler);
+    this.listeners.set(type, handlers);
+  }
+
+  send(data) {
+    this.sent.push(data);
+  }
+
+  close() {
+    this.emit("close", {});
+  }
+
+  emit(type, event) {
+    if (type === "open") {
+      this.readyState = FakeMainSocket.OPEN;
+    } else if (type === "close") {
+      this.readyState = FakeMainSocket.CLOSED;
+    }
+    for (const handler of this.listeners.get(type) ?? []) {
+      handler(event);
+    }
+  }
+}
+
 Object.defineProperty(globalThis, "crossOriginIsolated", {
   value: true,
   configurable: true
 });
 globalThis.Worker = FakeWorker;
 globalThis.AudioWorkletNode = FakeAudioWorkletNode;
+globalThis.WebSocket = FakeMainSocket;
 
 const {
   SoundBridgeAudioNode,
@@ -266,6 +307,65 @@ assert(
   fallbackPort.messages.some((message) => message.type === "processed" && message.blockId === 77),
   "live AudioNode fallback posts processed blocks"
 );
+
+const mainClient = new SoundBridgeClient({
+  url: "ws://127.0.0.1:47370/bridge",
+  origin: "http://127.0.0.1:5173",
+  requestTimeoutMs: 500
+});
+let mainDisconnects = 0;
+mainClient.addEventListener("disconnect", () => {
+  mainDisconnects += 1;
+});
+const firstMainConnect = mainClient.connect();
+const firstMainSocket = FakeMainSocket.instances.at(-1);
+firstMainSocket.emit("open", {});
+await firstMainConnect;
+
+const mainPair = mainClient.pair("token");
+const pairEnvelope = JSON.parse(firstMainSocket.sent.at(-1));
+firstMainSocket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: pairEnvelope.id,
+    ok: true,
+    payload: { sessionToken: "session-main", expiresAt: Date.now() + 1000 }
+  })
+});
+assert((await mainPair).sessionToken === "session-main", "main transport pair response resolves through client");
+
+const retiredRequest = mainClient.heartbeat();
+let retiredError;
+retiredRequest.catch((error) => {
+  retiredError = error;
+});
+firstMainSocket.readyState = FakeMainSocket.CONNECTING;
+const secondMainConnect = mainClient.connect();
+await Promise.resolve();
+assert(/reconnect/.test(String(retiredError?.message)), "main transport rejects retired pending requests on reconnect");
+const secondMainSocket = FakeMainSocket.instances.at(-1);
+assert(secondMainSocket !== firstMainSocket, "main transport creates a fresh socket on reconnect");
+secondMainSocket.emit("open", {});
+await secondMainConnect;
+assert(mainDisconnects === 0, "main transport ignores retired socket close events during reconnect");
+
+const currentRequest = mainClient.heartbeat();
+let currentSettled = false;
+currentRequest.then(() => {
+  currentSettled = true;
+});
+const currentEnvelope = JSON.parse(secondMainSocket.sent.at(-1));
+firstMainSocket.emit("message", {
+  data: JSON.stringify({ type: "response", id: currentEnvelope.id, ok: true, payload: { stale: true } })
+});
+firstMainSocket.emit("error", {});
+firstMainSocket.emit("close", {});
+await Promise.resolve();
+assert(currentSettled === false && mainDisconnects === 0, "main transport ignores stale socket events after reconnect");
+secondMainSocket.emit("message", {
+  data: JSON.stringify({ type: "response", id: currentEnvelope.id, ok: true, payload: { fresh: true } })
+});
+assert((await currentRequest).fresh === true, "main transport resolves responses from the active socket after reconnect");
 
 console.log("Web client worker transport smoke checks passed.");
 

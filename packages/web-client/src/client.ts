@@ -121,20 +121,24 @@ export class SoundBridgeClient extends EventTarget {
       return Promise.resolve();
     }
 
+    const previousSocket = this.socket;
+    if (previousSocket) {
+      this.socket = undefined;
+      this.rejectPendingRequests("SoundBridge socket closed before reconnect");
+      previousSocket.close();
+    }
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(this.url);
       socket.binaryType = "arraybuffer";
       this.socket = socket;
 
-      socket.addEventListener("open", () => resolve(), { once: true });
-      socket.addEventListener("error", () => reject(new Error(`Unable to connect to ${this.url}`)), { once: true });
-      socket.addEventListener("message", (event) => this.handleMessage(event.data));
+      socket.addEventListener("open", () => this.socket === socket && resolve(), { once: true });
+      socket.addEventListener("error", () => this.socket === socket && reject(new Error(`Unable to connect to ${this.url}`)), { once: true });
+      socket.addEventListener("message", (event) => this.socket === socket && this.handleMessage(event.data));
       socket.addEventListener("close", () => {
-        for (const [id, pending] of this.pending) {
-          clearTimeout(pending.timeout);
-          pending.reject(new Error(`SoundBridge socket closed before response ${id}.`));
-        }
-        this.pending.clear();
+        if (this.socket !== socket) return;
+        this.socket = undefined;
+        this.rejectPendingRequests("SoundBridge socket closed before response");
         this.dispatchEvent(new CustomEvent("disconnect"));
       });
     });
@@ -305,9 +309,7 @@ export class SoundBridgeClient extends EventTarget {
     return { port: channel.port1, sharedAudio };
   }
 
-  createAudioWorkletTransportPort(options: AudioWorkletTransportOptions): MessagePort | undefined {
-    return this.createAudioWorkletTransportConnection(options)?.port;
-  }
+  createAudioWorkletTransportPort(options: AudioWorkletTransportOptions): MessagePort | undefined { return this.createAudioWorkletTransportConnection(options)?.port; }
 
   sendMidiEvents(instanceId: string, events: MidiEvent[]): Promise<{ accepted: boolean; eventCount: number }> {
     return this.request("sendMidiEvents", { instanceId, events });
@@ -415,9 +417,7 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("useFileGrant", { instanceId, grantId, ...options });
   }
 
-  heartbeat(): Promise<{ now: number }> {
-    return this.request("heartbeat", { now: Date.now() });
-  }
+  heartbeat(): Promise<{ now: number }> { return this.request("heartbeat", { now: Date.now() }); }
 
   private request<TPayload>(
     command: ProtocolCommand,
