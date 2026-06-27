@@ -25,8 +25,6 @@ import {
   combinedLatencySamples,
   isRecoverablePressureReason,
   isRenderDeadlineProtocolError,
-  liveEffectBlockDurationMs,
-  liveEffectBlockFrames,
   liveEffectDryReason,
   liveEffectFailureReason,
   liveEffectLatencyMilliseconds,
@@ -36,6 +34,9 @@ import {
   withLiveEffectTimeout
 } from "./live-effect-rack-metrics";
 import type { LiveEffectDryReason, LiveEffectRackTiming } from "./live-effect-rack-metrics";
+import { createLiveEffectRackPolicy } from "./live-effect-rack-policy";
+export { createLiveEffectRackPolicy } from "./live-effect-rack-policy";
+export type { LiveEffectRackPolicy, LiveEffectRackPolicyOptions } from "./live-effect-rack-policy";
 import { liveTransportForBlock } from "./live-transport";
 export interface LiveEffectRackOptions {
   client: SoundBridgeClient;
@@ -131,14 +132,6 @@ export interface LiveEffectRackHealth {
   wetMix: number;
 }
 
-const LIVE_PERFORMANCE_INPUT_AGE_BLOCKS = 4;
-const LIVE_PERFORMANCE_PROCESS_BUDGET_BLOCKS = 1;
-const LIVE_PERFORMANCE_PROCESS_BUDGET_MISSES = 3;
-const LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS = 4;
-const LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS = 0.5;
-const LIVE_PERFORMANCE_RECOVERY_BLOCKS = 16;
-const LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES = 1;
-
 export function createLivePerformanceRackOptions(options: LivePerformanceRackOptions): LiveEffectRackOptions {
   const {
     maxInputAgeBlocks,
@@ -147,32 +140,27 @@ export function createLivePerformanceRackOptions(options: LivePerformanceRackOpt
     transitionFadeBlocks,
     ...rackOptions
   } = options;
-  const blockMs = liveEffectBlockDurationMs(options.sampleRate, options.maxBlockSize);
-  const blockFrames = liveEffectBlockFrames(options.maxBlockSize);
-  const inputAgeBlocks = boundedLiveEffectNumber(maxInputAgeBlocks, LIVE_PERFORMANCE_INPUT_AGE_BLOCKS, 0, 128);
-  const budgetBlocks = boundedLiveEffectNumber(processBudgetBlocks, LIVE_PERFORMANCE_PROCESS_BUDGET_BLOCKS, 0, 128);
-  const timeoutBlocks = boundedLiveEffectNumber(processTimeoutBlocks, LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS, 0, 128);
-  const fadeBlocks = boundedLiveEffectNumber(transitionFadeBlocks, LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS, 0, 8);
-
+  const policy = createLiveEffectRackPolicy({
+    ...options,
+    maxInputAgeBlocks,
+    processBudgetBlocks,
+    processTimeoutBlocks,
+    transitionFadeBlocks
+  });
   return {
     ...rackOptions,
     audioTransport: options.audioTransport ?? "binary",
-    maxInputAgeMs: boundedLiveEffectNumber(options.maxInputAgeMs, blockMs * inputAgeBlocks, 0, 60000),
-    maxInFlightBlocks: boundedLiveEffectInteger(options.maxInFlightBlocks, 1, 1, 32),
-    processBudgetMs: boundedLiveEffectNumber(options.processBudgetMs, blockMs * budgetBlocks, 0, 60000),
-    processTimeoutMs: boundedLiveEffectNumber(options.processTimeoutMs, blockMs * timeoutBlocks, 0, 60000),
-    transitionFadeSamples: boundedLiveEffectInteger(options.transitionFadeSamples, Math.ceil(blockFrames * fadeBlocks), 0, 4096),
-    maxConsecutiveProcessBudgetMisses: boundedLiveEffectInteger(
-      options.maxConsecutiveProcessBudgetMisses,
-      LIVE_PERFORMANCE_PROCESS_BUDGET_MISSES,
-      0,
-      1024
-    ),
-    maxConsecutiveRenderBudgetMisses: boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024),
-    processBudgetRecoveryBlocks: boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
-    renderBudgetRecoveryBlocks: boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
-    processTimeoutRecoveryBlocks: boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
-    maxProcessTimeoutRecoveries: boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES, 0, 32)
+    maxInputAgeMs: policy.maxInputAgeMs,
+    maxInFlightBlocks: policy.maxInFlightBlocks,
+    processBudgetMs: policy.processBudgetMs,
+    processTimeoutMs: policy.processTimeoutMs,
+    transitionFadeSamples: policy.transitionFadeSamples,
+    maxConsecutiveProcessBudgetMisses: policy.maxConsecutiveProcessBudgetMisses,
+    maxConsecutiveRenderBudgetMisses: policy.maxConsecutiveRenderBudgetMisses,
+    processBudgetRecoveryBlocks: policy.processBudgetRecoveryBlocks,
+    renderBudgetRecoveryBlocks: policy.renderBudgetRecoveryBlocks,
+    processTimeoutRecoveryBlocks: policy.processTimeoutRecoveryBlocks,
+    maxProcessTimeoutRecoveries: policy.maxProcessTimeoutRecoveries
   };
 }
 

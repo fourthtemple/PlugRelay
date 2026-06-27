@@ -1251,6 +1251,51 @@ const LIVE_TRANSPORT_MAX_SAMPLE_POSITION = 9007199254740991;
 const LIVE_TRANSPORT_MAX_MUSIC = 1000000000;
 const LIVE_TRANSPORT_DENOMINATORS = [1, 2, 4, 8, 16, 32, 64];
 
+export function createLiveEffectRackPolicy(options) {
+  const sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
+  const maxBlockSize = liveEffectBlockFrames(options.maxBlockSize);
+  const blockDurationMs = liveEffectBlockDurationMs(sampleRate, maxBlockSize);
+  const maxInputAgeBlocks = boundedLiveEffectNumber(options.maxInputAgeBlocks, LIVE_PERFORMANCE_INPUT_AGE_BLOCKS, 0, 128);
+  const processBudgetBlocks = boundedLiveEffectNumber(options.processBudgetBlocks, LIVE_PERFORMANCE_PROCESS_BUDGET_BLOCKS, 0, 128);
+  const processTimeoutBlocks = boundedLiveEffectNumber(options.processTimeoutBlocks, LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS, 0, 128);
+  const transitionFadeBlocks = boundedLiveEffectNumber(options.transitionFadeBlocks, LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS, 0, 8);
+  const maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, blockDurationMs * maxInputAgeBlocks, 0, 60000);
+  const processBudgetMs = boundedLiveEffectNumber(options.processBudgetMs, blockDurationMs * processBudgetBlocks, 0, 60000);
+  const processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, blockDurationMs * processTimeoutBlocks, 0, 60000);
+  const transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, Math.ceil(maxBlockSize * transitionFadeBlocks), 0, 4096);
+  const pluginLatencySamples = boundedLiveEffectLatencySamples(options.pluginLatencySamples, 0);
+  const transportLatencySamples = boundedLiveEffectLatencySamples(options.transportLatencySamples, 0);
+  const reportedLatencySamples = combinedLiveEffectLatencySamples(pluginLatencySamples, transportLatencySamples);
+  return {
+    sampleRate,
+    maxBlockSize,
+    blockDurationMs: Number(blockDurationMs.toFixed(3)),
+    maxInputAgeMs,
+    maxInputAgeBlocks: liveEffectPolicyBlockUnits(maxInputAgeMs, blockDurationMs),
+    maxInFlightBlocks: boundedLiveEffectInteger(options.maxInFlightBlocks, 1, 1, 32),
+    processBudgetMs,
+    processBudgetBlocks: liveEffectPolicyBlockUnits(processBudgetMs, blockDurationMs),
+    processTimeoutMs,
+    processTimeoutBlocks: liveEffectPolicyBlockUnits(processTimeoutMs, blockDurationMs),
+    transitionFadeSamples,
+    transitionFadeBlocks: liveEffectPolicyBlockUnits(transitionFadeSamples, maxBlockSize),
+    maxConsecutiveProcessBudgetMisses: boundedLiveEffectInteger(options.maxConsecutiveProcessBudgetMisses, LIVE_PERFORMANCE_PROCESS_BUDGET_MISSES, 0, 1024),
+    maxConsecutiveRenderBudgetMisses: boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024),
+    processBudgetRecoveryBlocks: boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
+    renderBudgetRecoveryBlocks: boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
+    processTimeoutRecoveryBlocks: boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
+    maxProcessTimeoutRecoveries: boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES, 0, 32),
+    pluginLatencySamples,
+    transportLatencySamples,
+    reportedLatencySamples,
+    reportedLatencyMs: liveEffectLatencyMilliseconds(reportedLatencySamples, sampleRate)
+  };
+}
+
+function liveEffectPolicyBlockUnits(value, blockValue) {
+  return blockValue > 0 ? Number((value / blockValue).toFixed(3)) : 0;
+}
+
 export function liveTransportForBlock(options) {
   const sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
   const maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
@@ -1300,32 +1345,28 @@ export function createLivePerformanceRackOptions(options) {
     transitionFadeBlocks,
     ...rackOptions
   } = options;
-  const blockMs = liveEffectBlockDurationMs(options.sampleRate, options.maxBlockSize);
-  const blockFrames = liveEffectBlockFrames(options.maxBlockSize);
-  const inputAgeBlocks = boundedLiveEffectNumber(maxInputAgeBlocks, LIVE_PERFORMANCE_INPUT_AGE_BLOCKS, 0, 128);
-  const budgetBlocks = boundedLiveEffectNumber(processBudgetBlocks, LIVE_PERFORMANCE_PROCESS_BUDGET_BLOCKS, 0, 128);
-  const timeoutBlocks = boundedLiveEffectNumber(processTimeoutBlocks, LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS, 0, 128);
-  const fadeBlocks = boundedLiveEffectNumber(transitionFadeBlocks, LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS, 0, 8);
+  const policy = createLiveEffectRackPolicy({
+    ...options,
+    maxInputAgeBlocks,
+    processBudgetBlocks,
+    processTimeoutBlocks,
+    transitionFadeBlocks
+  });
 
   return {
     ...rackOptions,
     audioTransport: options.audioTransport ?? "binary",
-    maxInputAgeMs: boundedLiveEffectNumber(options.maxInputAgeMs, blockMs * inputAgeBlocks, 0, 60000),
-    maxInFlightBlocks: boundedLiveEffectInteger(options.maxInFlightBlocks, 1, 1, 32),
-    processBudgetMs: boundedLiveEffectNumber(options.processBudgetMs, blockMs * budgetBlocks, 0, 60000),
-    processTimeoutMs: boundedLiveEffectNumber(options.processTimeoutMs, blockMs * timeoutBlocks, 0, 60000),
-    transitionFadeSamples: boundedLiveEffectInteger(options.transitionFadeSamples, Math.ceil(blockFrames * fadeBlocks), 0, 4096),
-    maxConsecutiveProcessBudgetMisses: boundedLiveEffectInteger(
-      options.maxConsecutiveProcessBudgetMisses,
-      LIVE_PERFORMANCE_PROCESS_BUDGET_MISSES,
-      0,
-      1024
-    ),
-    maxConsecutiveRenderBudgetMisses: boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024),
-    processBudgetRecoveryBlocks: boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
-    renderBudgetRecoveryBlocks: boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
-    processTimeoutRecoveryBlocks: boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
-    maxProcessTimeoutRecoveries: boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES, 0, 32)
+    maxInputAgeMs: policy.maxInputAgeMs,
+    maxInFlightBlocks: policy.maxInFlightBlocks,
+    processBudgetMs: policy.processBudgetMs,
+    processTimeoutMs: policy.processTimeoutMs,
+    transitionFadeSamples: policy.transitionFadeSamples,
+    maxConsecutiveProcessBudgetMisses: policy.maxConsecutiveProcessBudgetMisses,
+    maxConsecutiveRenderBudgetMisses: policy.maxConsecutiveRenderBudgetMisses,
+    processBudgetRecoveryBlocks: policy.processBudgetRecoveryBlocks,
+    renderBudgetRecoveryBlocks: policy.renderBudgetRecoveryBlocks,
+    processTimeoutRecoveryBlocks: policy.processTimeoutRecoveryBlocks,
+    maxProcessTimeoutRecoveries: policy.maxProcessTimeoutRecoveries
   };
 }
 
