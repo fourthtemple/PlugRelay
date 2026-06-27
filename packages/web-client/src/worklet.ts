@@ -384,7 +384,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       Atomics.store(shared.outputControl, SoundBridgeAudioProcessor.sharedReadIndex, (readIndex + 1) % shared.slots);
       Atomics.sub(shared.outputControl, SoundBridgeAudioProcessor.sharedAvailable, 1);
     }
-    this.sharedOutputDroppedBlocks += Atomics.exchange(shared.outputControl, SoundBridgeAudioProcessor.sharedDropped, 0);
+    const outputDrops = Atomics.exchange(shared.outputControl, SoundBridgeAudioProcessor.sharedDropped, 0);
+    this.sharedOutputDroppedBlocks += outputDrops;
+    if (outputDrops > 0) this.recordLateOutput();
   }
 
   private queueSharedOutputBlock(

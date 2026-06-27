@@ -209,6 +209,19 @@ assert(Atomics.load(sharedInputControl, 8) === 4, "shared worklet transport over
 assert(equal(Array.from(sharedInputAudio.subarray(0, 2)), [11, 11]), "shared worklet transport keeps the newest audio under input pressure");
 assert(sharedProcessor.sharedInputDroppedBlocks === 1, "shared worklet transport counts overwritten input pressure");
 
+const sharedOutputPressureProcessor = new processorCtor({
+  processorOptions: { outputChannels: 1, maxQueuedOutputBlocks: 4, outputLatencyBlocks: 1, maxOutputLatencyBlocks: 3, latencyMissThresholdBlocks: 1 }
+});
+const sharedOutputPressureMainPort = lastPort;
+const sharedOutputPressureTransportPort = new TestPort();
+const sharedOutputPressureAudio = createSharedAudio(2, 1, 2);
+sharedOutputPressureMainPort.onmessage({ data: { type: "connect-transport", port: sharedOutputPressureTransportPort, sharedAudio: sharedOutputPressureAudio } });
+Atomics.store(new Int32Array(sharedOutputPressureAudio.outputControl), 3, 1);
+sharedOutputPressureProcessor.process([[Float32Array.from([12, 12])]], [[new Float32Array(2)]]);
+assert(sharedOutputPressureProcessor.sharedOutputDroppedBlocks === 1, "shared worklet transport counts overwritten output pressure");
+assert(sharedOutputPressureProcessor.outputLatencyBlocks === 2, "shared output overwrite pressure raises adaptive output latency");
+assert(sharedOutputPressureProcessor.latencySafetyInsertions === 1, "shared output overwrite pressure inserts a controlled safety block");
+
 const adaptiveProcessor = new processorCtor({
   processorOptions: {
     outputChannels: 1,
