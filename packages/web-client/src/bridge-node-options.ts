@@ -19,6 +19,7 @@ export interface SoundBridgeAudioNodeOptions {
   maxBlockFrames?: number;
   maxConsecutiveRenderBudgetMisses?: number;
   maxConsecutiveAudioErrors?: number;
+  maxConsecutiveTransportPressureEvents?: number;
   bypassed?: boolean;
   workletUrl?: string;
 }
@@ -55,6 +56,9 @@ export interface SoundBridgeAudioNodeHealth {
   sharedInputDroppedBlocks: number;
   sharedOutputDroppedBlocks: number;
   transportPressureEvents: number;
+  consecutiveTransportPressureEvents: number;
+  maxConsecutiveTransportPressureEvents: number;
+  transportPressureAutoBypassed: boolean;
   lastTransportPressureReasons: string[];
   lastRenderEngine?: string;
   lastRenderDurationMs?: number;
@@ -68,7 +72,7 @@ export interface SoundBridgeAudioNodeHealth {
   maxConsecutiveAudioErrors: number;
   audioErrorAutoBypassed: boolean;
   lastAudioError?: unknown;
-  unhealthyReason?: "audio-error" | "render-budget-exceeded" | "destroyed";
+  unhealthyReason?: "audio-error" | "render-budget-exceeded" | "transport-pressure" | "destroyed";
 }
 
 const LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS = 4;
@@ -115,7 +119,8 @@ export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAu
     sharedBufferBlocks,
     maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192),
     maxConsecutiveRenderBudgetMisses: boundedInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024),
-    maxConsecutiveAudioErrors: boundedInteger(options.maxConsecutiveAudioErrors, 1, 0, 1024)
+    maxConsecutiveAudioErrors: boundedInteger(options.maxConsecutiveAudioErrors, 1, 0, 1024),
+    maxConsecutiveTransportPressureEvents: boundedInteger(options.maxConsecutiveTransportPressureEvents, 3, 0, 1024)
   };
 }
 

@@ -179,6 +179,7 @@ assert(liveNodeOptions.sharedBufferBlocks === 8, "live AudioNode preset derives 
 assert(liveNodeOptions.maxBlockFrames === 128, "live AudioNode preset keeps 128-frame block metadata");
 assert(liveNodeOptions.maxConsecutiveRenderBudgetMisses === 2, "live AudioNode preset fails dry after repeated budget misses");
 assert(liveNodeOptions.maxConsecutiveAudioErrors === 1, "live AudioNode preset fails dry on audio errors");
+assert(liveNodeOptions.maxConsecutiveTransportPressureEvents === 3, "live AudioNode preset fails dry after sustained transport pressure");
 
 const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
   instanceId: "inst-override",
@@ -197,7 +198,8 @@ const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
   sharedBufferBlocks: 7,
   maxBlockFrames: 256,
   maxConsecutiveRenderBudgetMisses: 5,
-  maxConsecutiveAudioErrors: 4
+  maxConsecutiveAudioErrors: 4,
+  maxConsecutiveTransportPressureEvents: 6
 });
 assert(overriddenLiveNodeOptions.audioTransport === "json", "live AudioNode preset preserves explicit transport overrides");
 assert(overriddenLiveNodeOptions.audioRequestTimeoutMs === 333, "live AudioNode preset preserves explicit timeout overrides");
@@ -213,6 +215,7 @@ assert(overriddenLiveNodeOptions.sharedBufferBlocks === 7, "live AudioNode prese
 assert(overriddenLiveNodeOptions.maxBlockFrames === 256, "live AudioNode preset preserves explicit block-frame overrides");
 assert(overriddenLiveNodeOptions.maxConsecutiveRenderBudgetMisses === 5, "live AudioNode preset preserves budget miss overrides");
 assert(overriddenLiveNodeOptions.maxConsecutiveAudioErrors === 4, "live AudioNode preset preserves audio-error overrides");
+assert(overriddenLiveNodeOptions.maxConsecutiveTransportPressureEvents === 6, "live AudioNode preset preserves transport-pressure overrides");
 
 const addedModules = [];
 const fakeContext = {
@@ -257,6 +260,7 @@ liveNode.addEventListener("healthchange", (event) => {
 assert(liveNode.health.bypassed === false, "SoundBridgeAudioNode health starts unbypassed");
 assert(liveNode.health.maxConsecutiveRenderBudgetMisses === 2, "SoundBridgeAudioNode health reports the render-budget miss threshold");
 assert(liveNode.health.maxConsecutiveAudioErrors === 1, "SoundBridgeAudioNode health reports the audio-error threshold");
+assert(liveNode.health.maxConsecutiveTransportPressureEvents === 3, "SoundBridgeAudioNode health reports the transport-pressure threshold");
 liveNode.setBypassed(true);
 assert(liveNode.health.bypassed === true, "SoundBridgeAudioNode health tracks manual bypass");
 assert(liveNode.health.bypassEvents === 1, "SoundBridgeAudioNode health counts bypass changes");
@@ -280,9 +284,15 @@ liveNode.addEventListener("stats", (event) => {
 });
 let transportPressureEvents = 0;
 let transportPressureDetail;
+let transportPressureAutoBypassEvents = 0;
+let transportPressureAutoBypassDetail;
 liveNode.addEventListener("transport-pressure", (event) => {
   transportPressureEvents += 1;
   transportPressureDetail = event.detail;
+});
+liveNode.addEventListener("transport-pressure-auto-bypassed", (event) => {
+  transportPressureAutoBypassEvents += 1;
+  transportPressureAutoBypassDetail = event.detail;
 });
 let latencyEvents = 0;
 let latencyDetail;
@@ -372,6 +382,66 @@ assert(refreshedLatency.reportedLatencySamples === 224, "refreshLatency stores p
 assert(refreshedLatency.latencyRefreshes === 1, "refreshLatency counts latency refreshes");
 assert(latencyEvents === 3 && latencyDetail?.direction === "changed", "refreshLatency emits latencychange when reported latency changes");
 assert(healthChangeEvents === 3 && healthChangeDetail?.reportedLatencySamples === 224, "refreshLatency emits healthchange with reported latency");
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    ...pressureStats,
+    outputLatencyBlocks: 1,
+    transportLatencySamples: 128,
+    latencyIncreases: 1,
+    latencyDecreases: 1,
+    responseDeadlineMisses: 5,
+    staleOutputBlocks: 3,
+    droppedInputBlocks: 2,
+    underruns: 8
+  }
+});
+assert(liveNode.health.consecutiveTransportPressureEvents === 1, "transport-pressure streak starts after a new pressure window");
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    ...pressureStats,
+    outputLatencyBlocks: 1,
+    transportLatencySamples: 128,
+    latencyIncreases: 1,
+    latencyDecreases: 1,
+    responseDeadlineMisses: 6,
+    staleOutputBlocks: 4,
+    droppedInputBlocks: 3,
+    underruns: 9
+  }
+});
+assert(liveNode.health.consecutiveTransportPressureEvents === 2, "transport-pressure streak counts consecutive pressure windows");
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    ...pressureStats,
+    outputLatencyBlocks: 1,
+    transportLatencySamples: 128,
+    latencyIncreases: 1,
+    latencyDecreases: 1,
+    responseDeadlineMisses: 7,
+    staleOutputBlocks: 5,
+    droppedInputBlocks: 4,
+    underruns: 10
+  }
+});
+assert(liveNode.health.bypassed === true, "sustained transport pressure auto-bypasses the AudioNode");
+assert(liveNode.health.healthy === false, "transport-pressure auto-bypass marks AudioNode unhealthy");
+assert(liveNode.health.unhealthyReason === "transport-pressure", "transport-pressure auto-bypass records a recoverable reason");
+assert(liveNode.health.transportPressureAutoBypassed === true, "SoundBridgeAudioNode health reports transport-pressure auto-bypass");
+assert(liveNode.health.consecutiveTransportPressureEvents === 3, "SoundBridgeAudioNode keeps the streak that tripped transport auto-bypass");
+assert(transportPressureAutoBypassEvents === 1, "SoundBridgeAudioNode emits transport-pressure auto-bypass once");
+assert(transportPressureAutoBypassDetail?.health?.unhealthyReason === "transport-pressure", "transport-pressure auto-bypass includes unhealthy health");
+assert(
+  FakeAudioWorkletNode.last.port.messages.at(-1)?.type === "set-bypassed" &&
+    FakeAudioWorkletNode.last.port.messages.at(-1)?.bypassed === true,
+  "transport-pressure auto-bypass sends a dry command to the worklet"
+);
+FakeAudioWorkletNode.last.port.onmessage({ data: { ...pressureStats, outputLatencyBlocks: 1, transportLatencySamples: 128, latencyIncreases: 1, latencyDecreases: 1, responseDeadlineMisses: 7, staleOutputBlocks: 5, droppedInputBlocks: 4, underruns: 10 } });
+assert(liveNode.health.transportPressureAutoBypassed === true, "stale calm stats do not clear transport-pressure auto-bypass");
+liveNode.setBypassed(false);
+assert(liveNode.health.bypassed === false, "manual unbypass retries after transport-pressure auto-bypass");
+assert(liveNode.health.healthy === true, "manual retry clears transport-pressure auto-bypass health");
+assert(liveNode.health.unhealthyReason === undefined, "manual retry clears the transport-pressure unhealthy reason");
+assert(liveNode.health.consecutiveTransportPressureEvents === 0, "manual retry clears the transport-pressure streak");
 let renderPressureEvents = 0;
 let renderPressureDetail;
 let autoBypassEvents = 0;
