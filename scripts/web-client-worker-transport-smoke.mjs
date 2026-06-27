@@ -256,6 +256,41 @@ FakeAudioWorkletNode.last.port.onmessage({
 });
 assert(statsEvents === 1, "SoundBridgeAudioNode emits one stats event per worklet stats message");
 assert(statsDetail.transportLatencySamples === 256, "SoundBridgeAudioNode preserves stats event details");
+let renderPressureEvents = 0;
+let renderPressureDetail;
+liveNode.addEventListener("render-budget-exceeded", (event) => {
+  renderPressureEvents += 1;
+  renderPressureDetail = event.detail;
+});
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    type: "process-diagnostics",
+    blockId: 88,
+    renderEngine: "native-vst3",
+    renderDurationMs: 3.5,
+    renderBudgetMs: 2.667,
+    renderBudgetExceeded: true
+  }
+});
+assert(liveNode.health.lastRenderEngine === "native-vst3", "SoundBridgeAudioNode health tracks render engine diagnostics");
+assert(liveNode.health.lastRenderDurationMs === 3.5, "SoundBridgeAudioNode health tracks render duration");
+assert(liveNode.health.lastRenderBudgetMs === 2.667, "SoundBridgeAudioNode health tracks render budget");
+assert(liveNode.health.renderBudgetExceeded === true, "SoundBridgeAudioNode health records render pressure");
+assert(liveNode.health.renderBudgetMisses === 1, "SoundBridgeAudioNode health counts render-budget misses");
+assert(renderPressureEvents === 1, "SoundBridgeAudioNode emits render-budget pressure events");
+assert(renderPressureDetail?.health?.renderBudgetMisses === 1, "render-budget pressure events include health");
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    type: "process-diagnostics",
+    blockId: 89,
+    renderEngine: "native-vst3",
+    renderDurationMs: 1.5,
+    renderBudgetMs: 2.667,
+    renderBudgetExceeded: false
+  }
+});
+assert(liveNode.health.renderBudgetMisses === 0, "SoundBridgeAudioNode clears render pressure after on-budget blocks");
+assert(liveNode.health.renderBudgetExceeded === false, "SoundBridgeAudioNode health records recovered render budget");
 
 const fallbackCalls = [];
 const fallbackClient = {

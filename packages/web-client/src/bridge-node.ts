@@ -25,6 +25,20 @@ export interface SoundBridgeAudioNodeOptions {
 
 export interface LivePerformanceAudioNodeOptions extends SoundBridgeAudioNodeOptions {}
 
+export interface SoundBridgeAudioNodeHealth {
+  healthy: boolean;
+  instanceId: string;
+  audioTransport: "binary" | "json";
+  audioRequestTimeoutMs: number;
+  inFlightBlocks: number;
+  maxInFlightBlocks: number;
+  lastRenderEngine?: string;
+  lastRenderDurationMs?: number;
+  lastRenderBudgetMs?: number;
+  renderBudgetExceeded: boolean;
+  renderBudgetMisses: number;
+}
+
 const LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS = 4;
 const LIVE_AUDIO_NODE_MAX_QUEUED_OUTPUT_BLOCKS = 8;
 const LIVE_AUDIO_NODE_OUTPUT_LATENCY_BLOCKS = 2;
@@ -97,6 +111,11 @@ export class SoundBridgeAudioNode extends EventTarget {
   private readonly maxInFlightBlocks: number;
   private readonly audioTransport: "binary" | "json";
   private readonly audioRequestTimeoutMs: number;
+  private lastRenderEngine?: string;
+  private lastRenderDurationMs?: number;
+  private lastRenderBudgetMs?: number;
+  private renderBudgetExceeded = false;
+  private renderBudgetMisses = 0;
 
   private constructor(context: AudioContext, client: SoundBridgeClient, options: Required<SoundBridgeAudioNodeOptions>) {
     super();
@@ -212,6 +231,22 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.node.disconnect();
   }
 
+  get health(): SoundBridgeAudioNodeHealth {
+    return {
+      healthy: !this.destroyed,
+      instanceId: this.instanceId,
+      audioTransport: this.audioTransport,
+      audioRequestTimeoutMs: this.audioRequestTimeoutMs,
+      inFlightBlocks: this.inFlightBlocks,
+      maxInFlightBlocks: this.maxInFlightBlocks,
+      lastRenderEngine: this.lastRenderEngine,
+      lastRenderDurationMs: this.lastRenderDurationMs,
+      lastRenderBudgetMs: this.lastRenderBudgetMs,
+      renderBudgetExceeded: this.renderBudgetExceeded,
+      renderBudgetMisses: this.renderBudgetMisses
+    };
+  }
+
   async destroy(): Promise<void> {
     this.destroyed = true;
     this.node.port.postMessage({ type: "destroy" });
@@ -282,6 +317,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     }
 
     if (typed.type === "process-diagnostics") {
+      this.recordProcessDiagnostics(typed);
       this.dispatchEvent(new CustomEvent("process-diagnostics", { detail: typed }));
       return;
     }
@@ -334,15 +370,17 @@ export class SoundBridgeAudioNode extends EventTarget {
           return;
         }
         if (typeof response.renderEngine === "string") {
+          const diagnostics = {
+            blockId: response.blockId,
+            renderEngine: response.renderEngine,
+            renderDurationMs: response.renderDurationMs,
+            renderBudgetMs: response.renderBudgetMs,
+            renderBudgetExceeded: response.renderBudgetExceeded
+          };
+          this.recordProcessDiagnostics(diagnostics);
           this.dispatchEvent(
             new CustomEvent("process-diagnostics", {
-              detail: {
-                blockId: response.blockId,
-                renderEngine: response.renderEngine,
-                renderDurationMs: response.renderDurationMs,
-                renderBudgetMs: response.renderBudgetMs,
-                renderBudgetExceeded: response.renderBudgetExceeded
-              }
+              detail: diagnostics
             })
           );
         }
@@ -367,9 +405,32 @@ export class SoundBridgeAudioNode extends EventTarget {
         this.inFlightBlocks -= 1;
       });
   }
+
+  private recordProcessDiagnostics(diagnostics: {
+    renderEngine?: unknown;
+    renderDurationMs?: unknown;
+    renderBudgetMs?: unknown;
+    renderBudgetExceeded?: unknown;
+  }): void {
+    if (typeof diagnostics.renderEngine === "string") {
+      this.lastRenderEngine = diagnostics.renderEngine;
+    }
+    this.lastRenderDurationMs = boundedOptionalNumber(diagnostics.renderDurationMs, 0, 60000);
+    this.lastRenderBudgetMs = boundedOptionalNumber(diagnostics.renderBudgetMs, 0, 60000);
+    this.renderBudgetExceeded = diagnostics.renderBudgetExceeded === true;
+    this.renderBudgetMisses = this.renderBudgetExceeded ? Math.min(1024, this.renderBudgetMisses + 1) : 0;
+    if (this.renderBudgetExceeded) {
+      this.dispatchEvent(new CustomEvent("render-budget-exceeded", { detail: { diagnostics, health: this.health } }));
+    }
+  }
 }
 
 function boundedInteger(value: number | undefined, fallback: number, min: number, max: number): number {
   const integer = Math.floor(Number(value ?? fallback));
   return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
+}
+
+function boundedOptionalNumber(value: unknown, min: number, max: number): number | undefined {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : undefined;
 }

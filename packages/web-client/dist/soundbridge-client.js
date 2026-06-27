@@ -681,6 +681,11 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.inFlightBlocks = 0;
     this.destroyed = false;
+    this.lastRenderEngine = undefined;
+    this.lastRenderDurationMs = undefined;
+    this.lastRenderBudgetMs = undefined;
+    this.renderBudgetExceeded = false;
+    this.renderBudgetMisses = 0;
     this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
       numberOfInputs: 1,
       numberOfOutputs: 1,
@@ -779,6 +784,22 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.node.disconnect();
   }
 
+  get health() {
+    return {
+      healthy: !this.destroyed,
+      instanceId: this.instanceId,
+      audioTransport: this.audioTransport,
+      audioRequestTimeoutMs: this.audioRequestTimeoutMs,
+      inFlightBlocks: this.inFlightBlocks,
+      maxInFlightBlocks: this.maxInFlightBlocks,
+      lastRenderEngine: this.lastRenderEngine,
+      lastRenderDurationMs: this.lastRenderDurationMs,
+      lastRenderBudgetMs: this.lastRenderBudgetMs,
+      renderBudgetExceeded: this.renderBudgetExceeded,
+      renderBudgetMisses: this.renderBudgetMisses
+    };
+  }
+
   async destroy() {
     this.destroyed = true;
     this.node.port.postMessage({ type: "destroy" });
@@ -796,6 +817,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     }
 
     if (message.type === "process-diagnostics") {
+      this.recordProcessDiagnostics(message);
       this.dispatchEvent(new CustomEvent("process-diagnostics", { detail: message }));
       return;
     }
@@ -848,15 +870,17 @@ export class SoundBridgeAudioNode extends EventTarget {
           return;
         }
         if (typeof response.renderEngine === "string") {
+          const diagnostics = {
+            blockId: response.blockId,
+            renderEngine: response.renderEngine,
+            renderDurationMs: response.renderDurationMs,
+            renderBudgetMs: response.renderBudgetMs,
+            renderBudgetExceeded: response.renderBudgetExceeded
+          };
+          this.recordProcessDiagnostics(diagnostics);
           this.dispatchEvent(
             new CustomEvent("process-diagnostics", {
-              detail: {
-                blockId: response.blockId,
-                renderEngine: response.renderEngine,
-                renderDurationMs: response.renderDurationMs,
-                renderBudgetMs: response.renderBudgetMs,
-                renderBudgetExceeded: response.renderBudgetExceeded
-              }
+              detail: diagnostics
             })
           );
         }
@@ -881,11 +905,29 @@ export class SoundBridgeAudioNode extends EventTarget {
         this.inFlightBlocks -= 1;
       });
   }
+
+  recordProcessDiagnostics(diagnostics) {
+    if (typeof diagnostics.renderEngine === "string") {
+      this.lastRenderEngine = diagnostics.renderEngine;
+    }
+    this.lastRenderDurationMs = boundedAudioNodeOptionalNumber(diagnostics.renderDurationMs, 0, 60000);
+    this.lastRenderBudgetMs = boundedAudioNodeOptionalNumber(diagnostics.renderBudgetMs, 0, 60000);
+    this.renderBudgetExceeded = diagnostics.renderBudgetExceeded === true;
+    this.renderBudgetMisses = this.renderBudgetExceeded ? Math.min(1024, this.renderBudgetMisses + 1) : 0;
+    if (this.renderBudgetExceeded) {
+      this.dispatchEvent(new CustomEvent("render-budget-exceeded", { detail: { diagnostics, health: this.health } }));
+    }
+  }
 }
 
 function boundedAudioNodeInteger(value, fallback, min, max) {
   const integer = Math.floor(Number(value ?? fallback));
   return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
+}
+
+function boundedAudioNodeOptionalNumber(value, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : undefined;
 }
 
 const LIVE_PERFORMANCE_INPUT_AGE_BLOCKS = 4;

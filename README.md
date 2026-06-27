@@ -107,6 +107,9 @@ Then create a plugin instance and put it in your Web Audio graph:
     outputChannels: negotiatedOutputChannels,
     workletUrl: "/soundbridge/soundbridge-worklet.js"
   });
+  pluginNode.addEventListener("render-budget-exceeded", () => {
+    console.warn("Plugin render exceeded the live block budget.", pluginNode.health);
+  });
 
   const oscillator = new OscillatorNode(audioContext, { frequency: 110 });
   oscillator.connect(pluginNode.node);
