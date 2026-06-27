@@ -244,6 +244,10 @@ assert(
   rackScheduler.snapshot().deadlinePressure.reasons.includes("increase-transport-latency"),
   "adaptive rack scheduler latency keeps scheduler pressure observable after an increase"
 );
+assert(
+  schedulerRaise.deadlinePressure?.reasons.includes("increase-transport-latency"),
+  "adaptive rack scheduler latency snapshots include scheduler pressure reasons"
+);
 
 const schedulerCooldown = rackSchedulerController.record({
   pluginLatencySamples: 64,
@@ -288,6 +292,7 @@ assert(schedulerRecovery.applied === true, "adaptive rack scheduler latency reco
 assert(schedulerRecovery.appliedDirection === "decrease", "adaptive rack scheduler latency reports downward scheduler changes");
 assert(schedulerRecovery.targetTransportLatencySamples === 384, "adaptive rack scheduler latency recovers in bounded one-block steps");
 assert(rackScheduler.snapshot().transportLatencySamples === 384, "adaptive rack scheduler latency applies the recovery target");
+assert(schedulerRecovery.deadlinePressure?.pressure === false, "adaptive rack scheduler latency snapshots show recovered pressure");
 
 const chainScheduler = createLiveEffectRackBlockScheduler({
   sampleRate: 48000,
@@ -337,6 +342,10 @@ assert(
   chainScheduler.snapshot().deadlinePressure.reasons.includes("increase-transport-latency"),
   "adaptive chain scheduler latency keeps scheduler pressure observable after an increase"
 );
+assert(
+  chainRaise.deadlinePressure?.reasons.includes("increase-transport-latency"),
+  "adaptive chain scheduler latency snapshots include scheduler pressure reasons"
+);
 
 const chainCooldown = chainController.record({
   latencySamples: 128,
@@ -374,5 +383,6 @@ assert(chainRecovery.applied === true, "adaptive chain scheduler latency recover
 assert(chainRecovery.appliedDirection === "decrease", "adaptive chain scheduler latency reports downward scheduler changes");
 assert(chainRecovery.targetTransportLatencySamples === 512, "adaptive chain scheduler latency recovers in bounded one-block steps");
 assert(chainScheduler.snapshot().transportLatencySamples === 512, "adaptive chain scheduler latency applies the recovery target");
+assert(chainRecovery.deadlinePressure?.pressure === false, "adaptive chain scheduler latency snapshots show recovered pressure");
 
 console.log("Live effect rack adaptive latency smoke checks passed.");

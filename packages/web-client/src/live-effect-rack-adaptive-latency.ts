@@ -7,7 +7,7 @@ import type {
   LiveEffectRackCalibrationWindowSnapshot,
   LiveEffectRackLatencyRefresher
 } from "./live-effect-rack-calibration";
-import type { LiveEffectRackDeadlinePressureHealth } from "./live-effect-rack-scheduler";
+import type { LiveEffectRackDeadlinePressure, LiveEffectRackDeadlinePressureHealth } from "./live-effect-rack-scheduler";
 
 const LIVE_EFFECT_ADAPTIVE_LATENCY_MIN_SAMPLES = 8;
 const LIVE_EFFECT_ADAPTIVE_LATENCY_COOLDOWN_BLOCKS = 64;
@@ -38,7 +38,7 @@ export interface LiveEffectRackSchedulerAdaptiveLatencyScheduler {
     health: LiveEffectRackDeadlinePressureHealth,
     calibration?: { warnings: string[] }
   ): unknown;
-  snapshot(): { transportLatencySamples: number };
+  snapshot(): { transportLatencySamples: number; deadlinePressure?: LiveEffectRackDeadlinePressure };
 }
 
 export interface LiveEffectRackChainSchedulerAdaptiveLatencyScheduler extends LiveEffectRackSchedulerAdaptiveLatencyScheduler {}
@@ -84,6 +84,7 @@ export interface LiveEffectRackSchedulerAdaptiveLatencySnapshot extends LiveEffe
   cooldownBlocksRemaining: number;
   stableBlocks: number;
   recoveryBlocksRemaining: number;
+  deadlinePressure?: LiveEffectRackDeadlinePressure;
 }
 
 export interface LiveEffectRackChainSchedulerAdaptiveLatencySnapshot extends LiveEffectRackCalibrationWindowSnapshot {
@@ -95,6 +96,7 @@ export interface LiveEffectRackChainSchedulerAdaptiveLatencySnapshot extends Liv
   cooldownBlocksRemaining: number;
   stableBlocks: number;
   recoveryBlocksRemaining: number;
+  deadlinePressure?: LiveEffectRackDeadlinePressure;
 }
 
 export class LiveEffectRackAdaptiveLatencyController<T = unknown> {
@@ -320,6 +322,7 @@ export class LiveEffectRackSchedulerAdaptiveLatencyController {
         this.window.reset();
       }
     }
+    const deadlinePressure = this.scheduler.snapshot().deadlinePressure;
     return {
       ...snapshot,
       applied,
@@ -328,7 +331,8 @@ export class LiveEffectRackSchedulerAdaptiveLatencyController {
       targetTransportLatencySamples,
       cooldownBlocksRemaining: this.cooldownBlocksRemaining,
       stableBlocks: this.stableBlocks,
-      recoveryBlocksRemaining: Math.max(0, this.latencyRecoveryBlocks - this.stableBlocks)
+      recoveryBlocksRemaining: Math.max(0, this.latencyRecoveryBlocks - this.stableBlocks),
+      deadlinePressure
     };
   }
 
@@ -469,6 +473,7 @@ export class LiveEffectRackChainSchedulerAdaptiveLatencyController {
         this.window.reset();
       }
     }
+    const deadlinePressure = this.scheduler.snapshot().deadlinePressure;
     return {
       ...snapshot,
       applied,
@@ -478,7 +483,8 @@ export class LiveEffectRackChainSchedulerAdaptiveLatencyController {
       targetTransportLatencySamples,
       cooldownBlocksRemaining: this.cooldownBlocksRemaining,
       stableBlocks: this.stableBlocks,
-      recoveryBlocksRemaining: Math.max(0, this.latencyRecoveryBlocks - this.stableBlocks)
+      recoveryBlocksRemaining: Math.max(0, this.latencyRecoveryBlocks - this.stableBlocks),
+      deadlinePressure
     };
   }
 

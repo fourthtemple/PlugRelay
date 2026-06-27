@@ -2223,6 +2223,7 @@ export class LiveEffectRackSchedulerAdaptiveLatencyController {
         this.window.reset();
       }
     }
+    const deadlinePressure = this.scheduler.snapshot().deadlinePressure;
     return {
       ...snapshot,
       applied,
@@ -2231,7 +2232,8 @@ export class LiveEffectRackSchedulerAdaptiveLatencyController {
       targetTransportLatencySamples,
       cooldownBlocksRemaining: this.cooldownBlocksRemaining,
       stableBlocks: this.stableBlocks,
-      recoveryBlocksRemaining: Math.max(0, this.latencyRecoveryBlocks - this.stableBlocks)
+      recoveryBlocksRemaining: Math.max(0, this.latencyRecoveryBlocks - this.stableBlocks),
+      deadlinePressure
     };
   }
 
@@ -2355,6 +2357,7 @@ export class LiveEffectRackChainSchedulerAdaptiveLatencyController {
         this.window.reset();
       }
     }
+    const deadlinePressure = this.scheduler.snapshot().deadlinePressure;
     return {
       ...snapshot,
       applied,
@@ -2364,7 +2367,8 @@ export class LiveEffectRackChainSchedulerAdaptiveLatencyController {
       targetTransportLatencySamples,
       cooldownBlocksRemaining: this.cooldownBlocksRemaining,
       stableBlocks: this.stableBlocks,
-      recoveryBlocksRemaining: Math.max(0, this.latencyRecoveryBlocks - this.stableBlocks)
+      recoveryBlocksRemaining: Math.max(0, this.latencyRecoveryBlocks - this.stableBlocks),
+      deadlinePressure
     };
   }
 
