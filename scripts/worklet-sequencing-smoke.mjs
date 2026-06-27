@@ -130,6 +130,25 @@ assert(
 );
 assert(directProcessor.inputBufferReuses === 1, "direct worklet transport counts input buffer reuse");
 
+const adaptiveProcessor = new processorCtor({
+  processorOptions: {
+    outputChannels: 1,
+    maxQueuedOutputBlocks: 4,
+    outputLatencyBlocks: 1,
+    maxOutputLatencyBlocks: 3,
+    latencyMissThresholdBlocks: 2
+  }
+});
+const adaptiveMainPort = lastPort;
+const adaptiveTransportPort = new TestPort();
+adaptiveMainPort.onmessage({ data: { type: "connect-transport", port: adaptiveTransportPort } });
+adaptiveProcessor.process([[Float32Array.from([0])]], [[new Float32Array(1)]]);
+adaptiveProcessor.process([[Float32Array.from([1])]], [[new Float32Array(1)]]);
+adaptiveProcessor.process([[Float32Array.from([2])]], [[new Float32Array(1)]]);
+assert(adaptiveProcessor.outputLatencyBlocks === 2, "direct worklet transport raises output latency after repeated misses");
+assert(adaptiveProcessor.latencyIncreases === 1, "direct worklet transport counts adaptive latency raises");
+assert(adaptiveProcessor.transportLatencySamples() === 2, "direct worklet transport reports adaptive transport latency samples");
+
 const statsProcessor = new processorCtor({
   processorOptions: {
     outputChannels: 1,
@@ -143,6 +162,9 @@ for (let index = 0; index < 128; index += 1) {
 }
 const statsMessage = statsPort.messages.find((message) => message.type === "stats");
 assert(typeof statsMessage?.inFlightBlocks === "number", "worklet stats report in-flight blocks");
+assert(typeof statsMessage?.transportLatencySamples === "number", "worklet stats report transport latency samples");
+assert(typeof statsMessage?.latencyIncreases === "number", "worklet stats report adaptive latency increases");
+assert(typeof statsMessage?.latencyDecreases === "number", "worklet stats report adaptive latency decreases");
 assert(typeof statsMessage?.inputBufferAllocations === "number", "worklet stats report input buffer allocations");
 assert(typeof statsMessage?.inputBufferReuses === "number", "worklet stats report input buffer reuse");
 assert(typeof statsMessage?.pooledInputBuffers === "number", "worklet stats report pooled input buffers");

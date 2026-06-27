@@ -583,7 +583,10 @@ export class SoundBridgeAudioNode extends EventTarget {
         outputChannels: options.outputChannels,
         maxInFlightBlocks: options.maxInFlightBlocks,
         maxQueuedOutputBlocks: options.maxQueuedOutputBlocks,
-        outputLatencyBlocks: options.outputLatencyBlocks
+        outputLatencyBlocks: options.outputLatencyBlocks,
+        minOutputLatencyBlocks: options.minOutputLatencyBlocks,
+        maxOutputLatencyBlocks: options.maxOutputLatencyBlocks,
+        adaptiveOutputLatency: options.adaptiveOutputLatency
       }
     });
     this.node.port.onmessage = (event) => this.handleWorkletMessage(event.data);
@@ -605,6 +608,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       maxInFlightBlocks: boundedAudioNodeInteger(options.maxInFlightBlocks, 8, 1, 64),
       maxQueuedOutputBlocks: boundedAudioNodeInteger(options.maxQueuedOutputBlocks, 16, 1, 64),
       outputLatencyBlocks: 1,
+      minOutputLatencyBlocks: 1,
+      maxOutputLatencyBlocks: 4,
+      adaptiveOutputLatency: options.adaptiveOutputLatency !== false,
       audioTransport: options.audioTransport === "json" ? "json" : "binary",
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
@@ -612,6 +618,18 @@ export class SoundBridgeAudioNode extends EventTarget {
       options.outputLatencyBlocks,
       Math.min(2, normalized.maxQueuedOutputBlocks),
       1,
+      normalized.maxQueuedOutputBlocks
+    );
+    normalized.minOutputLatencyBlocks = boundedAudioNodeInteger(
+      options.minOutputLatencyBlocks,
+      1,
+      1,
+      normalized.outputLatencyBlocks
+    );
+    normalized.maxOutputLatencyBlocks = boundedAudioNodeInteger(
+      options.maxOutputLatencyBlocks,
+      Math.min(normalized.maxQueuedOutputBlocks, Math.max(normalized.outputLatencyBlocks + 2, 4)),
+      normalized.outputLatencyBlocks,
       normalized.maxQueuedOutputBlocks
     );
     await context.audioWorklet.addModule(normalized.workletUrl);

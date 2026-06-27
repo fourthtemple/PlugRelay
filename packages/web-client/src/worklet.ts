@@ -1,12 +1,22 @@
 class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   private readonly outputChannels: number;
   private readonly maxQueuedOutputBlocks: number;
-  private readonly outputLatencyBlocks: number;
+  private outputLatencyBlocks: number;
+  private readonly minOutputLatencyBlocks: number;
+  private readonly maxOutputLatencyBlocks: number;
+  private readonly adaptiveOutputLatency: boolean;
+  private readonly latencyMissThresholdBlocks: number;
+  private readonly latencyRecoveryBlocks: number;
   private blockId = 0;
+  private lastFrames = 128;
   private underruns = 0;
   private processedBlocks = 0;
   private staleOutputBlocks = 0;
   private droppedInputBlocks = 0;
+  private latencyIncreases = 0;
+  private latencyDecreases = 0;
+  private consecutiveLatencyMisses = 0;
+  private consecutiveOnTimeBlocks = 0;
   private inputBufferAllocations = 0;
   private inputBufferReuses = 0;
   private pooledInputBuffers = 0;
@@ -30,6 +40,21 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       1,
       this.maxQueuedOutputBlocks
     );
+    this.minOutputLatencyBlocks = this.boundedInteger(
+      processorOptions.minOutputLatencyBlocks,
+      1,
+      1,
+      this.outputLatencyBlocks
+    );
+    this.maxOutputLatencyBlocks = this.boundedInteger(
+      processorOptions.maxOutputLatencyBlocks,
+      Math.min(this.maxQueuedOutputBlocks, Math.max(this.outputLatencyBlocks + 2, 4)),
+      this.outputLatencyBlocks,
+      this.maxQueuedOutputBlocks
+    );
+    this.adaptiveOutputLatency = processorOptions.adaptiveOutputLatency !== false;
+    this.latencyMissThresholdBlocks = this.boundedInteger(processorOptions.latencyMissThresholdBlocks, 2, 1, 32);
+    this.latencyRecoveryBlocks = this.boundedInteger(processorOptions.latencyRecoveryBlocks, 512, 32, 8192);
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
 
@@ -37,6 +62,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     const input = inputs[0] ?? [];
     const output = outputs[0] ?? [];
     const frames = output[0]?.length ?? input[0]?.length ?? 128;
+    this.lastFrames = frames;
     const outgoing = this.copyInputBlock(input, frames);
     const currentBlockId = this.blockId++;
     const targetBlockId = currentBlockId - this.outputLatencyBlocks;
@@ -50,7 +76,11 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.writeBlock(output, outgoing, frames);
       this.underruns += 1;
     }
-    this.dropStaleOutputBlocks(targetBlockId);
+    this.recordOutputTiming(Boolean(queued), targetBlockId);
+    const staleDropped = this.dropStaleOutputBlocks(targetBlockId);
+    if (staleDropped > 0) {
+      this.recordLateOutput();
+    }
 
     const processMessage = {
       type: "process",
@@ -78,6 +108,12 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         underruns: this.underruns,
         queuedOutputBlocks: this.outputBlocks.size,
         outputLatencyBlocks: this.outputLatencyBlocks,
+        minOutputLatencyBlocks: this.minOutputLatencyBlocks,
+        maxOutputLatencyBlocks: this.maxOutputLatencyBlocks,
+        adaptiveOutputLatency: this.adaptiveOutputLatency,
+        transportLatencySamples: this.transportLatencySamples(),
+        latencyIncreases: this.latencyIncreases,
+        latencyDecreases: this.latencyDecreases,
         staleOutputBlocks: this.staleOutputBlocks,
         droppedInputBlocks: this.droppedInputBlocks,
         inputBufferAllocations: this.inputBufferAllocations,
@@ -147,6 +183,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     if (blockId < this.blockId - this.outputLatencyBlocks) {
       this.staleOutputBlocks += 1;
+      this.recordLateOutput();
       return;
     }
 
@@ -192,6 +229,56 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
   private outputChannelBlock(channel: ArrayLike<number>): Float32Array {
     return channel instanceof Float32Array ? channel : Float32Array.from(channel);
+  }
+
+  private recordOutputTiming(onTime: boolean, targetBlockId: number): void {
+    if (!this.canAdaptLatency() || targetBlockId < 0) {
+      return;
+    }
+    if (onTime) {
+      this.consecutiveLatencyMisses = 0;
+      this.consecutiveOnTimeBlocks += 1;
+      if (
+        this.outputLatencyBlocks > this.minOutputLatencyBlocks &&
+        this.consecutiveOnTimeBlocks >= this.latencyRecoveryBlocks
+      ) {
+        this.outputLatencyBlocks -= 1;
+        this.latencyDecreases += 1;
+        this.consecutiveOnTimeBlocks = 0;
+      }
+      return;
+    }
+    this.consecutiveOnTimeBlocks = 0;
+    this.consecutiveLatencyMisses += 1;
+    if (
+      this.outputLatencyBlocks < this.maxOutputLatencyBlocks &&
+      this.consecutiveLatencyMisses >= this.latencyMissThresholdBlocks
+    ) {
+      this.outputLatencyBlocks += 1;
+      this.latencyIncreases += 1;
+      this.consecutiveLatencyMisses = 0;
+    }
+  }
+
+  private recordLateOutput(): void {
+    if (!this.canAdaptLatency() || this.outputLatencyBlocks >= this.maxOutputLatencyBlocks) {
+      return;
+    }
+    this.consecutiveOnTimeBlocks = 0;
+    this.consecutiveLatencyMisses += 1;
+    if (this.consecutiveLatencyMisses >= this.latencyMissThresholdBlocks) {
+      this.outputLatencyBlocks += 1;
+      this.latencyIncreases += 1;
+      this.consecutiveLatencyMisses = 0;
+    }
+  }
+
+  private canAdaptLatency(): boolean {
+    return this.adaptiveOutputLatency && Boolean(this.transportPort);
+  }
+
+  private transportLatencySamples(): number {
+    return this.outputLatencyBlocks * this.lastFrames;
   }
 
   private takeInputBuffer(frames: number): Float32Array {
@@ -245,16 +332,19 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
   }
 
-  private dropStaleOutputBlocks(targetBlockId: number): void {
+  private dropStaleOutputBlocks(targetBlockId: number): number {
     if (targetBlockId < 0) {
-      return;
+      return 0;
     }
+    let dropped = 0;
     for (const blockId of Array.from(this.outputBlocks.keys())) {
       if (blockId < targetBlockId) {
         this.outputBlocks.delete(blockId);
         this.staleOutputBlocks += 1;
+        dropped += 1;
       }
     }
+    return dropped;
   }
 
   private boundedInteger(value: unknown, fallback: number, min: number, max: number): number {

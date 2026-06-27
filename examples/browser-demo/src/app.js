@@ -45,6 +45,8 @@ const elements = {
   droppedInputBlocks: document.querySelector("#droppedInputBlocks"),
   inFlightBlocks: document.querySelector("#inFlightBlocks"),
   outputLatencyBlocks: document.querySelector("#outputLatencyBlocks"),
+  transportLatencySamples: document.querySelector("#transportLatencySamples"),
+  latencyIncreases: document.querySelector("#latencyIncreases"),
   inputBufferAllocations: document.querySelector("#inputBufferAllocations"),
   inputBufferReuses: document.querySelector("#inputBufferReuses"),
   renderEngine: document.querySelector("#renderEngine"),
@@ -64,6 +66,7 @@ let activePluginId;
 let activeInstancePlugin;
 let bridgeStartupPromise;
 let controlsEnabled = false;
+let latestTransportLatencySamples = 0;
 const activeNotes = new Set();
 const keyToNote = new Map();
 const fileGrantActions = createFileGrantActions({
@@ -345,13 +348,17 @@ async function doEnsureBridgeInstance(recreate = false) {
   selectedInstanceId = instanceId;
   activePluginId = pluginId;
   activeInstancePlugin = created.plugin ?? pluginBrowser.selectedPlugin();
+  latestTransportLatencySamples = 0;
   elements.renderEngine.textContent = "Waiting";
   bridge = await SoundBridgeAudioNode.create(audioContext, client, {
     instanceId,
     inputChannels,
     outputChannels,
     maxInFlightBlocks: 8,
-    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627a"
+    minOutputLatencyBlocks: 1,
+    maxOutputLatencyBlocks: 4,
+    adaptiveOutputLatency: true,
+    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627b"
   });
 
   analyser = audioContext.createAnalyser();
@@ -368,6 +375,9 @@ async function doEnsureBridgeInstance(recreate = false) {
     elements.droppedInputBlocks.textContent = String(stats.droppedInputBlocks ?? 0);
     elements.inFlightBlocks.textContent = String(stats.inFlightBlocks ?? 0);
     elements.outputLatencyBlocks.textContent = String(stats.outputLatencyBlocks ?? 0);
+    elements.transportLatencySamples.textContent = String(stats.transportLatencySamples ?? 0);
+    latestTransportLatencySamples = Number(stats.transportLatencySamples ?? latestTransportLatencySamples) || 0;
+    elements.latencyIncreases.textContent = String(stats.latencyIncreases ?? 0);
     elements.inputBufferAllocations.textContent = String(stats.inputBufferAllocations ?? 0);
     elements.inputBufferReuses.textContent = String(stats.inputBufferReuses ?? 0);
   });
@@ -493,7 +503,7 @@ async function refreshLatency() {
     return;
   }
   try {
-    const latency = await client.getLatency(selectedInstanceId);
+    const latency = await client.getLatency(selectedInstanceId, latestTransportLatencySamples);
     setStatus(elements.latencyStatus, `${latency.reportedLatencySamples} samples`, "ready");
   } catch (error) {
     setStatus(elements.latencyStatus, "Latency unknown", "");
