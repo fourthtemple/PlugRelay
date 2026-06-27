@@ -2572,6 +2572,7 @@ function liveEffectChainStageErrorResult(index, stage, error, durationMs) {
 
 const LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID = 9_007_199_254_740_991;
 const LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION = 9_007_199_254_740_991;
+const LIVE_EFFECT_SCHEDULER_DEADLINE_LEAD_TARGET_BLOCKS = 1;
 
 export class LiveEffectRackBlockScheduler {
   constructor(options) {
@@ -2582,8 +2583,19 @@ export class LiveEffectRackBlockScheduler {
     this.transportLatencySamples = boundedLiveEffectLatencySamples(options.transportLatencySamples, 0);
     this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, 0, 0, 60000);
     this.compensateOutputLatency = options.compensateOutputLatency !== false;
+    this.deadlineLeadTargetBlocks = boundedLiveEffectNumber(
+      options.deadlineLeadTargetBlocks,
+      LIVE_EFFECT_SCHEDULER_DEADLINE_LEAD_TARGET_BLOCKS,
+      0,
+      64
+    );
+    this.responseJitterThresholdBlocks = boundedLiveEffectNumber(options.responseJitterThresholdBlocks, 0, 0, 64);
     this.nowMs = typeof options.nowMs === "function" ? options.nowMs : liveEffectNowMs;
     this.baseTransport = { ...options.transport };
+    this.responseJitterBlocks = 0;
+    this.responseDeadlineMisses = 0;
+    this.responseDeadlineMissesSinceLastUpdate = 0;
+    this.deadlinePressureWarnings = [];
   }
 
   schedule(channels, options = {}) {
@@ -2624,6 +2636,7 @@ export class LiveEffectRackBlockScheduler {
       timestamp,
       captureAgeMs,
       stale: this.maxInputAgeMs > 0 && captureAgeMs > this.maxInputAgeMs,
+      deadlinePressure: this.deadlinePressureSnapshot(transportLatencySamples),
       transport
     };
   }
@@ -2634,18 +2647,24 @@ export class LiveEffectRackBlockScheduler {
   }
 
   updateFromRackHealth(health) {
-    return this.updateLatency(health.transportLatencySamples);
+    this.updateLatency(health.transportLatencySamples);
+    this.updateDeadlinePressure(health);
+    return this.transportLatencySamples;
   }
 
   updateFromChainHealth(health) {
-    return this.updateLatency(health.latencySamples);
+    this.updateLatency(health.latencySamples);
+    this.updateDeadlinePressure(health);
+    return this.transportLatencySamples;
   }
 
   updateFromChainCalibration(health, calibration) {
-    return this.updateLatency(combinedLiveEffectLatencySamples(
+    this.updateLatency(combinedLiveEffectLatencySamples(
       boundedLiveEffectLatencySamples(health.latencySamples, 0),
       boundedLiveEffectLatencySamples(calibration.recommendedTransportLatencySamples, 0)
     ));
+    this.updateDeadlinePressure(health, calibration);
+    return this.transportLatencySamples;
   }
 
   reset(options = {}) {
@@ -2658,7 +2677,11 @@ export class LiveEffectRackBlockScheduler {
       nextBlockId: this.nextBlockId,
       nextSamplePosition: this.nextSamplePosition,
       transportLatencySamples: this.transportLatencySamples,
-      maxInputAgeMs: this.maxInputAgeMs
+      transportLatencyBlocks: this.transportLatencyBlocks(),
+      maxInputAgeMs: this.maxInputAgeMs,
+      deadlineLeadTargetBlocks: this.deadlineLeadTargetBlocks,
+      responseJitterThresholdBlocks: this.responseJitterThresholdBlocks,
+      deadlinePressure: this.deadlinePressureSnapshot()
     };
   }
 
@@ -2667,6 +2690,52 @@ export class LiveEffectRackBlockScheduler {
     if (samplePosition !== void 0) {
       this.nextSamplePosition = Math.min(LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION, samplePosition + this.maxBlockSize);
     }
+  }
+
+  updateDeadlinePressure(health, calibration) {
+    const lead = boundedLiveEffectOptionalNumber(health.lastResponseDeadlineLeadBlocks, -64, 64);
+    const jitter = boundedLiveEffectOptionalNumber(health.responseJitterBlocks, 0, 64);
+    if (lead !== void 0) this.lastResponseDeadlineLeadBlocks = lead;
+    if (jitter !== void 0) this.responseJitterBlocks = jitter;
+    if (health.responseDeadlineMisses !== void 0) {
+      const nextMisses = boundedLiveEffectInteger(health.responseDeadlineMisses, this.responseDeadlineMisses, 0, Number.MAX_SAFE_INTEGER);
+      this.responseDeadlineMissesSinceLastUpdate = liveEffectSchedulerPressureCounterDelta(nextMisses, this.responseDeadlineMisses);
+      this.responseDeadlineMisses = nextMisses;
+    }
+    this.deadlinePressureWarnings = calibration?.warnings?.slice() ?? [];
+    return this.deadlinePressureSnapshot();
+  }
+
+  deadlinePressureReasonsForLatency(transportLatencySamples) {
+    const reasons = [];
+    const warnings = this.deadlinePressureWarnings;
+    if (this.responseDeadlineMissesSinceLastUpdate > 0 || warnings.includes("deadline-miss")) reasons.push("deadline-miss");
+    if (this.lastResponseDeadlineLeadBlocks !== void 0 && this.lastResponseDeadlineLeadBlocks < this.deadlineLeadTargetBlocks) {
+      reasons.push("low-deadline-lead");
+    }
+    if (this.responseJitterBlocks > this.transportLatencyBlocks(transportLatencySamples) + this.responseJitterThresholdBlocks || warnings.includes("response-jitter")) {
+      reasons.push("response-jitter");
+    }
+    if (warnings.includes("increase-transport-latency")) reasons.push("increase-transport-latency");
+    return Array.from(new Set(reasons));
+  }
+
+  deadlinePressureSnapshot(transportLatencySamples = this.transportLatencySamples) {
+    const reasons = this.deadlinePressureReasonsForLatency(transportLatencySamples);
+    return {
+      pressure: reasons.length > 0,
+      reasons,
+      lastResponseDeadlineLeadBlocks: this.lastResponseDeadlineLeadBlocks,
+      responseJitterBlocks: this.responseJitterBlocks,
+      responseDeadlineMisses: this.responseDeadlineMisses,
+      responseDeadlineMissesSinceLastUpdate: this.responseDeadlineMissesSinceLastUpdate,
+      transportLatencySamples,
+      transportLatencyBlocks: this.transportLatencyBlocks(transportLatencySamples)
+    };
+  }
+
+  transportLatencyBlocks(transportLatencySamples = this.transportLatencySamples) {
+    return this.maxBlockSize > 0 ? Number((transportLatencySamples / this.maxBlockSize).toFixed(3)) : 0;
   }
 }
 
@@ -2682,6 +2751,10 @@ function optionalLiveEffectSchedulerInteger(value, min, max) {
 function finiteLiveEffectSchedulerNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function liveEffectSchedulerPressureCounterDelta(current, baseline) {
+  return current >= baseline ? current - baseline : current;
 }
 
 export function liveTransportForBlock(options) {

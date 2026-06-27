@@ -45,11 +45,30 @@ assert(second.request.wetMix === 0.25, "live rack scheduler preserves per-block 
 assert(second.transport.playing === false && second.transport.tempo === 96, "live rack scheduler applies per-block transport overrides");
 assert(second.transport.samplePosition === 1664, "live rack scheduler keeps latency compensation after advancing");
 
-scheduler.updateFromRackHealth({ transportLatencySamples: 512 });
+scheduler.updateFromRackHealth({
+  transportLatencySamples: 512,
+  lastResponseDeadlineLeadBlocks: 0.5,
+  responseJitterBlocks: 5,
+  responseDeadlineMisses: 2
+});
 now = 1010;
 const stale = scheduler.schedule([[0.25]], { timestamp: 1000 });
 assert(stale.stale === true && stale.captureAgeMs === 10, "live rack scheduler detects stale captured audio");
 assert(stale.transport.samplePosition === 2048, "live rack scheduler uses updated rack transport latency");
+assert(
+  stale.deadlinePressure.pressure &&
+    stale.deadlinePressure.reasons.includes("deadline-miss") &&
+    stale.deadlinePressure.reasons.includes("low-deadline-lead") &&
+    stale.deadlinePressure.reasons.includes("response-jitter"),
+  "live rack scheduler carries deadline pressure into scheduled blocks"
+);
+scheduler.updateFromRackHealth({
+  transportLatencySamples: 512,
+  lastResponseDeadlineLeadBlocks: 2,
+  responseJitterBlocks: 1,
+  responseDeadlineMisses: 2
+});
+assert(scheduler.snapshot().deadlinePressure.pressure === false, "live rack scheduler clears pressure after stable rack health");
 
 const chain = createLiveEffectRackChain({
   stages: [{
@@ -86,6 +105,61 @@ scheduler.updateFromChainCalibration(chain.health, chainCalibration);
 now = 1012;
 const calibratedChain = scheduler.schedule([[0.3]], { timestamp: now });
 assert(calibratedChain.transport.samplePosition === 2560, "live rack scheduler applies calibrated chain latency compensation");
+
+const pressureScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  transportLatencySamples: 0,
+  nowMs: () => now
+});
+pressureScheduler.updateFromChainCalibration(
+  {
+    latencySamples: 0,
+    lastResponseDeadlineLeadBlocks: 0.25,
+    responseJitterBlocks: 3,
+    responseDeadlineMisses: 1
+  },
+  {
+    recommendedTransportLatencySamples: 512,
+    warnings: ["deadline-miss", "response-jitter", "increase-transport-latency"]
+  }
+);
+const pressuredSnapshot = pressureScheduler.snapshot();
+assert(
+  pressuredSnapshot.transportLatencyBlocks === 4 &&
+    pressuredSnapshot.deadlinePressure.reasons.includes("increase-transport-latency"),
+  "live rack scheduler exposes calibrated deadline-pressure recommendations"
+);
+pressureScheduler.updateFromChainHealth({
+  latencySamples: 512,
+  lastResponseDeadlineLeadBlocks: 2,
+  responseJitterBlocks: 1,
+  responseDeadlineMisses: 1
+});
+assert(
+  pressureScheduler.snapshot().deadlinePressure.pressure === false,
+  "live rack scheduler resolves chain pressure when added latency covers jitter and lead"
+);
+
+const overrideScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  transportLatencySamples: 0,
+  nowMs: () => now
+});
+overrideScheduler.updateFromRackHealth({
+  transportLatencySamples: 0,
+  lastResponseDeadlineLeadBlocks: 2,
+  responseJitterBlocks: 3,
+  responseDeadlineMisses: 0
+});
+const overrideLatencyBlock = overrideScheduler.schedule([[0.1]], { transportLatencySamples: 512 });
+assert(
+  overrideScheduler.snapshot().deadlinePressure.pressure === true &&
+    overrideLatencyBlock.deadlinePressure.pressure === false &&
+    overrideLatencyBlock.deadlinePressure.transportLatencyBlocks === 4,
+  "live rack scheduler evaluates per-block pressure against per-block transport latency"
+);
 
 const explicitTransport = { playing: false, samplePosition: 7 };
 const explicit = scheduler.schedule([[0.1]], { transport: explicitTransport, timestamp: now });

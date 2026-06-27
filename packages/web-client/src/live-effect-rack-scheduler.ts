@@ -4,6 +4,7 @@ import {
   boundedLatencySamples,
   boundedLiveEffectInteger,
   boundedLiveEffectNumber,
+  boundedOptionalNumber,
   combinedLatencySamples,
   liveEffectNowMs
 } from "./live-effect-rack-metrics";
@@ -13,6 +14,24 @@ import type { LiveTransportBlockOptions } from "./live-transport";
 
 const LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID = 9_007_199_254_740_991;
 const LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION = 9_007_199_254_740_991;
+const LIVE_EFFECT_SCHEDULER_DEADLINE_LEAD_TARGET_BLOCKS = 1;
+
+export type LiveEffectRackDeadlinePressureReason =
+  | "deadline-miss"
+  | "increase-transport-latency"
+  | "low-deadline-lead"
+  | "response-jitter";
+
+export interface LiveEffectRackDeadlinePressure {
+  pressure: boolean;
+  reasons: LiveEffectRackDeadlinePressureReason[];
+  lastResponseDeadlineLeadBlocks?: number;
+  responseJitterBlocks: number;
+  responseDeadlineMisses: number;
+  responseDeadlineMissesSinceLastUpdate: number;
+  transportLatencySamples: number;
+  transportLatencyBlocks: number;
+}
 
 export interface LiveEffectRackBlockSchedulerOptions {
   sampleRate: number;
@@ -22,6 +41,8 @@ export interface LiveEffectRackBlockSchedulerOptions {
   transportLatencySamples?: number;
   maxInputAgeMs?: number;
   compensateOutputLatency?: boolean;
+  deadlineLeadTargetBlocks?: number;
+  responseJitterThresholdBlocks?: number;
   nowMs?: () => number;
   transport?: Partial<LiveTransportBlockOptions>;
 }
@@ -33,6 +54,7 @@ export interface LiveEffectRackScheduledBlock {
   timestamp: number;
   captureAgeMs: number;
   stale: boolean;
+  deadlinePressure: LiveEffectRackDeadlinePressure;
   transport: HostTransportState;
 }
 
@@ -42,16 +64,29 @@ export interface LiveEffectRackScheduleOptions extends Omit<Partial<LiveEffectBl
   transportOptions?: Partial<LiveTransportBlockOptions>;
 }
 
+export interface LiveEffectRackDeadlinePressureHealth {
+  lastResponseDeadlineLeadBlocks?: unknown;
+  responseJitterBlocks?: unknown;
+  responseDeadlineMisses?: unknown;
+}
+
 export class LiveEffectRackBlockScheduler {
   readonly sampleRate: number;
   readonly maxBlockSize: number;
   readonly maxInputAgeMs: number;
   readonly compensateOutputLatency: boolean;
+  readonly deadlineLeadTargetBlocks: number;
+  readonly responseJitterThresholdBlocks: number;
   private readonly nowMs: () => number;
   private readonly baseTransport: Partial<LiveTransportBlockOptions>;
   private nextBlockId: number;
   private nextSamplePosition?: number;
   private transportLatencySamples: number;
+  private lastResponseDeadlineLeadBlocks?: number;
+  private responseJitterBlocks = 0;
+  private responseDeadlineMisses = 0;
+  private responseDeadlineMissesSinceLastUpdate = 0;
+  private deadlinePressureWarnings: string[] = [];
 
   constructor(options: LiveEffectRackBlockSchedulerOptions) {
     this.sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
@@ -61,6 +96,13 @@ export class LiveEffectRackBlockScheduler {
     this.transportLatencySamples = boundedLatencySamples(options.transportLatencySamples, 0);
     this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, 0, 0, 60000);
     this.compensateOutputLatency = options.compensateOutputLatency !== false;
+    this.deadlineLeadTargetBlocks = boundedLiveEffectNumber(
+      options.deadlineLeadTargetBlocks,
+      LIVE_EFFECT_SCHEDULER_DEADLINE_LEAD_TARGET_BLOCKS,
+      0,
+      64
+    );
+    this.responseJitterThresholdBlocks = boundedLiveEffectNumber(options.responseJitterThresholdBlocks, 0, 0, 64);
     this.nowMs = typeof options.nowMs === "function" ? options.nowMs : liveEffectNowMs;
     this.baseTransport = { ...options.transport };
   }
@@ -103,6 +145,7 @@ export class LiveEffectRackBlockScheduler {
       timestamp,
       captureAgeMs,
       stale: this.maxInputAgeMs > 0 && captureAgeMs > this.maxInputAgeMs,
+      deadlinePressure: this.deadlinePressureSnapshot(transportLatencySamples),
       transport
     };
   }
@@ -112,22 +155,30 @@ export class LiveEffectRackBlockScheduler {
     return this.transportLatencySamples;
   }
 
-  updateFromRackHealth(health: Pick<LiveEffectRackHealth, "transportLatencySamples">): number {
-    return this.updateLatency(health.transportLatencySamples);
+  updateFromRackHealth(
+    health: Pick<LiveEffectRackHealth, "transportLatencySamples"> & LiveEffectRackDeadlinePressureHealth
+  ): number {
+    this.updateLatency(health.transportLatencySamples);
+    this.updateDeadlinePressure(health);
+    return this.transportLatencySamples;
   }
 
-  updateFromChainHealth(health: { latencySamples: unknown }): number {
-    return this.updateLatency(health.latencySamples);
+  updateFromChainHealth(health: { latencySamples: unknown } & LiveEffectRackDeadlinePressureHealth): number {
+    this.updateLatency(health.latencySamples);
+    this.updateDeadlinePressure(health);
+    return this.transportLatencySamples;
   }
 
   updateFromChainCalibration(
-    health: { latencySamples: unknown },
-    calibration: Pick<LiveEffectRackCalibration, "recommendedTransportLatencySamples">
+    health: { latencySamples: unknown } & LiveEffectRackDeadlinePressureHealth,
+    calibration: Pick<LiveEffectRackCalibration, "recommendedTransportLatencySamples" | "warnings">
   ): number {
-    return this.updateLatency(combinedLatencySamples(
+    this.updateLatency(combinedLatencySamples(
       boundedLatencySamples(health.latencySamples, 0),
       boundedLatencySamples(calibration.recommendedTransportLatencySamples, 0)
     ));
+    this.updateDeadlinePressure(health, calibration);
+    return this.transportLatencySamples;
   }
 
   reset(options: { nextBlockId?: number; nextSamplePosition?: number } = {}): void {
@@ -139,13 +190,21 @@ export class LiveEffectRackBlockScheduler {
     nextBlockId: number;
     nextSamplePosition?: number;
     transportLatencySamples: number;
+    transportLatencyBlocks: number;
     maxInputAgeMs: number;
+    deadlineLeadTargetBlocks: number;
+    responseJitterThresholdBlocks: number;
+    deadlinePressure: LiveEffectRackDeadlinePressure;
   } {
     return {
       nextBlockId: this.nextBlockId,
       nextSamplePosition: this.nextSamplePosition,
       transportLatencySamples: this.transportLatencySamples,
-      maxInputAgeMs: this.maxInputAgeMs
+      transportLatencyBlocks: this.transportLatencyBlocks(),
+      maxInputAgeMs: this.maxInputAgeMs,
+      deadlineLeadTargetBlocks: this.deadlineLeadTargetBlocks,
+      responseJitterThresholdBlocks: this.responseJitterThresholdBlocks,
+      deadlinePressure: this.deadlinePressureSnapshot()
     };
   }
 
@@ -154,6 +213,55 @@ export class LiveEffectRackBlockScheduler {
     if (samplePosition !== undefined) {
       this.nextSamplePosition = Math.min(LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION, samplePosition + this.maxBlockSize);
     }
+  }
+
+  private updateDeadlinePressure(
+    health: LiveEffectRackDeadlinePressureHealth,
+    calibration?: Pick<LiveEffectRackCalibration, "warnings">
+  ): LiveEffectRackDeadlinePressure {
+    const lead = boundedOptionalNumber(health.lastResponseDeadlineLeadBlocks, -64, 64);
+    const jitter = boundedOptionalNumber(health.responseJitterBlocks, 0, 64);
+    if (lead !== undefined) this.lastResponseDeadlineLeadBlocks = lead;
+    if (jitter !== undefined) this.responseJitterBlocks = jitter;
+    if (health.responseDeadlineMisses !== undefined) {
+      const nextMisses = boundedLiveEffectInteger(health.responseDeadlineMisses, this.responseDeadlineMisses, 0, Number.MAX_SAFE_INTEGER);
+      this.responseDeadlineMissesSinceLastUpdate = pressureCounterDelta(nextMisses, this.responseDeadlineMisses);
+      this.responseDeadlineMisses = nextMisses;
+    }
+    this.deadlinePressureWarnings = calibration?.warnings?.slice() ?? [];
+    return this.deadlinePressureSnapshot();
+  }
+
+  private deadlinePressureReasonsForLatency(transportLatencySamples: number): LiveEffectRackDeadlinePressureReason[] {
+    const reasons: LiveEffectRackDeadlinePressureReason[] = [];
+    const warnings = this.deadlinePressureWarnings;
+    if (this.responseDeadlineMissesSinceLastUpdate > 0 || warnings.includes("deadline-miss")) reasons.push("deadline-miss");
+    if (this.lastResponseDeadlineLeadBlocks !== undefined && this.lastResponseDeadlineLeadBlocks < this.deadlineLeadTargetBlocks) {
+      reasons.push("low-deadline-lead");
+    }
+    if (this.responseJitterBlocks > this.transportLatencyBlocks(transportLatencySamples) + this.responseJitterThresholdBlocks || warnings.includes("response-jitter")) {
+      reasons.push("response-jitter");
+    }
+    if (warnings.includes("increase-transport-latency")) reasons.push("increase-transport-latency");
+    return Array.from(new Set(reasons));
+  }
+
+  private deadlinePressureSnapshot(transportLatencySamples = this.transportLatencySamples): LiveEffectRackDeadlinePressure {
+    const reasons = this.deadlinePressureReasonsForLatency(transportLatencySamples);
+    return {
+      pressure: reasons.length > 0,
+      reasons,
+      lastResponseDeadlineLeadBlocks: this.lastResponseDeadlineLeadBlocks,
+      responseJitterBlocks: this.responseJitterBlocks,
+      responseDeadlineMisses: this.responseDeadlineMisses,
+      responseDeadlineMissesSinceLastUpdate: this.responseDeadlineMissesSinceLastUpdate,
+      transportLatencySamples,
+      transportLatencyBlocks: this.transportLatencyBlocks(transportLatencySamples)
+    };
+  }
+
+  private transportLatencyBlocks(transportLatencySamples = this.transportLatencySamples): number {
+    return this.maxBlockSize > 0 ? Number((transportLatencySamples / this.maxBlockSize).toFixed(3)) : 0;
   }
 }
 
@@ -169,4 +277,8 @@ function optionalSchedulerInteger(value: unknown, min: number, max: number): num
 function finiteSchedulerNumber(value: unknown, fallback: number): number {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function pressureCounterDelta(current: number, baseline: number): number {
+  return current >= baseline ? current - baseline : current;
 }
