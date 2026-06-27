@@ -948,20 +948,24 @@ export class SoundBridgeAudioNode extends EventTarget {
     if (this.destroyed) {
       return;
     }
-    if (!bypassed && (this.renderBudgetAutoBypassed || this.audioErrorAutoBypassed || this.transportPressureAutoBypassed)) {
-      this.renderBudgetAutoBypassed = this.audioErrorAutoBypassed = this.transportPressureAutoBypassed = false;
-      this.renderBudgetExceeded = false;
-      this.renderBudgetMisses = 0;
-      this.consecutiveAudioErrors = 0;
-      this.consecutiveTransportPressureEvents = 0;
-      this.lastAudioError = undefined;
-      if (this.unhealthyReason === "render-budget-exceeded" || this.unhealthyReason === "audio-error" || this.unhealthyReason === "transport-pressure") this.unhealthyReason = undefined;
-    }
+    if (!bypassed) this.clearAutoBypassState();
     if (this.bypassed === bypassed) return;
     this.bypassed = bypassed;
     this.bypassEvents = Math.min(1024, this.bypassEvents + 1);
     this.node.port.postMessage({ type: "set-bypassed", bypassed });
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  retry() {
+    if (this.destroyed || !this.clearAutoBypassState()) return false;
+    if (this.bypassed) {
+      this.bypassed = false;
+      this.bypassEvents = Math.min(1024, this.bypassEvents + 1);
+      this.node.port.postMessage({ type: "set-bypassed", bypassed: false });
+    }
+    this.dispatchEvent(new CustomEvent("retry", { detail: { health: this.health } }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+    return true;
   }
 
   async refreshLatency(transportLatencySamples = this.transportLatencySamples) {
@@ -1326,6 +1330,18 @@ export class SoundBridgeAudioNode extends EventTarget {
       this.consecutiveAudioErrors = 0;
       this.unhealthyReason = undefined;
     }
+  }
+
+  clearAutoBypassState() {
+    if (!(this.renderBudgetAutoBypassed || this.audioErrorAutoBypassed || this.transportPressureAutoBypassed)) return false;
+    this.renderBudgetAutoBypassed = this.audioErrorAutoBypassed = this.transportPressureAutoBypassed = false;
+    this.renderBudgetExceeded = false;
+    this.renderBudgetMisses = 0;
+    this.consecutiveAudioErrors = 0;
+    this.consecutiveTransportPressureEvents = 0;
+    this.lastAudioError = undefined;
+    if (this.unhealthyReason === "render-budget-exceeded" || this.unhealthyReason === "audio-error" || this.unhealthyReason === "transport-pressure") this.unhealthyReason = undefined;
+    return true;
   }
 
   recordRenderLatency(latencySamples, diagnostics) {

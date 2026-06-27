@@ -258,10 +258,13 @@ liveNode.addEventListener("healthchange", (event) => {
   healthChangeEvents += 1;
   healthChangeDetail = event.detail;
 });
+let retryEvents = 0, retryDetail;
+liveNode.addEventListener("retry", (event) => { retryEvents += 1; retryDetail = event.detail; });
 assert(liveNode.health.bypassed === false, "SoundBridgeAudioNode health starts unbypassed");
 assert(liveNode.health.maxConsecutiveRenderBudgetMisses === 2, "SoundBridgeAudioNode health reports the render-budget miss threshold");
 assert(liveNode.health.maxConsecutiveAudioErrors === 1, "SoundBridgeAudioNode health reports the audio-error threshold");
 assert(liveNode.health.maxConsecutiveTransportPressureEvents === 3, "SoundBridgeAudioNode health reports the transport-pressure threshold");
+assert(liveNode.retry() === false && retryEvents === 0, "SoundBridgeAudioNode retry is idle before auto-bypass");
 liveNode.setBypassed(true);
 assert(liveNode.health.bypassed === true, "SoundBridgeAudioNode health tracks manual bypass");
 assert(liveNode.health.bypassEvents === 1, "SoundBridgeAudioNode health counts bypass changes");
@@ -441,11 +444,12 @@ assert(
 );
 FakeAudioWorkletNode.last.port.onmessage({ data: { ...pressureStats, outputLatencyBlocks: 1, transportLatencySamples: 128, latencyIncreases: 1, latencyDecreases: 1, responseDeadlineMisses: 7, staleOutputBlocks: 5, droppedInputBlocks: 4, underruns: 10 } });
 assert(liveNode.health.transportPressureAutoBypassed === true, "stale calm stats do not clear transport-pressure auto-bypass");
-liveNode.setBypassed(false);
-assert(liveNode.health.bypassed === false, "manual unbypass retries after transport-pressure auto-bypass");
-assert(liveNode.health.healthy === true, "manual retry clears transport-pressure auto-bypass health");
-assert(liveNode.health.unhealthyReason === undefined, "manual retry clears the transport-pressure unhealthy reason");
-assert(liveNode.health.consecutiveTransportPressureEvents === 0, "manual retry clears the transport-pressure streak");
+assert(liveNode.retry() === true, "SoundBridgeAudioNode retry resumes after transport-pressure auto-bypass");
+assert(liveNode.health.bypassed === false, "AudioNode retry unbypasses after transport-pressure auto-bypass");
+assert(liveNode.health.healthy === true, "AudioNode retry clears transport-pressure auto-bypass health");
+assert(liveNode.health.unhealthyReason === undefined, "AudioNode retry clears the transport-pressure unhealthy reason");
+assert(liveNode.health.consecutiveTransportPressureEvents === 0, "AudioNode retry clears the transport-pressure streak");
+assert(retryEvents === 1 && retryDetail?.health?.healthy === true, "AudioNode retry emits recovered health");
 let renderPressureEvents = 0;
 let renderPressureDetail;
 let autoBypassEvents = 0;
@@ -510,12 +514,13 @@ FakeAudioWorkletNode.last.port.onmessage({
   }
 });
 assert(liveNode.health.renderBudgetAutoBypassed === true, "stale on-budget diagnostics do not clear auto-bypass");
-liveNode.setBypassed(false);
-assert(liveNode.health.bypassed === false, "manual unbypass retries after render-budget auto-bypass");
-assert(liveNode.health.healthy === true, "manual retry clears render-budget auto-bypass health");
-assert(liveNode.health.unhealthyReason === undefined, "manual retry clears the render-budget unhealthy reason");
-assert(liveNode.health.renderBudgetMisses === 0, "manual retry clears render-budget miss count");
-assert(liveNode.health.renderBudgetExceeded === false, "manual retry clears render-budget pressure state");
+assert(liveNode.retry() === true, "SoundBridgeAudioNode retry resumes after render-budget auto-bypass");
+assert(liveNode.health.bypassed === false, "AudioNode retry unbypasses after render-budget auto-bypass");
+assert(liveNode.health.healthy === true, "AudioNode retry clears render-budget auto-bypass health");
+assert(liveNode.health.unhealthyReason === undefined, "AudioNode retry clears the render-budget unhealthy reason");
+assert(liveNode.health.renderBudgetMisses === 0, "AudioNode retry clears render-budget miss count");
+assert(liveNode.health.renderBudgetExceeded === false, "AudioNode retry clears render-budget pressure state");
+assert(retryEvents === 2 && retryDetail?.health?.renderBudgetAutoBypassed === false, "AudioNode retry emits render-budget recovery health");
 let audioErrorEvents = 0;
 let audioErrorDetail;
 let audioErrorAutoBypassEvents = 0;
@@ -562,13 +567,14 @@ FakeAudioWorkletNode.last.port.onmessage({
 });
 assert(liveNode.health.audioErrorAutoBypassed === true, "stale successful diagnostics do not clear audio-error auto-bypass");
 assert(liveNode.health.unhealthyReason === "audio-error", "stale successful diagnostics keep audio-error health");
-liveNode.setBypassed(false);
-assert(liveNode.health.bypassed === false, "manual unbypass retries after audio-error auto-bypass");
-assert(liveNode.health.healthy === true, "manual retry clears audio-error auto-bypass health");
-assert(liveNode.health.audioErrorAutoBypassed === false, "manual retry clears audio-error auto-bypass state");
-assert(liveNode.health.consecutiveAudioErrors === 0, "manual retry clears consecutive audio errors");
-assert(liveNode.health.lastAudioError === undefined, "manual retry clears the latest audio error");
+assert(liveNode.retry() === true, "SoundBridgeAudioNode retry resumes after audio-error auto-bypass");
+assert(liveNode.health.bypassed === false, "AudioNode retry unbypasses after audio-error auto-bypass");
+assert(liveNode.health.healthy === true, "AudioNode retry clears audio-error auto-bypass health");
+assert(liveNode.health.audioErrorAutoBypassed === false, "AudioNode retry clears audio-error auto-bypass state");
+assert(liveNode.health.consecutiveAudioErrors === 0, "AudioNode retry clears consecutive audio errors");
+assert(liveNode.health.lastAudioError === undefined, "AudioNode retry clears the latest audio error");
 assert(liveNode.health.audioErrors === 1, "SoundBridgeAudioNode keeps cumulative audio error count after recovery");
+assert(retryEvents === 3 && retryDetail?.health?.audioErrorAutoBypassed === false, "AudioNode retry emits audio-error recovery health");
 
 const fallbackCalls = [];
 const fallbackClient = {
