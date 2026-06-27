@@ -20,7 +20,11 @@ export type LiveEffectRackDeadlinePressureReason =
   | "deadline-miss"
   | "dry-output-pressure"
   | "increase-transport-latency"
+  | "increase-process-budget"
+  | "increase-process-timeout"
   | "low-deadline-lead"
+  | "process-over-budget"
+  | "process-timeout"
   | "response-jitter";
 
 export interface LiveEffectRackDeadlinePressure {
@@ -317,6 +321,10 @@ export class LiveEffectRackBlockScheduler {
       reasons.push("response-jitter");
     }
     if (warnings.includes("dry-output-pressure")) reasons.push("dry-output-pressure");
+    if (warnings.includes("process-over-budget")) reasons.push("process-over-budget");
+    if (warnings.includes("process-timeout")) reasons.push("process-timeout");
+    if (warnings.includes("increase-process-budget")) reasons.push("increase-process-budget");
+    if (warnings.includes("increase-process-timeout")) reasons.push("increase-process-timeout");
     if (warnings.includes("increase-transport-latency")) reasons.push("increase-transport-latency");
     return Array.from(new Set(reasons));
   }

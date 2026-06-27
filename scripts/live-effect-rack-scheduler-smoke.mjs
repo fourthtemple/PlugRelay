@@ -5,7 +5,8 @@ import {
   createLiveEffectRackChainCalibrationWindow,
   createLiveEffectRackFrameBatchProcessor,
   createLivePerformanceFrameBatchProcessor,
-  createLivePerformanceFrameBatchProcessorOptions
+  createLivePerformanceFrameBatchProcessorOptions,
+  shouldSkipLiveEffectDeadlinePressure
 } from "../packages/web-client/dist/soundbridge-client.js";
 
 function assert(condition, message) {
@@ -170,15 +171,20 @@ pressureScheduler.updateFromChainCalibration(
   },
   {
     recommendedTransportLatencySamples: 512,
-    warnings: ["deadline-miss", "dry-output-pressure", "response-jitter", "increase-transport-latency"]
+    warnings: ["deadline-miss", "dry-output-pressure", "response-jitter", "process-over-budget", "process-timeout", "increase-process-budget", "increase-process-timeout", "increase-transport-latency"]
   }
 );
 const pressuredSnapshot = pressureScheduler.snapshot();
+const pressuredReasons = pressuredSnapshot.deadlinePressure.reasons;
 assert(
   pressuredSnapshot.transportLatencyBlocks === 4 &&
-    pressuredSnapshot.deadlinePressure.reasons.includes("dry-output-pressure") &&
-    pressuredSnapshot.deadlinePressure.reasons.includes("increase-transport-latency"),
-  "live rack scheduler exposes calibrated dry-output and latency pressure recommendations"
+    ["dry-output-pressure", "process-over-budget", "process-timeout", "increase-process-budget", "increase-process-timeout", "increase-transport-latency"]
+      .every((reason) => pressuredReasons.includes(reason)),
+  "live rack scheduler exposes calibrated dry-output, process, timeout, and latency pressure recommendations"
+);
+assert(
+  shouldSkipLiveEffectDeadlinePressure(pressuredSnapshot.deadlinePressure, { skipOnDeadlinePressure: true, skipOnDeadlinePressureReasons: ["process-timeout"] }) === true,
+  "live rack scheduler pressure filters can match process-timeout recommendations"
 );
 pressureScheduler.updateFromChainHealth({
   latencySamples: 512,
