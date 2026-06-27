@@ -40,12 +40,29 @@ export function renderTimeoutProtocolError(instance, error, context, makeProtoco
   );
 }
 
+export function renderQuarantineProtocolError(instance, context, makeProtocolError) {
+  if (instance?.renderQuarantined !== true) {
+    return undefined;
+  }
+  return makeProtocolError(
+    "render_quarantined",
+    "Plugin render worker is quarantined after a missed live deadline; recreate the instance before rendering again.",
+    renderDiagnosticDetails(instance, context, { workerTerminated: true })
+  );
+}
+
 function recordRenderTimeout(instance, context = {}) {
   if (instance) {
     instance.renderTimeouts = boundedRenderCount((instance.renderTimeouts ?? 0) + 1);
     instance.consecutiveRenderTimeouts = boundedRenderCount((instance.consecutiveRenderTimeouts ?? 0) + 1);
     instance.lastRenderTimeoutMs = boundedRenderTimeoutMs(context.renderTimeoutMs);
+    instance.renderQuarantined = true;
+    instance.renderQuarantineReason = "render-timeout";
   }
+  return renderDiagnosticDetails(instance, context, { workerTerminated: true });
+}
+
+function renderDiagnosticDetails(instance, context = {}, options = {}) {
   return {
     instanceId: boundedRenderText(instance?.instanceId, 96),
     pluginId: boundedRenderText(instance?.pluginId, 256),
@@ -57,7 +74,9 @@ function recordRenderTimeout(instance, context = {}) {
     frames: boundedRenderInteger(context.frames, 0, 8192),
     sampleRate: boundedRenderNumber(context.sampleRate, 384000),
     blockId: boundedOptionalRenderInteger(context.blockId),
-    workerTerminated: true
+    workerTerminated: options.workerTerminated === true,
+    renderQuarantined: instance?.renderQuarantined === true,
+    quarantineReason: boundedRenderText(instance?.renderQuarantineReason, 64)
   };
 }
 

@@ -1304,7 +1304,7 @@ function liveEffectTimeoutError() {
 
 function liveEffectFailureReason(error) {
   return error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout" ||
-    error instanceof SoundBridgeProtocolError && error.code === "render_timeout"
+    error instanceof SoundBridgeProtocolError && (error.code === "render_timeout" || error.code === "render_quarantined")
     ? "process-timeout"
     : "processing-error";
 }

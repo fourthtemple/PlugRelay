@@ -15,7 +15,7 @@ import { createDaemonPairing } from "./daemon-pairing.mjs";
 import { applyNativeParameterSnapshot, parameterSnapshotResponse } from "./daemon-parameter-snapshots.mjs";
 import { createDaemonParameterCommands } from "./daemon-parameter-commands.mjs";
 import { createPluginCatalogSupport, loadNativeHostStatus, resolveNativeRenderer } from "./daemon-plugin-catalog.mjs";
-import { boundedRenderDurationMs, boundedRenderTimeoutMs, recordRenderSuccess, renderBudgetDiagnostics, renderTimeoutProtocolError, renderTimestampMs } from "./daemon-render-diagnostics.mjs";
+import { boundedRenderDurationMs, boundedRenderTimeoutMs, recordRenderSuccess, renderBudgetDiagnostics, renderQuarantineProtocolError, renderTimeoutProtocolError, renderTimestampMs } from "./daemon-render-diagnostics.mjs";
 import { createDaemonRequestHandler } from "./daemon-request-handler.mjs";
 import { createDaemonRuntimePayloads } from "./daemon-runtime-payloads.mjs";
 import { createDaemonVst3ProgramData } from "./daemon-vst3-program-data.mjs";
@@ -573,6 +573,11 @@ async function processAudioBlock(payload, session) {
   validateRenderBlockSizeProfile(instance, requestedFrames, frames);
   const renderTimeoutMs = boundedRenderTimeoutMs(payload.renderTimeoutMs);
   const blockSampleRate = clampSampleRate(payload.sampleRate, instance.sampleRate);
+  const renderContext = { blockId: payload.blockId, frames, renderTimeoutMs, sampleRate: blockSampleRate };
+  const quarantineError = renderQuarantineProtocolError(instance, renderContext, protocolError);
+  if (quarantineError) {
+    throw quarantineError;
+  }
   const mainInputChannels = normalizeAudioChannels(payload.channels, MAX_AUDIO_CHANNELS, frames);
   const inputBuses = normalizeAudioBusBlocks(payload.inputBuses, mainInputChannels, instance.layout?.inputBusLayouts, frames, {
     strictRequest: true,
@@ -588,7 +593,7 @@ async function processAudioBlock(payload, session) {
     try {
       processed = await processInstrumentBlock(instance, frames, blockSampleRate, { inputBuses, transport, renderTimeoutMs });
     } catch (error) {
-      throw renderTimeoutProtocolError(instance, error, { blockId: payload.blockId, frames, renderTimeoutMs, sampleRate: blockSampleRate }, protocolError) ?? error;
+      throw renderTimeoutProtocolError(instance, error, renderContext, protocolError) ?? error;
     }
     recordRenderSuccess(instance);
     const renderDurationMs = boundedRenderDurationMs(renderStartedAt);
@@ -620,7 +625,7 @@ async function processAudioBlock(payload, session) {
         renderTimeoutMs
       });
     } catch (error) {
-      throw renderTimeoutProtocolError(instance, error, { blockId: payload.blockId, frames, renderTimeoutMs, sampleRate: blockSampleRate }, protocolError) ?? error;
+      throw renderTimeoutProtocolError(instance, error, renderContext, protocolError) ?? error;
     }
     recordRenderSuccess(instance);
     const renderDurationMs = boundedRenderDurationMs(renderStartedAt);

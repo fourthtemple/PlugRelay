@@ -2,6 +2,7 @@ import {
   boundedRenderTimeoutMs,
   recordRenderSuccess,
   renderBudgetDiagnostics,
+  renderQuarantineProtocolError,
   renderTimeoutProtocolError
 } from "./daemon-render-diagnostics.mjs";
 
@@ -25,18 +26,31 @@ check(firstTimeout?.code === "render_timeout", "worker command timeout maps to r
 check(firstTimeout.details.renderTimeoutMs === 3, "render timeout details clamp timeout milliseconds");
 check(firstTimeout.details.renderTimeouts === 1, "render timeout details count total misses");
 check(firstTimeout.details.consecutiveRenderTimeouts === 1, "render timeout details count consecutive misses");
+check(firstTimeout.details.renderQuarantined === true, "render timeout details report quarantine");
 check(firstTimeout.details.workerTerminated === true, "render timeout details report worker termination");
+
+const quarantined = renderQuarantineProtocolError(
+  instance,
+  { blockId: 13, frames: 128, renderTimeoutMs: 3, sampleRate: 48000 },
+  protocolError
+);
+check(quarantined?.code === "render_quarantined", "quarantined render workers fail fast");
+check(quarantined.details.renderTimeouts === 1, "quarantine errors do not increment timeout counters");
 
 const secondTimeout = renderTimeoutProtocolError(
   instance,
   timeoutError,
-  { blockId: 13, frames: 512, renderTimeoutMs: 5, sampleRate: 96000 },
+  { blockId: 14, frames: 512, renderTimeoutMs: 5, sampleRate: 96000 },
   protocolError
 );
 check(secondTimeout.details.renderTimeouts === 2, "render timeout counter increments");
 check(secondTimeout.details.consecutiveRenderTimeouts === 2, "consecutive render timeout counter increments");
 recordRenderSuccess(instance);
 check(instance.consecutiveRenderTimeouts === 0, "successful render clears consecutive timeout counter");
+check(
+  renderQuarantineProtocolError(instance, { blockId: 15 }, protocolError)?.code === "render_quarantined",
+  "successful render accounting does not clear quarantine"
+);
 check(
   renderTimeoutProtocolError(instance, new Error("worker_stdout_malformed"), {}, protocolError) === undefined,
   "non-timeout worker errors stay on the generic error path"

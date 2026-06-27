@@ -381,6 +381,21 @@ assert(
 client.protocolErrorCode = undefined;
 await daemonTimeoutRack.destroy();
 
+const daemonQuarantineRack = await SoundBridgeLiveEffectRack.create({
+  client,
+  plugin,
+  sampleRate: 48000,
+  maxBlockSize: 128
+});
+client.protocolErrorCode = "render_quarantined";
+const daemonQuarantined = await daemonQuarantineRack.processBlock({ blockId: 26, channels: inputChannels });
+assert(
+  daemonQuarantined.bypassed === true && daemonQuarantineRack.health.unhealthyReason === "process-timeout",
+  "daemon render_quarantined errors use live process-timeout policy"
+);
+client.protocolErrorCode = undefined;
+await daemonQuarantineRack.destroy();
+
 const livePerformanceRack = await SoundBridgeLiveEffectRack.createLivePerformance({
   client,
   plugin,
