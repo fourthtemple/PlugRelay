@@ -83,6 +83,7 @@ function connectAudioPort(port: MessagePort, config: AudioPortConfig): void {
 function sendAudioProcess(port: MessagePort, config: AudioPortConfig, message: { blockId?: number; frames?: number; channels?: ArrayLike<number>[] }): void {
   const channels = Array.isArray(message.channels) ? message.channels : [];
   const frames = boundedFrames(message.frames ?? channels[0]?.length ?? 128);
+  const recyclableInput = recyclableInputChannels(channels, frames);
   const blockId = Math.floor(Number(message.blockId ?? 0));
   const samplePosition = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, blockId * frames));
   const binary = config.audioTransport === "binary";
@@ -102,15 +103,52 @@ function sendAudioProcess(port: MessagePort, config: AudioPortConfig, message: {
     payload
   };
   if (!socket || socket.readyState !== WebSocket.OPEN) {
+    recycleAudioInput(port, recyclableInput, frames);
     port.postMessage({ type: "audio-error", blockId, error: "SoundBridge worker transport is not connected." });
     return;
   }
   try {
     pendingAudioPorts.set(envelope.id, port);
     socket.send(binary ? encodeBinaryAudioEnvelope(envelope, channels) : JSON.stringify(envelope));
+    recycleAudioInput(port, recyclableInput, frames);
   } catch (error) {
     pendingAudioPorts.delete(envelope.id);
+    recycleAudioInput(port, recyclableInput, frames);
     port.postMessage({ type: "audio-error", blockId, error: String(error instanceof Error ? error.message : error) });
+  }
+}
+
+function recyclableInputChannels(channels: ArrayLike<number>[], frames: number): Float32Array[] {
+  return channels.filter(
+    (channel): channel is Float32Array =>
+      channel instanceof Float32Array &&
+      channel.length === frames &&
+      channel.byteOffset === 0 &&
+      channel.buffer instanceof ArrayBuffer &&
+      channel.byteLength === channel.buffer.byteLength &&
+      channel.buffer.byteLength >= frames * Float32Array.BYTES_PER_ELEMENT
+  );
+}
+
+function recycleAudioInput(port: MessagePort, channels: Float32Array[], frames: number): void {
+  if (channels.length === 0) {
+    return;
+  }
+  const transfer: ArrayBuffer[] = [];
+  const recycled: Float32Array[] = [];
+  const seenBuffers = new Set<ArrayBufferLike>();
+  for (const channel of channels) {
+    if (seenBuffers.has(channel.buffer)) {
+      continue;
+    }
+    seenBuffers.add(channel.buffer);
+    recycled.push(channel);
+    transfer.push(channel.buffer as ArrayBuffer);
+  }
+  try {
+    port.postMessage({ type: "recycle-input", frames, channels: recycled }, transfer);
+  } catch {
+    // Recycling is a realtime optimization; processing must continue if a host rejects transfer.
   }
 }
 
@@ -121,7 +159,7 @@ function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unk
   }
   pendingAudioPorts.delete(envelope.id ?? "");
   if (envelope.ok && envelope.payload && typeof envelope.payload === "object") {
-    const payload = envelope.payload as { blockId?: number; channels?: Float32Array[]; latencySamples?: number; renderEngine?: string };
+    const payload = envelope.payload as { blockId?: number; channels?: ArrayLike<number>[]; latencySamples?: number; renderEngine?: string };
     const channels = Array.isArray(payload.channels) ? payload.channels : [];
     port.postMessage(
       {
@@ -131,12 +169,30 @@ function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unk
         latencySamples: payload.latencySamples,
         renderEngine: payload.renderEngine
       },
-      channels.map((channel) => channel.buffer)
+      transferableChannelBuffers(channels)
     );
   } else {
     port.postMessage({ type: "audio-error", error: envelope.error });
   }
   return true;
+}
+
+function transferableChannelBuffers(channels: ArrayLike<number>[]): ArrayBuffer[] {
+  const transfer: ArrayBuffer[] = [];
+  const seenBuffers = new Set<ArrayBufferLike>();
+  for (const channel of channels) {
+    if (
+      channel instanceof Float32Array &&
+      channel.byteOffset === 0 &&
+      channel.buffer instanceof ArrayBuffer &&
+      channel.byteLength === channel.buffer.byteLength &&
+      !seenBuffers.has(channel.buffer)
+    ) {
+      seenBuffers.add(channel.buffer);
+      transfer.push(channel.buffer as ArrayBuffer);
+    }
+  }
+  return transfer;
 }
 
 function boundedFrames(value: unknown): number {

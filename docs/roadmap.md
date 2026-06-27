@@ -15,7 +15,7 @@ SoundBridge already has the core security and host shape in place:
 - bounded plugin scanning metadata for VST3, AU, and LV2 without exposing launch paths to browsers
 - bounded parameters, automation events, automation curves, timeline lanes, MIDI events, transport context, latency, tail, state, bus layouts, and file-grant operations
 - binary WebSocket audio frames for main-bus and bus-indexed `processAudioBlock` buffers used by the web client and live effect rack
-- optional browser worker transport that owns WebSocket, JSON, and binary audio frame encode/decode, with direct `AudioWorklet` audio ports for live processing
+- optional browser worker transport that owns WebSocket, JSON, and binary audio frame encode/decode, with direct `AudioWorklet` audio ports, recycled input buffers, and transferred binary output buffers for live processing
 - generic parameter editor sessions
 - opt-in file grant broker foundation with path-free browser responses
 - native worker IPC limits for command size, pending commands, stdout/stderr lines, diagnostics, startup, timeout, and termination
@@ -70,7 +70,7 @@ Generic parameter editors work today. Native plugin UI is intentionally still a 
 
 ## Browser And Transport Work
 
-The current worker-owned WebSocket audio path is good for correctness and demos. It is not the final low-latency transport.
+The current worker-owned WebSocket audio path is good for correctness and demos. It now avoids the page thread, recycles worklet input buffers after worker send, and avoids extra binary-output cloning, but it is not the final low-latency transport.
 
 - Add `SharedArrayBuffer` ring buffers where cross-origin isolation is available.
 - Add adaptive buffering, underrun reporting, and latency compensation suitable for Web DAWs.

@@ -76,6 +76,7 @@ function connectAudioPort(port, config) {
 function sendAudioProcess(port, config, message) {
   const channels = Array.isArray(message.channels) ? message.channels : [];
   const frames = boundedFrames(message.frames ?? channels[0]?.length ?? 128);
+  const recyclableInput = recyclableInputChannels(channels, frames);
   const blockId = Math.floor(Number(message.blockId ?? 0));
   const samplePosition = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, blockId * frames));
   const binary = config.audioTransport === "binary";
@@ -95,15 +96,51 @@ function sendAudioProcess(port, config, message) {
     payload
   };
   if (!socket || socket.readyState !== WebSocket.OPEN) {
+    recycleAudioInput(port, recyclableInput, frames);
     port.postMessage({ type: "audio-error", blockId, error: "SoundBridge worker transport is not connected." });
     return;
   }
   try {
     pendingAudioPorts.set(envelope.id, port);
     socket.send(binary ? encodeBinaryAudioEnvelope(envelope, channels) : JSON.stringify(envelope));
+    recycleAudioInput(port, recyclableInput, frames);
   } catch (error) {
     pendingAudioPorts.delete(envelope.id);
+    recycleAudioInput(port, recyclableInput, frames);
     port.postMessage({ type: "audio-error", blockId, error: String(error instanceof Error ? error.message : error) });
+  }
+}
+
+function recyclableInputChannels(channels, frames) {
+  return channels.filter(
+    (channel) =>
+      channel instanceof Float32Array &&
+      channel.length === frames &&
+      channel.byteOffset === 0 &&
+      channel.buffer instanceof ArrayBuffer &&
+      channel.byteLength === channel.buffer.byteLength &&
+      channel.buffer.byteLength >= frames * Float32Array.BYTES_PER_ELEMENT
+  );
+}
+
+function recycleAudioInput(port, channels, frames) {
+  if (channels.length === 0) {
+    return;
+  }
+  const transfer = [];
+  const recycled = [];
+  const seenBuffers = new Set();
+  for (const channel of channels) {
+    if (seenBuffers.has(channel.buffer)) {
+      continue;
+    }
+    seenBuffers.add(channel.buffer);
+    recycled.push(channel);
+    transfer.push(channel.buffer);
+  }
+  try {
+    port.postMessage({ type: "recycle-input", frames, channels: recycled }, transfer);
+  } catch {
   }
 }
 
@@ -124,12 +161,30 @@ function routeAudioResponse(envelope) {
         latencySamples: payload.latencySamples,
         renderEngine: payload.renderEngine
       },
-      channels.map((channel) => channel.buffer)
+      transferableChannelBuffers(channels)
     );
   } else {
     port.postMessage({ type: "audio-error", error: envelope.error });
   }
   return true;
+}
+
+function transferableChannelBuffers(channels) {
+  const transfer = [];
+  const seenBuffers = new Set();
+  for (const channel of channels) {
+    if (
+      channel instanceof Float32Array &&
+      channel.byteOffset === 0 &&
+      channel.buffer instanceof ArrayBuffer &&
+      channel.byteLength === channel.buffer.byteLength &&
+      !seenBuffers.has(channel.buffer)
+    ) {
+      seenBuffers.add(channel.buffer);
+      transfer.push(channel.buffer);
+    }
+  }
+  return transfer;
 }
 
 function boundedFrames(value) {

@@ -26,6 +26,7 @@ class TestAudioWorkletProcessor {
 }
 
 vm.runInNewContext(workletSource, {
+  ArrayBuffer,
   AudioWorkletProcessor: TestAudioWorkletProcessor,
   Float32Array,
   Map,
@@ -95,6 +96,15 @@ directMainPort.onmessage({ data: { type: "connect-transport", port: directTransp
 directProcessor.process([[Float32Array.from([5, 5])]], [[new Float32Array(2)]]);
 assert(directTransportPort.messages[0]?.type === "process", "direct worklet transport posts process blocks to the transport port");
 assert(!directMainPort.messages.some((message) => message.type === "process"), "direct worklet transport avoids page-thread process messages");
+const recycledInput = directTransportPort.messages[0].channels[0];
+directTransportPort.onmessage({
+  data: {
+    type: "recycle-input",
+    frames: 2,
+    channels: [recycledInput]
+  }
+});
+assert(directProcessor.pooledInputBuffers === 1, "direct worklet transport pools recycled input buffers");
 const transferredOutput = Float32Array.from([50, 50]);
 directTransportPort.onmessage({
   data: {
@@ -113,6 +123,12 @@ assert(
   directMainPort.messages.some((message) => message.type === "process-diagnostics" && message.renderEngine === "direct-worker"),
   "direct worklet transport forwards render diagnostics to the page port"
 );
+directProcessor.process([[Float32Array.from([6, 6])]], [[new Float32Array(2)]]);
+assert(
+  directTransportPort.messages[1]?.channels?.[0] === recycledInput,
+  "direct worklet transport reuses recycled input buffers for later process blocks"
+);
+assert(directProcessor.inputBufferReuses === 1, "direct worklet transport counts input buffer reuse");
 
 const statsProcessor = new processorCtor({
   processorOptions: {
@@ -127,6 +143,9 @@ for (let index = 0; index < 128; index += 1) {
 }
 const statsMessage = statsPort.messages.find((message) => message.type === "stats");
 assert(typeof statsMessage?.inFlightBlocks === "number", "worklet stats report in-flight blocks");
+assert(typeof statsMessage?.inputBufferAllocations === "number", "worklet stats report input buffer allocations");
+assert(typeof statsMessage?.inputBufferReuses === "number", "worklet stats report input buffer reuse");
+assert(typeof statsMessage?.pooledInputBuffers === "number", "worklet stats report pooled input buffers");
 
 console.log("Worklet sequencing smoke checks passed.");
 

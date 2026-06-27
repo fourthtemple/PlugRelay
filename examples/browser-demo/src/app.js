@@ -45,6 +45,8 @@ const elements = {
   droppedInputBlocks: document.querySelector("#droppedInputBlocks"),
   inFlightBlocks: document.querySelector("#inFlightBlocks"),
   outputLatencyBlocks: document.querySelector("#outputLatencyBlocks"),
+  inputBufferAllocations: document.querySelector("#inputBufferAllocations"),
+  inputBufferReuses: document.querySelector("#inputBufferReuses"),
   renderEngine: document.querySelector("#renderEngine"),
   log: document.querySelector("#log"),
   scope: document.querySelector("#scope")
@@ -366,6 +368,8 @@ async function doEnsureBridgeInstance(recreate = false) {
     elements.droppedInputBlocks.textContent = String(stats.droppedInputBlocks ?? 0);
     elements.inFlightBlocks.textContent = String(stats.inFlightBlocks ?? 0);
     elements.outputLatencyBlocks.textContent = String(stats.outputLatencyBlocks ?? 0);
+    elements.inputBufferAllocations.textContent = String(stats.inputBufferAllocations ?? 0);
+    elements.inputBufferReuses.textContent = String(stats.inputBufferReuses ?? 0);
   });
   bridge.addEventListener("audio-error", (event) => {
     logError(event.detail);

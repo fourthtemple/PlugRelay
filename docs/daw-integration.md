@@ -61,7 +61,7 @@ This is the right policy for live sets: a failed effect should become a dry bypa
 
 ## Current Prototype Limitations
 
-- Main-bus and bus-indexed audio blocks use binary WebSocket frames in the reference web client. The demo opts into worker-owned WebSocket transport with a direct `AudioWorklet` audio port, and the worklet queues transferred binary output buffers without cloning them again. JSON audio blocks remain the compatibility path for hosts that opt out of binary transport. Input blocks still allocate/transfer per render quantum until shared-memory ring buffers are implemented.
+- Main-bus and bus-indexed audio blocks use binary WebSocket frames in the reference web client. The demo opts into worker-owned WebSocket transport with a direct `AudioWorklet` audio port. That path recycles transferred input buffers after worker send and queues transferred binary output buffers without cloning them again. JSON audio blocks remain the compatibility path for hosts that opt out of binary transport. Input blocks still cross a `MessagePort` per render quantum until shared-memory ring buffers are implemented.
 - Parameter automation supports bounded event lists, bounded per-block step/linear curves with sample offsets, and stored absolute-sample timeline lanes applied from `processAudioBlock.transport.samplePosition`.
 - Editor support currently means bounded generic parameter editor sessions plus an opt-in native editor broker contract; platform-specific native plugin windows remain future broker implementation work.
 - The mock plugin is a gain effect.

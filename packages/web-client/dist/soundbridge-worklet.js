@@ -2,7 +2,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const processorOptions = options.processorOptions ?? {};
-    this.outputChannels = processorOptions.outputChannels ?? 2;
+    this.outputChannels = this.boundedInteger(processorOptions.outputChannels, 2, 1, 32);
     this.maxQueuedOutputBlocks = this.boundedInteger(processorOptions.maxQueuedOutputBlocks, 16, 1, 64);
     this.outputLatencyBlocks = this.boundedInteger(
       processorOptions.outputLatencyBlocks,
@@ -15,9 +15,14 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.processedBlocks = 0;
     this.staleOutputBlocks = 0;
     this.droppedInputBlocks = 0;
+    this.inputBufferAllocations = 0;
+    this.inputBufferReuses = 0;
+    this.pooledInputBuffers = 0;
     this.inFlightBlocks = 0;
     this.outputBlocks = new Map();
+    this.inputBufferPool = new Map();
     this.maxInFlightBlocks = this.boundedInteger(processorOptions.maxInFlightBlocks, 8, 1, 64);
+    this.maxRecycledInputBuffers = this.outputChannels * Math.max(2, this.maxInFlightBlocks);
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
 
@@ -50,6 +55,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     if (this.transportPort) {
       if (this.inFlightBlocks >= this.maxInFlightBlocks) {
         this.droppedInputBlocks += 1;
+        this.recycleInputBlock(outgoing, frames);
       } else {
         this.inFlightBlocks += 1;
         this.transportPort.postMessage(processMessage, transfer);
@@ -67,6 +73,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         outputLatencyBlocks: this.outputLatencyBlocks,
         staleOutputBlocks: this.staleOutputBlocks,
         droppedInputBlocks: this.droppedInputBlocks,
+        inputBufferAllocations: this.inputBufferAllocations,
+        inputBufferReuses: this.inputBufferReuses,
+        pooledInputBuffers: this.pooledInputBuffers,
         inFlightBlocks: this.inFlightBlocks
       });
     }
@@ -81,6 +90,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     if (message.type === "destroy") {
       this.outputBlocks.clear();
+      this.inputBufferPool.clear();
+      this.pooledInputBuffers = 0;
       this.transportPort?.postMessage({ type: "destroy" });
       this.transportPort = void 0;
       return;
@@ -94,6 +105,11 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     if (message.type === "dropped") {
       this.droppedInputBlocks += 1;
+      return;
+    }
+
+    if (message.type === "recycle-input" && Array.isArray(message.channels)) {
+      this.recycleInputBlock(message.channels, message.frames);
       return;
     }
 
@@ -132,9 +148,11 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     const channels = [];
     for (let channelIndex = 0; channelIndex < this.outputChannels; channelIndex += 1) {
       const source = input[channelIndex] ?? input[0];
-      const copy = new Float32Array(frames);
+      const copy = this.takeInputBuffer(frames);
       if (source) {
         copy.set(source.subarray(0, frames));
+      } else {
+        copy.fill(0);
       }
       channels.push(copy);
     }
@@ -158,6 +176,46 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
   outputChannelBlock(channel) {
     return channel instanceof Float32Array ? channel : Float32Array.from(channel);
+  }
+
+  takeInputBuffer(frames) {
+    const pool = this.inputBufferPool.get(frames);
+    const recycled = pool?.pop();
+    if (recycled) {
+      this.pooledInputBuffers = Math.max(0, this.pooledInputBuffers - 1);
+      if (recycled.length === frames && recycled.buffer.byteLength >= frames * Float32Array.BYTES_PER_ELEMENT) {
+        this.inputBufferReuses += 1;
+        return recycled;
+      }
+    }
+    this.inputBufferAllocations += 1;
+    return new Float32Array(frames);
+  }
+
+  recycleInputBlock(channels, requestedFrames) {
+    const frames = this.boundedInteger(requestedFrames, channels[0]?.length ?? 128, 1, 8192);
+    const pool = this.inputBufferPool.get(frames) ?? [];
+    const seenBuffers = new Set();
+    for (const channel of channels) {
+      if (
+        this.pooledInputBuffers >= this.maxRecycledInputBuffers ||
+        !(channel instanceof Float32Array) ||
+        channel.length !== frames ||
+        channel.byteOffset !== 0 ||
+        !(channel.buffer instanceof ArrayBuffer) ||
+        channel.byteLength !== channel.buffer.byteLength ||
+        channel.buffer.byteLength < frames * Float32Array.BYTES_PER_ELEMENT ||
+        seenBuffers.has(channel.buffer)
+      ) {
+        continue;
+      }
+      seenBuffers.add(channel.buffer);
+      pool.push(channel);
+      this.pooledInputBuffers += 1;
+    }
+    if (pool.length > 0) {
+      this.inputBufferPool.set(frames, pool);
+    }
   }
 
   dropOldestOutputBlock() {
