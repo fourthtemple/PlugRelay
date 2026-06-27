@@ -1,6 +1,7 @@
 import type { LiveEffectBlockRequest, LiveEffectBlockResponse, LiveEffectRackHealth } from "./live-effect-rack";
 import { boundedLiveEffectChannels, dryChannels, outputTail, transitionOutputChannels, wetMixedChannels } from "./live-effect-rack-audio";
-import { boundedLatencySamples, boundedLiveEffectInteger, boundedLiveEffectNumber, boundedOptionalNumber, liveEffectLatencyMilliseconds, liveEffectNowMs } from "./live-effect-rack-metrics";
+import { boundedLatencySamples, boundedLiveEffectInteger, boundedLiveEffectNumber, boundedOptionalNumber, liveEffectLatencyMilliseconds, liveEffectNowMs, liveEffectRackTiming } from "./live-effect-rack-metrics";
+import type { LiveEffectRackTiming } from "./live-effect-rack-metrics";
 import type { LiveEffectRackScheduledBlock } from "./live-effect-rack-scheduler";
 
 const LIVE_EFFECT_CHAIN_MAX_STAGES = 16;
@@ -172,6 +173,20 @@ export class LiveEffectRackChain extends EventTarget {
       unhealthyReason: this.unhealthyReason,
       lastError: this.lastError
     };
+  }
+
+  get timing(): LiveEffectRackTiming {
+    return liveEffectRackTiming(
+      this.sampleRate,
+      this.maxBlockSize,
+      this.latencySamples,
+      0,
+      this.latencySamples,
+      this.processBudgetMs,
+      0,
+      0,
+      this.transitionFadeSamples
+    );
   }
 
   async processBlock(

@@ -114,6 +114,10 @@ export class LiveEffectRackBlockScheduler {
     return this.updateLatency(health.transportLatencySamples);
   }
 
+  updateFromChainHealth(health: { latencySamples: unknown }): number {
+    return this.updateLatency(health.latencySamples);
+  }
+
   reset(options: { nextBlockId?: number; nextSamplePosition?: number } = {}): void {
     this.nextBlockId = boundedLiveEffectInteger(options.nextBlockId, 0, 0, LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID);
     this.nextSamplePosition = optionalSchedulerInteger(options.nextSamplePosition, 0, LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION);

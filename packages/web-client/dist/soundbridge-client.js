@@ -2101,6 +2101,10 @@ export class LiveEffectRackChain extends EventTarget {
     };
   }
 
+  get timing() {
+    return liveEffectRackTiming(this.sampleRate, this.maxBlockSize, this.latencySamples, 0, this.latencySamples, this.processBudgetMs, 0, 0, this.transitionFadeSamples);
+  }
+
   async processBlock(request, options = {}) {
     const processStartedAt = this.nowMs();
     const outputChannels = this.chainOutputChannels(request.channels);
@@ -2505,6 +2509,10 @@ export class LiveEffectRackBlockScheduler {
 
   updateFromRackHealth(health) {
     return this.updateLatency(health.transportLatencySamples);
+  }
+
+  updateFromChainHealth(health) {
+    return this.updateLatency(health.latencySamples);
   }
 
   reset(options = {}) {

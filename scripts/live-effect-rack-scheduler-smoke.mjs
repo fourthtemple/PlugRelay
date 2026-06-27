@@ -1,4 +1,7 @@
-import { createLiveEffectRackBlockScheduler } from "../packages/web-client/dist/soundbridge-client.js";
+import {
+  createLiveEffectRackBlockScheduler,
+  createLiveEffectRackChain
+} from "../packages/web-client/dist/soundbridge-client.js";
 
 function assert(condition, message) {
   if (!condition) {
@@ -47,6 +50,28 @@ const stale = scheduler.schedule([[0.25]], { timestamp: 1000 });
 assert(stale.stale === true && stale.captureAgeMs === 10, "live rack scheduler detects stale captured audio");
 assert(stale.transport.samplePosition === 2048, "live rack scheduler uses updated rack transport latency");
 
+const chain = createLiveEffectRackChain({
+  stages: [{
+    async processBlock(request) {
+      return {
+        blockId: request.blockId,
+        channels: request.channels,
+        latencySamples: 640,
+        renderEngine: "latency-stage",
+        bypassed: false,
+        healthy: true
+      };
+    }
+  }],
+  sampleRate: 48000,
+  maxBlockSize: 128
+});
+await chain.processBlock({ blockId: 99, channels: [[0.1]], sampleRate: 48000 });
+scheduler.updateFromChainHealth(chain.health);
+now = 1011;
+const chainCompensated = scheduler.schedule([[0.2]], { timestamp: now });
+assert(chainCompensated.transport.samplePosition === 2304, "live rack scheduler can compensate from chain aggregate latency");
+
 const explicitTransport = { playing: false, samplePosition: 7 };
 const explicit = scheduler.schedule([[0.1]], { transport: explicitTransport, timestamp: now });
 assert(explicit.transport === explicitTransport, "live rack scheduler preserves explicit host transport");
@@ -56,6 +81,6 @@ scheduler.reset({ nextBlockId: 4, nextSamplePosition: 512 });
 const reset = scheduler.schedule([[0.2]]);
 assert(reset.blockId === 4 && reset.samplePosition === 512, "live rack scheduler reset sets the next block position");
 assert(scheduler.snapshot().nextBlockId === 5, "live rack scheduler snapshot reports the next block id");
-assert(scheduler.snapshot().transportLatencySamples === 512, "live rack scheduler snapshot reports current latency compensation");
+assert(scheduler.snapshot().transportLatencySamples === 640, "live rack scheduler snapshot reports current latency compensation");
 
 console.log("Live effect rack scheduler smoke checks passed.");

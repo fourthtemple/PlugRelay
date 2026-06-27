@@ -175,6 +175,15 @@ assert(
     lastLatencyHealth.infiniteTail === true,
   "live rack chain tracks sample-rate-aware aggregate latency and infinite tail"
 );
+const chainTiming = latencyChain.timing;
+assert(
+  chainTiming.pluginLatencySamples === 48 &&
+    chainTiming.transportLatencySamples === 0 &&
+    chainTiming.reportedLatencySamples === 48 &&
+    chainTiming.pluginLatencyBlocks === 24 &&
+    chainTiming.reportedLatencyMs === 0.5,
+  "live rack chain exposes aggregate timing for host schedulers"
+);
 
 const slotStage = new FakeStage("slot-health", 1);
 const slotChain = createLiveEffectRackChain({
