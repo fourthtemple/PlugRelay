@@ -40,10 +40,11 @@ The daemon prints an ephemeral pairing token. Your page needs that token before 
 
 ## Use It From Your Website
 
-Serve these two files from your site:
+Serve these files from your site:
 
 ```text
 packages/web-client/dist/soundbridge-client.js
+packages/web-client/dist/soundbridge-transport-worker.js
 packages/web-client/dist/soundbridge-worklet.js
 ```
 
@@ -58,7 +59,8 @@ Then create a plugin instance and put it in your Web Audio graph:
 
   const audioContext = new AudioContext();
   const client = new SoundBridgeClient({
-    url: "ws://127.0.0.1:47370/bridge"
+    url: "ws://127.0.0.1:47370/bridge",
+    transport: "worker"
   });
 
   await client.connect();

@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./dist/soundbridge-client.js",
+    "./transport-worker": "./dist/soundbridge-transport-worker.js",
     "./worklet": "./dist/soundbridge-worklet.js"
   }
 }

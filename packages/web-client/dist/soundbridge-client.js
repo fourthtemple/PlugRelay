@@ -14,12 +14,22 @@ export class SoundBridgeClient extends EventTarget {
     this.origin = options.origin ?? globalThis.location?.origin ?? "unknown-origin";
     this.requestTimeoutMs = options.requestTimeoutMs ?? 5000;
     this.pairingToken = options.pairingToken;
+    this.transport = options.transport === "worker" ? "worker" : "main";
+    this.transportWorkerUrl = options.transportWorkerUrl ?? new URL("./soundbridge-transport-worker.js", import.meta.url);
     this.requestSeq = 0;
     this.sessionToken = undefined;
     this.pending = new Map();
+    this.workerConnected = false;
+    this.workerMessageHandler = (event) => {
+      this.handleWorkerMessage(event.data);
+    };
   }
 
   connect() {
+    if (this.transport === "worker") {
+      return this.connectWorker();
+    }
+
     if (this.socket?.readyState === WebSocket.OPEN) {
       return Promise.resolve();
     }
@@ -40,6 +50,47 @@ export class SoundBridgeClient extends EventTarget {
         this.pending.clear();
         this.dispatchEvent(new CustomEvent("disconnect"));
       });
+    });
+  }
+
+  connectWorker() {
+    if (this.worker && this.workerConnected) {
+      return Promise.resolve();
+    }
+    if (typeof Worker === "undefined") {
+      return Promise.reject(new Error("SoundBridge worker transport is not available in this environment."));
+    }
+
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        this.worker = new Worker(this.transportWorkerUrl, { type: "module" });
+        this.worker.addEventListener("message", this.workerMessageHandler);
+      }
+      const worker = this.worker;
+      const cleanup = () => {
+        worker.removeEventListener("message", onConnectMessage);
+        worker.removeEventListener("error", onConnectError);
+      };
+      const onConnectMessage = (event) => {
+        const message = event.data;
+        if (message?.type === "connected") {
+          cleanup();
+          this.workerConnected = true;
+          resolve();
+          return;
+        }
+        if (message?.type === "connect-error") {
+          cleanup();
+          reject(new Error(message.message ?? `Unable to connect to ${this.url}`));
+        }
+      };
+      const onConnectError = () => {
+        cleanup();
+        reject(new Error(`Unable to start SoundBridge transport worker.`));
+      };
+      worker.addEventListener("message", onConnectMessage);
+      worker.addEventListener("error", onConnectError);
+      worker.postMessage({ type: "connect", url: this.url });
     });
   }
 
@@ -183,9 +234,13 @@ export class SoundBridgeClient extends EventTarget {
   }
 
   request(command, payload, includeSession = true, timeoutMs = this.requestTimeoutMs, binaryAudioChannels) {
-    const socket = this.socket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("SoundBridge socket is not connected."));
+    if (this.transport === "main") {
+      const socket = this.socket;
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        return Promise.reject(new Error("SoundBridge socket is not connected."));
+      }
+    } else if (!this.worker || !this.workerConnected) {
+      return Promise.reject(new Error("SoundBridge worker transport is not connected."));
     }
 
     const id = `req-${++this.requestSeq}`;
@@ -206,9 +261,13 @@ export class SoundBridgeClient extends EventTarget {
         reject(new Error(`SoundBridge request timed out: ${command}`));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timeout });
-      socket.send(
-        binaryAudioChannels ? encodeBinaryAudioEnvelope(envelope, binaryAudioChannels) : JSON.stringify(envelope)
-      );
+      if (this.transport === "worker") {
+        this.worker?.postMessage({ type: "request", envelope, binaryAudioChannels });
+      } else {
+        this.socket?.send(
+          binaryAudioChannels ? encodeBinaryAudioEnvelope(envelope, binaryAudioChannels) : JSON.stringify(envelope)
+        );
+      }
     });
   }
 
@@ -220,6 +279,31 @@ export class SoundBridgeClient extends EventTarget {
       return;
     }
 
+    this.handleEnvelope(envelope);
+  }
+
+  handleWorkerMessage(message) {
+    if (message?.type === "message" && message.envelope) {
+      this.handleEnvelope(message.envelope);
+      return;
+    }
+    if (message?.type === "send-error" && message.id) {
+      const pending = this.pending.get(message.id);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        this.pending.delete(message.id);
+        pending.reject(new Error(message.message ?? "SoundBridge worker transport send failed."));
+      }
+      return;
+    }
+    if (message?.type === "closed") {
+      this.workerConnected = false;
+      this.rejectPendingRequests("SoundBridge worker transport closed before response");
+      this.dispatchEvent(new CustomEvent("disconnect"));
+    }
+  }
+
+  handleEnvelope(envelope) {
     if (envelope.type === "event") {
       this.dispatchEvent(new CustomEvent(envelope.event, { detail: envelope.payload }));
       return;
@@ -244,6 +328,14 @@ export class SoundBridgeClient extends EventTarget {
 
     const error = envelope.error ?? { code: "unknown_error", message: "Unknown SoundBridge protocol error." };
     pending.reject(new SoundBridgeProtocolError(error.code, error.message, error.details));
+  }
+
+  rejectPendingRequests(message) {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error(`${message} ${id}.`));
+    }
+    this.pending.clear();
   }
 }
 
@@ -444,6 +536,11 @@ function boundedBinaryInteger(value, min, max) {
   }
   return integer;
 }
+
+export {
+  decodeBinaryAudioEnvelope as __soundBridgeDecodeBinaryAudioEnvelope,
+  encodeBinaryAudioEnvelope as __soundBridgeEncodeBinaryAudioEnvelope
+};
 
 export class SoundBridgeAudioNode extends EventTarget {
   constructor(context, client, options) {

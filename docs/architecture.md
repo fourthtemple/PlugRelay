@@ -14,7 +14,7 @@ The SDK is a small TypeScript package that gives Web DAWs:
 - protocol message types shared with daemon implementations
 - format-aware plugin metadata for VST3, AU, LV2, and mock/test plugins
 
-The `AudioWorkletProcessor` never blocks. It copies input blocks, posts them to the main thread, and consumes returned processed blocks by `blockId` at a configured block latency so out-of-order WebSocket responses cannot reshuffle audio during live effects processing. If the target block is missing or stale, it falls back to dry audio for that block and reports underrun, stale-output, dropped-input, queue-depth, and latency-block stats. A production build should move the socket work into a dedicated worker and use `SharedArrayBuffer` ring buffers when cross-origin isolation is available.
+The `AudioWorkletProcessor` never blocks. It copies input blocks, posts them through the host page to the web client's optional transport worker, and consumes returned processed blocks by `blockId` at a configured block latency so out-of-order WebSocket responses cannot reshuffle audio during live effects processing. If the target block is missing or stale, it falls back to dry audio for that block and reports underrun, stale-output, dropped-input, queue-depth, and latency-block stats. A production build should use `SharedArrayBuffer` ring buffers when cross-origin isolation is available.
 
 ### Local Bridge Daemon
 
@@ -96,7 +96,7 @@ Protocol:
 
 ## Latency Tradeoffs
 
-The MVP prioritizes correctness over ultra-low latency. Binary WebSocket audio blocks reduce serialization overhead, but the current browser-owned socket path is not a final real-time transport. It is useful because it exposes:
+The MVP prioritizes correctness over ultra-low latency. Binary WebSocket audio blocks and worker-owned socket transport reduce main-thread work, but the current MessagePort queue is not a final real-time transport. It is useful because it exposes:
 
 - browser scheduling behavior
 - AudioWorklet queue depth requirements
@@ -106,7 +106,6 @@ The MVP prioritizes correctness over ultra-low latency. Binary WebSocket audio b
 
 The production path should add:
 
-- a dedicated browser worker for socket and transport work
 - `SharedArrayBuffer` ring buffers where available
 - adaptive buffering and latency compensation
 - daemon-side plugin worker processes

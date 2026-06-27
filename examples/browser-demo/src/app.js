@@ -252,7 +252,8 @@ async function connectToDaemon() {
 
     client = new SoundBridgeClient({
       url: elements.daemonUrl.value.trim(),
-      origin: window.location.origin
+      origin: window.location.origin,
+      transport: "worker"
     });
     await client.connect();
     const pairingToken = elements.pairingToken.value.trim();
