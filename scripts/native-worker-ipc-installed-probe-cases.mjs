@@ -273,6 +273,9 @@ export async function exerciseInstalledProbeSupport({ check }) {
       reportedLatencySamples: 64,
       tailSamples: 0,
       infiniteTail: true,
+      renderDurationMs: 1,
+      renderBudgetMs: 3,
+      renderBudgetExceeded: false,
       renderSignal: "silent"
     }
   ];
@@ -323,6 +326,8 @@ export async function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.coverage.latencyTail["infinite-tail"] === 1 &&
       coverageSummary.coverage.renderSignals.signal === 1 &&
       coverageSummary.coverage.renderSignals.silent === 1 &&
+      coverageSummary.coverage.liveRender["over-budget"] === 1 &&
+      coverageSummary.coverage.liveRender["within-budget"] === 1 &&
       coverageSummary.coverage.outputBusSignals["main-aux-signal"] === 1 &&
       coverageSummary.coverage.outputBusSignals.missing === 1 &&
       coverageSummary.coverage.nativeEditor.opened === 1,
@@ -336,6 +341,7 @@ export async function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].renderDurationMs === 7 &&
       coverageSummary.matrix[0].renderBudgetMs === 3 &&
       coverageSummary.matrix[0].renderBudgetExceeded === true &&
+      coverageSummary.matrix[0].liveRender === "over-budget" &&
       coverageSummary.matrix[0].listedPreset === "applied" &&
       coverageSummary.matrix[0].listedPresetParameterCount === 4 &&
       coverageSummary.matrix[0].vst3ProgramData === "restored" &&
@@ -450,6 +456,7 @@ export async function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].featureStatus.fileGrants === "passed" &&
       coverageSummary.matrix[0].featureStatus.transport === "accepted" &&
       coverageSummary.matrix[0].featureStatus.rendering === "passed" &&
+      coverageSummary.matrix[0].featureStatus.liveRendering === "over-budget" &&
       coverageSummary.matrix[0].featureStatus.editor === "opened" &&
       coverageSummary.matrix[1].name === "[local-path]" &&
       coverageSummary.matrix[1].vst3ProgramLists === "skipped-format" &&
@@ -466,6 +473,7 @@ export async function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[1].fileGrantOtherPresetLoad === "skipped-unadvertised" &&
       coverageSummary.matrix[1].latencyTail === "infinite-tail" &&
       coverageSummary.matrix[1].infiniteTail === true &&
+      coverageSummary.matrix[1].liveRender === "within-budget" &&
       coverageSummary.matrix[1].nativeEditor === "missing" &&
       coverageSummary.matrix[1].featureStatus.fileGrants === "passed" &&
       coverageSummary.matrix[1].fileGrantOperations.includes("loadLicense"),

@@ -15,6 +15,7 @@ export function summarizeFeatureStatus(result, options) {
     automation: safeMatrixText(automationLaneStatus(result), 64),
     transport: hostTransportStatus(result),
     rendering: renderingFeatureStatus(result),
+    liveRendering: liveRenderStatus(result),
     busLayouts: busLayoutFeatureStatus(result),
     latencyTail: latencyTailFeatureStatus(result),
     editor: nativeEditorStatus(result, options)
@@ -211,6 +212,24 @@ export function renderSignalStatus(result) {
     return String(result.renderSignal);
   }
   return hasFailedPhase(result, ["processAudioBlock"]) ? "failed" : "missing";
+}
+
+export function liveRenderStatus(result) {
+  if (hasFailedPhase(result, ["processAudioBlock"])) {
+    return "failed";
+  }
+  if (result.renderBudgetExceeded === true) {
+    return "over-budget";
+  }
+  const duration = Number(result.renderDurationMs);
+  const budget = Number(result.renderBudgetMs);
+  if (result.renderBudgetExceeded === false && Number.isFinite(duration) && Number.isFinite(budget) && budget > 0) {
+    return "within-budget";
+  }
+  if (Number.isFinite(duration) || Number.isFinite(budget) || hasOkPhase(result, "processAudioBlock")) {
+    return "missing-budget";
+  }
+  return "missing";
 }
 
 export function nativeEditorStatus(result, options) {

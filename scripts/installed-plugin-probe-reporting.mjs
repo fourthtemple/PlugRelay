@@ -13,6 +13,7 @@ import {
   hostTransportStatus,
   latencyTailStatus,
   listedPresetStatus,
+  liveRenderStatus,
   midiTimingStatus,
   nativeEditorStatus,
   outputBusSignalStatus,
@@ -133,6 +134,7 @@ function summarizeCompatibilityMatrix(results, options) {
       renderDurationMs: safeMatrixInteger(result.renderDurationMs, 0, 60000),
       renderBudgetMs: safeMatrixInteger(result.renderBudgetMs, 0, 60000),
       renderBudgetExceeded: typeof result.renderBudgetExceeded === "boolean" ? result.renderBudgetExceeded : undefined,
+      liveRender: safeMatrixText(liveRenderStatus(result), 64),
       outputBusSignal: safeMatrixText(outputBusSignalStatus(result), 64),
       outputBusSignalFlags: safeMatrixArray(result.outputBusSignalProfile?.flags, 64),
       outputBusSignalCount: safeMatrixInteger(result.outputBusSignalProfile?.signalOutputBusCount, 0, 32),
@@ -358,6 +360,7 @@ function summarizeFeatureCoverage(results, options) {
     hostTransport: countBy(results, hostTransportStatus),
     latencyTail: countBy(results, latencyTailStatus),
     renderSignals: countBy(results, renderSignalStatus),
+    liveRender: countBy(results, liveRenderStatus),
     outputBusSignals: countBy(results, outputBusSignalStatus),
     nativeEditor: countNativeEditor(results, options)
   };
