@@ -38,9 +38,12 @@ export interface SoundBridgeAudioNodeHealth {
   queuedOutputBlocks: number;
   outputLatencyBlocks: number;
   transportLatencySamples: number;
+  pluginLatencySamples: number;
+  reportedLatencySamples: number;
   latencyIncreases: number;
   latencyDecreases: number;
   latencyChangeEvents: number;
+  latencyRefreshes: number;
   lastLatencyChangeDirection?: "increased" | "decreased" | "changed";
   responseDeadlineLeadSamples: number;
   responseJitterSamples: number;
@@ -142,9 +145,12 @@ export class SoundBridgeAudioNode extends EventTarget {
   private queuedOutputBlocks = 0;
   private outputLatencyBlocks = 0;
   private transportLatencySamples = 0;
+  private pluginLatencySamples = 0;
+  private reportedLatencySamples = 0;
   private latencyIncreases = 0;
   private latencyDecreases = 0;
   private latencyChangeEvents = 0;
+  private latencyRefreshes = 0;
   private lastLatencyChangeDirection?: SoundBridgeAudioNodeHealth["lastLatencyChangeDirection"];
   private responseDeadlineLeadSamples = 0;
   private responseJitterSamples = 0;
@@ -290,6 +296,39 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
+  async refreshLatency(transportLatencySamples = this.transportLatencySamples): Promise<SoundBridgeAudioNodeHealth> {
+    if (this.destroyed) {
+      return this.health;
+    }
+    const previous = {
+      pluginLatencySamples: this.pluginLatencySamples,
+      transportLatencySamples: this.transportLatencySamples,
+      reportedLatencySamples: this.reportedLatencySamples
+    };
+    const requestedTransportLatencySamples = boundedInteger(transportLatencySamples, this.transportLatencySamples, 0, 1_048_576);
+    const latency = await this.client.getLatency(this.instanceId, requestedTransportLatencySamples);
+    this.pluginLatencySamples = boundedInteger(latency.pluginLatencySamples, this.pluginLatencySamples, 0, 1_048_576);
+    this.transportLatencySamples = boundedInteger(latency.transportLatencySamples, requestedTransportLatencySamples, 0, 1_048_576);
+    this.reportedLatencySamples = boundedInteger(
+      latency.reportedLatencySamples,
+      combinedAudioNodeLatencySamples(this.pluginLatencySamples, this.transportLatencySamples),
+      0,
+      1_048_576
+    );
+    this.latencyRefreshes = Math.min(1024, this.latencyRefreshes + 1);
+    if (
+      this.pluginLatencySamples !== previous.pluginLatencySamples ||
+      this.transportLatencySamples !== previous.transportLatencySamples ||
+      this.reportedLatencySamples !== previous.reportedLatencySamples
+    ) {
+      this.latencyChangeEvents = Math.min(1024, this.latencyChangeEvents + 1);
+      this.lastLatencyChangeDirection = "changed";
+      this.dispatchEvent(new CustomEvent("latencychange", { detail: { direction: "changed", previous, latency, health: this.health } }));
+    }
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+    return this.health;
+  }
+
   disconnect(): void {
     this.node.disconnect();
   }
@@ -307,9 +346,12 @@ export class SoundBridgeAudioNode extends EventTarget {
       queuedOutputBlocks: this.queuedOutputBlocks,
       outputLatencyBlocks: this.outputLatencyBlocks,
       transportLatencySamples: this.transportLatencySamples,
+      pluginLatencySamples: this.pluginLatencySamples,
+      reportedLatencySamples: this.reportedLatencySamples,
       latencyIncreases: this.latencyIncreases,
       latencyDecreases: this.latencyDecreases,
       latencyChangeEvents: this.latencyChangeEvents,
+      latencyRefreshes: this.latencyRefreshes,
       lastLatencyChangeDirection: this.lastLatencyChangeDirection,
       responseDeadlineLeadSamples: this.responseDeadlineLeadSamples,
       responseJitterSamples: this.responseJitterSamples,
@@ -533,6 +575,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.queuedOutputBlocks = boundedInteger(stats.queuedOutputBlocks, this.queuedOutputBlocks, 0, 64);
     this.outputLatencyBlocks = boundedInteger(stats.outputLatencyBlocks, this.outputLatencyBlocks, 0, 64);
     this.transportLatencySamples = boundedInteger(stats.transportLatencySamples, this.transportLatencySamples, 0, 1_048_576);
+    this.reportedLatencySamples = combinedAudioNodeLatencySamples(this.pluginLatencySamples, this.transportLatencySamples);
     this.latencyIncreases = boundedInteger(stats.latencyIncreases, this.latencyIncreases, 0, Number.MAX_SAFE_INTEGER);
     this.latencyDecreases = boundedInteger(stats.latencyDecreases, this.latencyDecreases, 0, Number.MAX_SAFE_INTEGER);
     this.responseDeadlineLeadSamples =
@@ -662,4 +705,8 @@ function boundedInteger(value: number | undefined, fallback: number, min: number
 function boundedOptionalNumber(value: unknown, min: number, max: number): number | undefined {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : undefined;
+}
+
+function combinedAudioNodeLatencySamples(pluginLatencySamples: number, transportLatencySamples: number): number {
+  return Math.min(1_048_576, pluginLatencySamples + transportLatencySamples);
 }

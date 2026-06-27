@@ -310,6 +310,7 @@ assert(liveNode.health.inFlightBlocks === 3, "SoundBridgeAudioNode health tracks
 assert(liveNode.health.queuedOutputBlocks === 2, "SoundBridgeAudioNode health tracks queued output blocks");
 assert(liveNode.health.outputLatencyBlocks === 2, "SoundBridgeAudioNode health tracks output latency blocks");
 assert(liveNode.health.transportLatencySamples === 256, "SoundBridgeAudioNode health tracks transport latency samples");
+assert(liveNode.health.reportedLatencySamples === 256, "SoundBridgeAudioNode health combines transport latency before plugin refresh");
 assert(liveNode.health.latencyIncreases === 1, "SoundBridgeAudioNode health tracks adaptive latency increases");
 assert(liveNode.health.latencyDecreases === 0, "SoundBridgeAudioNode health tracks adaptive latency decreases");
 assert(liveNode.health.latencyChangeEvents === 1, "SoundBridgeAudioNode health counts latency changes");
@@ -354,6 +355,15 @@ assert(latencyDetail?.direction === "decreased", "latencychange reports adaptive
 assert(liveNode.health.latencyDecreases === 1, "SoundBridgeAudioNode health tracks latency recovery decreases");
 assert(liveNode.health.lastLatencyChangeDirection === "decreased", "SoundBridgeAudioNode health tracks recovery direction");
 assert(transportPressureEvents === 1, "latency recovery without new pressure counters does not emit transport-pressure");
+const refreshedLatency = await liveNode.refreshLatency();
+const latencyRequest = FakeWorker.last.messages.at(-1);
+assert(latencyRequest.envelope.command === "getLatency", "SoundBridgeAudioNode refreshLatency requests daemon latency");
+assert(latencyRequest.envelope.payload.transportLatencySamples === 128, "refreshLatency uses the latest worklet transport latency");
+assert(refreshedLatency.pluginLatencySamples === 96, "refreshLatency stores plugin latency in health");
+assert(refreshedLatency.reportedLatencySamples === 224, "refreshLatency stores plugin plus transport latency in health");
+assert(refreshedLatency.latencyRefreshes === 1, "refreshLatency counts latency refreshes");
+assert(latencyEvents === 3 && latencyDetail?.direction === "changed", "refreshLatency emits latencychange when reported latency changes");
+assert(healthChangeEvents === 3 && healthChangeDetail?.reportedLatencySamples === 224, "refreshLatency emits healthchange with reported latency");
 let renderPressureEvents = 0;
 let renderPressureDetail;
 liveNode.addEventListener("render-budget-exceeded", (event) => {
@@ -572,6 +582,14 @@ function responsePayload(command, payload) {
       latencySamples: 0,
       tailSamples: 0,
       infiniteTail: false
+    };
+  }
+  if (command === "getLatency") {
+    const transportLatencySamples = Math.max(0, Math.min(1048576, Math.floor(Number(payload.transportLatencySamples ?? 0))));
+    return {
+      pluginLatencySamples: 96,
+      transportLatencySamples,
+      reportedLatencySamples: Math.min(1048576, 96 + transportLatencySamples)
     };
   }
   return {};
