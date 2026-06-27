@@ -1,6 +1,9 @@
 import {
   calibrateLivePerformanceAudioNodePolicy,
-  createLivePerformanceAudioNodePolicy
+  createLivePerformanceAudioNodeCalibrationWindow,
+  createLivePerformanceAudioNodePolicy,
+  livePerformanceAudioNodeOptionsFromCalibration,
+  refreshLivePerformanceAudioNodeLatencyFromCalibration
 } from "../packages/web-client/dist/soundbridge-client.js";
 
 function assert(condition, message) {
@@ -51,6 +54,28 @@ assert(readyCalibration.recommendedOutputLatencyBlocks === 3, "live AudioNode ca
 assert(readyCalibration.recommendedTransportLatencySamples === 384, "live AudioNode calibration preserves transport latency samples");
 assert(readyCalibration.recommendedMaxOutputLatencyBlocks === 4, "live AudioNode calibration avoids growing max latency when existing ceiling is enough");
 
+const readyWindow = createLivePerformanceAudioNodeCalibrationWindow({
+  instanceId: "inst-ready-window",
+  sampleRate: 48000,
+  maxBlockFrames: 128,
+  transportLatencySamples: 384,
+  safetyMarginBlocks: 0
+});
+let readySnapshot = readyWindow.snapshot();
+assert(readySnapshot.samples === 0 && readySnapshot.droppedSamples === 0, "live AudioNode calibration window starts empty");
+readySnapshot = readyWindow.record({
+  lastRenderDurationMs: 0.5,
+  responseJitterBlocks: 0.25,
+  responseDeadlineLeadSamples: 160
+});
+assert(readySnapshot.samples === 1, "live AudioNode calibration window records health snapshots");
+assert(readySnapshot.calibration.realtimeReady === true, "live AudioNode calibration window accepts in-budget health");
+assert(readySnapshot.calibration.observedDeadlineLeadMinBlocks === 1.25, "live AudioNode calibration window converts deadline lead samples to blocks");
+assert(readySnapshot.recommendedOptions.outputLatencyBlocks === 3, "live AudioNode calibration window recommends output latency options");
+assert(readySnapshot.recommendedOptions.audioRequestTimeoutMs === 250, "live AudioNode calibration window carries timeout options");
+const unchangedReadySnapshot = readyWindow.record({ lastRenderDurationMs: Number.NaN });
+assert(unchangedReadySnapshot.samples === 1, "live AudioNode calibration window ignores non-finite samples");
+
 const stressedCalibration = calibrateLivePerformanceAudioNodePolicy({
   instanceId: "inst-stress",
   sampleRate: 48000,
@@ -83,6 +108,69 @@ assert(
   ]),
   "live AudioNode calibration reports expected pressure warnings"
 );
+
+const stressedWindow = createLivePerformanceAudioNodeCalibrationWindow({
+  instanceId: "inst-stress-window",
+  sampleRate: 48000,
+  maxBlockFrames: 128,
+  maxSamples: 2,
+  pluginLatencySamples: 64,
+  safetyMarginBlocks: 1
+});
+stressedWindow.record({
+  lastRenderDurationMs: 2.6,
+  responseJitterBlocks: 1,
+  responseDeadlineLeadSamples: 128
+});
+stressedWindow.record({
+  lastRenderDurationMs: 4,
+  responseJitterBlocks: 3,
+  responseDeadlineLeadSamples: -128,
+  underruns: 1,
+  sharedInputDroppedBlocks: 1
+});
+const stressedSnapshot = stressedWindow.record({
+  lastRenderDurationMs: 4.2,
+  responseJitterBlocks: 3.25,
+  responseDeadlineLeadSamples: -160,
+  droppedInputBlocks: 2
+});
+assert(stressedSnapshot.samples === 2, "live AudioNode calibration window keeps bounded recent samples");
+assert(stressedSnapshot.droppedSamples === 1, "live AudioNode calibration window reports overwritten sample windows");
+assert(stressedSnapshot.calibration.realtimeReady === false, "live AudioNode calibration window flags stressed health");
+assert(stressedSnapshot.calibration.warnings.includes("audio-drop-pressure"), "live AudioNode calibration window keeps pressure counters");
+assert(stressedSnapshot.recommendedOptions.outputLatencyBlocks === 7, "live AudioNode calibration window recommends output latency from jitter and pressure");
+assert(stressedSnapshot.recommendedOptions.maxOutputLatencyBlocks === 8, "live AudioNode calibration window recommends max latency headroom");
+assert(stressedSnapshot.recommendedOptions.sharedBufferBlocks === 12, "live AudioNode calibration window recommends shared ring depth");
+
+const overriddenOptions = stressedWindow.recommendedOptions({
+  instanceId: "inst-next",
+  inputChannels: 4,
+  outputLatencyBlocks: 1,
+  sharedBufferBlocks: 2
+});
+assert(overriddenOptions.instanceId === "inst-next", "live AudioNode calibration recommendations allow next-instance overrides");
+assert(overriddenOptions.inputChannels === 4, "live AudioNode calibration recommendations preserve host channel overrides");
+assert(overriddenOptions.outputLatencyBlocks === 7, "live AudioNode calibration recommendations keep measured output latency advice");
+assert(overriddenOptions.sharedBufferBlocks === 12, "live AudioNode calibration recommendations keep measured shared-buffer advice");
+
+const copiedOptions = livePerformanceAudioNodeOptionsFromCalibration(stressedSnapshot.calibration, { audioTransferMode: "message" });
+assert(copiedOptions.audioTransferMode === "message", "live AudioNode calibration helper preserves non-measured host overrides");
+assert(copiedOptions.maxOutputLatencyBlocks === stressedSnapshot.recommendedOptions.maxOutputLatencyBlocks, "live AudioNode calibration helper copies max latency advice");
+
+const latencyRefreshes = [];
+const refreshed = await refreshLivePerformanceAudioNodeLatencyFromCalibration({
+  async refreshLatency(transportLatencySamples) {
+    latencyRefreshes.push(transportLatencySamples);
+    return { transportLatencySamples };
+  }
+}, stressedSnapshot.calibration);
+assert(latencyRefreshes.length === 1 && latencyRefreshes[0] === 896, "live AudioNode calibration helper refreshes latency with recommended transport latency");
+assert(refreshed.transportLatencySamples === 896, "live AudioNode calibration helper returns the latency refresh result");
+
+stressedWindow.reset();
+const resetSnapshot = stressedWindow.snapshot();
+assert(resetSnapshot.samples === 0 && resetSnapshot.droppedSamples === 0, "live AudioNode calibration window reset clears samples");
 
 const boundedCalibration = calibrateLivePerformanceAudioNodePolicy({
   instanceId: "inst-bounded",

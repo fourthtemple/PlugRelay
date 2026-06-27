@@ -155,6 +155,33 @@ export interface LivePerformanceAudioNodeCalibration {
   warnings: string[];
 }
 
+export interface LivePerformanceAudioNodeCalibrationHealthSample {
+  lastRenderDurationMs?: number;
+  responseJitterBlocks?: number;
+  responseDeadlineLeadSamples?: number;
+  underruns?: number;
+  droppedInputBlocks?: number;
+  staleOutputBlocks?: number;
+  sharedInputDroppedBlocks?: number;
+  sharedOutputDroppedBlocks?: number;
+}
+
+export interface LivePerformanceAudioNodeCalibrationWindowOptions extends LivePerformanceAudioNodePolicyOptions {
+  maxSamples?: number;
+  safetyMarginBlocks?: number;
+}
+
+export interface LivePerformanceAudioNodeCalibrationWindowSnapshot {
+  samples: number;
+  droppedSamples: number;
+  calibration: LivePerformanceAudioNodeCalibration;
+  recommendedOptions: SoundBridgeAudioNodeOptions;
+}
+
+export interface LivePerformanceAudioNodeLatencyRefresher<T = unknown> {
+  refreshLatency(transportLatencySamples?: number): Promise<T>;
+}
+
 export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAudioNodeOptions): SoundBridgeAudioNodeOptions {
   const maxQueuedOutputBlocks = boundedInteger(options.maxQueuedOutputBlocks, LIVE_AUDIO_NODE_MAX_QUEUED_OUTPUT_BLOCKS, 1, 64);
   const outputLatencyBlocks = boundedInteger(options.outputLatencyBlocks, Math.min(LIVE_AUDIO_NODE_OUTPUT_LATENCY_BLOCKS, maxQueuedOutputBlocks), 1, maxQueuedOutputBlocks);
@@ -394,4 +421,134 @@ function exceedsAudioNodePolicy(value: number, policyValue: number): boolean {
 
 function roundedAudioNodeNumber(value: number): number {
   return Number(value.toFixed(3));
+}
+
+export class LivePerformanceAudioNodeCalibrationWindow {
+  readonly options: LivePerformanceAudioNodeCalibrationWindowOptions;
+  readonly maxSamples: number;
+  private renderDurationsMs: number[] = [];
+  private responseJitterBlocks: number[] = [];
+  private deadlineLeadBlocks: number[] = [];
+  private underruns = 0;
+  private droppedInputBlocks = 0;
+  private staleOutputBlocks = 0;
+  private sharedInputDroppedBlocks = 0;
+  private sharedOutputDroppedBlocks = 0;
+  private droppedSamples = 0;
+
+  constructor(options: LivePerformanceAudioNodeCalibrationWindowOptions) {
+    this.options = { ...options };
+    this.maxSamples = boundedInteger(options.maxSamples, LIVE_AUDIO_NODE_CALIBRATION_SAMPLES, 1, LIVE_AUDIO_NODE_CALIBRATION_SAMPLES);
+  }
+
+  record(health: LivePerformanceAudioNodeCalibrationHealthSample): LivePerformanceAudioNodeCalibrationWindowSnapshot {
+    let accepted = false;
+    let dropped = false;
+    const renderDuration = boundedOptionalNumber(health.lastRenderDurationMs, 0, 60000);
+    const responseJitter = boundedOptionalNumber(health.responseJitterBlocks, 0, 64);
+    const deadlineLead = audioNodeDeadlineLeadBlocks(health.responseDeadlineLeadSamples, this.options.maxBlockFrames);
+    if (renderDuration !== undefined) { dropped = this.append(this.renderDurationsMs, renderDuration) || dropped; accepted = true; }
+    if (responseJitter !== undefined) { dropped = this.append(this.responseJitterBlocks, responseJitter) || dropped; accepted = true; }
+    if (deadlineLead !== undefined) { dropped = this.append(this.deadlineLeadBlocks, deadlineLead) || dropped; accepted = true; }
+    this.recordPressure(health);
+    if (accepted && dropped) this.droppedSamples += 1;
+    return this.snapshot();
+  }
+
+  reset(): void {
+    this.renderDurationsMs = [];
+    this.responseJitterBlocks = [];
+    this.deadlineLeadBlocks = [];
+    this.underruns = 0;
+    this.droppedInputBlocks = 0;
+    this.staleOutputBlocks = 0;
+    this.sharedInputDroppedBlocks = 0;
+    this.sharedOutputDroppedBlocks = 0;
+    this.droppedSamples = 0;
+  }
+
+  snapshot(): LivePerformanceAudioNodeCalibrationWindowSnapshot {
+    const calibration = this.calibrate();
+    return {
+      samples: this.samples,
+      droppedSamples: this.droppedSamples,
+      calibration,
+      recommendedOptions: livePerformanceAudioNodeOptionsFromCalibration(calibration)
+    };
+  }
+
+  calibrate(): LivePerformanceAudioNodeCalibration {
+    return calibrateLivePerformanceAudioNodePolicy({
+      ...this.options,
+      renderDurationsMs: this.renderDurationsMs,
+      responseJitterBlocks: this.responseJitterBlocks,
+      deadlineLeadBlocks: this.deadlineLeadBlocks,
+      underruns: this.underruns,
+      droppedInputBlocks: this.droppedInputBlocks,
+      staleOutputBlocks: this.staleOutputBlocks,
+      sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
+      sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks
+    });
+  }
+
+  recommendedOptions(overrides: Partial<SoundBridgeAudioNodeOptions> = {}): SoundBridgeAudioNodeOptions {
+    return livePerformanceAudioNodeOptionsFromCalibration(this.calibrate(), overrides);
+  }
+
+  private get samples(): number {
+    return Math.max(this.renderDurationsMs.length, this.responseJitterBlocks.length, this.deadlineLeadBlocks.length);
+  }
+
+  private append(samples: number[], value: number): boolean {
+    samples.push(value);
+    if (samples.length <= this.maxSamples) return false;
+    samples.splice(0, samples.length - this.maxSamples);
+    return true;
+  }
+
+  private recordPressure(health: LivePerformanceAudioNodeCalibrationHealthSample): void {
+    this.underruns = Math.max(this.underruns, boundedInteger(health.underruns, 0, 0, Number.MAX_SAFE_INTEGER));
+    this.droppedInputBlocks = Math.max(this.droppedInputBlocks, boundedInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
+    this.staleOutputBlocks = Math.max(this.staleOutputBlocks, boundedInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
+    this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, boundedInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
+    this.sharedOutputDroppedBlocks = Math.max(this.sharedOutputDroppedBlocks, boundedInteger(health.sharedOutputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
+  }
+}
+
+export function createLivePerformanceAudioNodeCalibrationWindow(options: LivePerformanceAudioNodeCalibrationWindowOptions): LivePerformanceAudioNodeCalibrationWindow {
+  return new LivePerformanceAudioNodeCalibrationWindow(options);
+}
+
+export function livePerformanceAudioNodeOptionsFromCalibration(
+  calibration: LivePerformanceAudioNodeCalibration,
+  overrides: Partial<SoundBridgeAudioNodeOptions> = {}
+): SoundBridgeAudioNodeOptions {
+  const recommended: SoundBridgeAudioNodeOptions = {
+    ...calibration.policy.options,
+    outputLatencyBlocks: calibration.recommendedOutputLatencyBlocks,
+    maxOutputLatencyBlocks: calibration.recommendedMaxOutputLatencyBlocks,
+    sharedBufferBlocks: calibration.recommendedSharedBufferBlocks,
+    audioRequestTimeoutMs: calibration.recommendedAudioRequestTimeoutMs
+  };
+  return {
+    ...recommended,
+    ...overrides,
+    outputLatencyBlocks: recommended.outputLatencyBlocks,
+    maxOutputLatencyBlocks: recommended.maxOutputLatencyBlocks,
+    sharedBufferBlocks: recommended.sharedBufferBlocks,
+    audioRequestTimeoutMs: recommended.audioRequestTimeoutMs
+  };
+}
+
+export function refreshLivePerformanceAudioNodeLatencyFromCalibration<T>(
+  node: LivePerformanceAudioNodeLatencyRefresher<T>,
+  calibration: LivePerformanceAudioNodeCalibration
+): Promise<T> {
+  return node.refreshLatency(calibration.recommendedTransportLatencySamples);
+}
+
+function audioNodeDeadlineLeadBlocks(responseDeadlineLeadSamples: unknown, maxBlockFrames: unknown): number | undefined {
+  const leadSamples = boundedOptionalNumber(responseDeadlineLeadSamples, -1_048_576, 1_048_576);
+  if (leadSamples === undefined) return undefined;
+  return roundedAudioNodeNumber(leadSamples / boundedInteger(Number(maxBlockFrames), 128, 1, 8192));
 }
