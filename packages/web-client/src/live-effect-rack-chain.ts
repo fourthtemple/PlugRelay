@@ -107,6 +107,12 @@ export interface LiveEffectRackChainHealth {
   lastError?: unknown;
 }
 
+export interface LiveEffectRackChainDryOutputEventDetail {
+  response: LiveEffectRackChainResponse;
+  health: LiveEffectRackChainHealth;
+  reason: LiveEffectRackChainDryReason;
+}
+
 export class LiveEffectRackChain extends EventTarget {
   readonly stages: LiveEffectRackChainStage[];
   readonly maxBlockSize: number;
@@ -452,7 +458,12 @@ export class LiveEffectRackChain extends EventTarget {
     const channels = transitionOutputChannels(normalized, this.lastOutputTail, this.lastOutputPath, outputPath, this.transitionFadeSamples);
     this.lastOutputTail = outputTail(channels, outputChannels);
     this.lastOutputPath = outputPath;
-    return channels === response.channels ? response : { ...response, channels };
+    const finalResponse = channels === response.channels ? response : { ...response, channels };
+    if (lastDryReason !== undefined) {
+      const detail: LiveEffectRackChainDryOutputEventDetail = { response: finalResponse, health: this.health, reason: lastDryReason };
+      this.dispatchEvent(new CustomEvent("dry-output", { detail }));
+    }
+    return finalResponse;
   }
 
   private recordDryReason(lastDryReason: LiveEffectRackChainDryReason | undefined): void {

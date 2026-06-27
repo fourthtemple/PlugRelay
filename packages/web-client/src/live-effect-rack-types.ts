@@ -48,6 +48,12 @@ export interface LiveEffectBlockResponse extends Omit<AudioBlockResponse, "chann
   error?: unknown;
 }
 
+export interface LiveEffectRackDryOutputEventDetail {
+  response: LiveEffectBlockResponse;
+  health: LiveEffectRackHealth;
+  reason?: LiveEffectDryReason;
+}
+
 export interface LiveEffectRackProcessOptions {
   skipOnDeadlinePressure?: boolean;
 }

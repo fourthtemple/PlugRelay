@@ -84,6 +84,10 @@ const rack = await SoundBridgeLiveEffectRack.create({
   maxBlockSize: 128
 });
 assert(rack.health.dryOutputBlocks === 0, "live rack scheduled smoke starts without dry output pressure");
+const dryOutputEvents = [];
+rack.addEventListener("dry-output", (event) => {
+  dryOutputEvents.push(event.detail);
+});
 
 const staleScheduler = createLiveEffectRackBlockScheduler({
   sampleRate: 48000,
@@ -106,6 +110,12 @@ assert(
   "live rack scheduled stale blocks fail dry without plugin processing"
 );
 assert(staleEvents === 1 && client.processed.length === 0, "live rack scheduled stale blocks emit stale pressure without plugin work");
+assert(
+  dryOutputEvents.length === 1 &&
+    dryOutputEvents[0].reason === "stale-input" &&
+    dryOutputEvents[0].health.dryOutputBlocks === 1,
+  "live rack emits every scheduled stale dry output"
+);
 
 const freshScheduled = staleScheduler.schedule(inputChannels, { timestamp: 100 });
 const scheduledWet = await rack.processScheduledBlock(freshScheduled);
@@ -116,6 +126,7 @@ assert(
     rack.health.lastDryReason === undefined,
   "live rack scheduled fresh blocks process normally"
 );
+assert(dryOutputEvents.length === 1, "live rack does not emit dry-output for wet scheduled blocks");
 
 const pressureScheduler = createLiveEffectRackBlockScheduler({
   sampleRate: 48000,
@@ -151,6 +162,12 @@ assert(
   deadlinePressureEvents === 1 &&
     client.processed.length === processedBeforePressure + 1,
   "live rack deadline-pressure dry skips are host-visible and avoid plugin work"
+);
+assert(
+  dryOutputEvents.length === 2 &&
+    dryOutputEvents[1].reason === "deadline-pressure" &&
+    dryOutputEvents[1].health.dryOutputBlocks === 2,
+  "live rack emits every scheduler deadline-pressure dry output"
 );
 
 await rack.destroy();

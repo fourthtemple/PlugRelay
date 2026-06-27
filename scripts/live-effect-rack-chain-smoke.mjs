@@ -541,6 +541,10 @@ const scheduler = createLiveEffectRackBlockScheduler({
   nowMs: () => 20
 });
 const staleScheduled = scheduler.schedule([[0.2, 0.1]], { timestamp: 10 });
+const chainDryOutputEvents = [];
+chain.addEventListener("dry-output", (event) => {
+  chainDryOutputEvents.push(event.detail);
+});
 const staleResponse = await chain.processScheduledBlock(staleScheduled);
 assert(staleResponse.bypassed === true, "live rack chain bypasses stale scheduled blocks");
 assert(staleResponse.processedStages === 0 && left.requests.length === 1, "live rack chain does not process stale scheduled blocks");
@@ -550,12 +554,22 @@ assert(
     chain.health.dryOutputBlocks === 1,
   "live rack chain records stale scheduled dry pressure"
 );
+assert(
+  chainDryOutputEvents.length === 1 &&
+    chainDryOutputEvents[0].reason === "chain-stale-input" &&
+    chainDryOutputEvents[0].health.dryOutputBlocks === 1,
+  "live rack chain emits every scheduled stale dry output"
+);
 
 const deadlinePressureStage = new FakeStage("deadline-pressure-scheduled", 7);
 const deadlinePressureChain = createLiveEffectRackChain({
   stages: [deadlinePressureStage],
   outputChannels: 1,
   maxBlockSize: 2
+});
+const deadlinePressureDryOutputEvents = [];
+deadlinePressureChain.addEventListener("dry-output", (event) => {
+  deadlinePressureDryOutputEvents.push(event.detail);
 });
 const deadlinePressureScheduler = createLiveEffectRackBlockScheduler({
   sampleRate: 48000,
@@ -571,6 +585,7 @@ deadlinePressureScheduler.updateDeadlinePressureFromHealth(
 );
 const pressuredScheduledWet = deadlinePressureScheduler.schedule([[1, 1]]);
 const pressuredWetResponse = await deadlinePressureChain.processScheduledBlock(pressuredScheduledWet);
+assert(deadlinePressureDryOutputEvents.length === 0, "live rack chain does not emit dry-output for wet scheduled blocks");
 const pressuredScheduledDry = deadlinePressureScheduler.schedule([[2, 2]]);
 const pressuredDryResponse = await deadlinePressureChain.processScheduledBlock(pressuredScheduledDry, {
   skipOnDeadlinePressure: true
@@ -595,6 +610,12 @@ assert(
   "live rack chain records scheduler deadline-pressure dry reason"
 );
 assert(deadlinePressureChain.health.dryOutputBlocks === 1, "live rack chain counts scheduler deadline-pressure dry output");
+assert(
+  deadlinePressureDryOutputEvents.length === 1 &&
+    deadlinePressureDryOutputEvents[0].reason === "chain-deadline-pressure" &&
+    deadlinePressureDryOutputEvents[0].health.dryOutputBlocks === 1,
+  "live rack chain emits every scheduler deadline-pressure dry output"
+);
 
 const throwingStage = {
   health: { instanceId: "inst-throw" },

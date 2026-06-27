@@ -36,6 +36,7 @@ import type { LiveEffectDryReason, LiveEffectRackTiming } from "./live-effect-ra
 import type {
   LiveEffectBlockRequest,
   LiveEffectBlockResponse,
+  LiveEffectRackDryOutputEventDetail,
   LiveEffectRackHealth,
   LiveEffectRackOptions,
   LiveEffectRackProcessOptions,
@@ -46,7 +47,7 @@ export { calibrateLiveEffectRackPolicy, createLiveEffectRackPolicy } from "./liv
 export type { LiveEffectRackCalibration, LiveEffectRackCalibrationOptions, LiveEffectRackPolicy, LiveEffectRackPolicyOptions } from "./live-effect-rack-policy";
 export { LiveEffectRackCalibrationWindow, LiveEffectRackChainCalibrationWindow, createLiveEffectRackCalibrationWindow, createLiveEffectRackChainCalibrationWindow, liveEffectRackPolicyOptionsFromCalibration, refreshLiveEffectRackLatencyFromCalibration } from "./live-effect-rack-calibration";
 export type { LiveEffectRackCalibrationHealthSample, LiveEffectRackCalibrationWindowOptions, LiveEffectRackCalibrationWindowSnapshot, LiveEffectRackChainCalibrationHealthSample, LiveEffectRackLatencyRefresher } from "./live-effect-rack-calibration";
-export type { LiveEffectBlockRequest, LiveEffectBlockResponse, LiveEffectRackHealth, LiveEffectRackOptions, LiveEffectRackProcessOptions, LivePerformanceRackOptions } from "./live-effect-rack-types";
+export type { LiveEffectBlockRequest, LiveEffectBlockResponse, LiveEffectRackDryOutputEventDetail, LiveEffectRackHealth, LiveEffectRackOptions, LiveEffectRackProcessOptions, LivePerformanceRackOptions } from "./live-effect-rack-types";
 import type { LiveEffectRackScheduledBlock } from "./live-effect-rack-scheduler";
 import { liveTransportForBlock } from "./live-transport";
 
@@ -473,7 +474,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
 
   private dryResponse(request: LiveEffectBlockRequest, error: unknown, renderEngine = "dry-bypass"): LiveEffectBlockResponse {
     this.dryOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.dryOutputBlocks + 1);
-    return this.finishResponse({
+    const response = this.finishResponse({
       blockId: request.blockId,
       channels: dryChannels(request.channels, this.outputChannels, this.maxBlockSize),
       latencySamples: 0,
@@ -484,6 +485,9 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       healthy: this.healthy,
       error
     });
+    const detail: LiveEffectRackDryOutputEventDetail = { response, health: this.health, reason: this.lastDryReason };
+    this.dispatchEvent(new CustomEvent("dry-output", { detail }));
+    return response;
   }
   private recordRenderBudget(response: AudioBlockResponse): boolean {
     this.lastRenderDurationMs = boundedOptionalNumber(response.renderDurationMs, 0, 60000);

@@ -2672,7 +2672,11 @@ export class LiveEffectRackChain extends EventTarget {
     const channels = transitionLiveEffectOutputChannels(normalized, this.lastOutputTail, this.lastOutputPath, outputPath, this.transitionFadeSamples);
     this.lastOutputTail = liveEffectOutputTail(channels, outputChannels);
     this.lastOutputPath = outputPath;
-    return channels === response.channels ? response : { ...response, channels };
+    const finalResponse = channels === response.channels ? response : { ...response, channels };
+    if (lastDryReason !== void 0) {
+      this.dispatchEvent(new CustomEvent("dry-output", { detail: { response: finalResponse, health: this.health, reason: lastDryReason } }));
+    }
+    return finalResponse;
   }
 
   recordDryReason(lastDryReason) {
@@ -3508,7 +3512,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
 
   dryResponse(request, error, renderEngine = "dry-bypass") {
     this.dryOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.dryOutputBlocks + 1);
-    return this.finishResponse({
+    const response = this.finishResponse({
       blockId: request.blockId,
       channels: dryLiveEffectChannels(request.channels, this.outputChannels, this.maxBlockSize),
       latencySamples: 0,
@@ -3519,6 +3523,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       healthy: this.healthy,
       error
     });
+    this.dispatchEvent(new CustomEvent("dry-output", { detail: { response, health: this.health, reason: this.lastDryReason } }));
+    return response;
   }
 
   recordRenderBudget(response) {
