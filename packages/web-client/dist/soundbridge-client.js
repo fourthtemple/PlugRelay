@@ -2029,8 +2029,9 @@ export function createLiveEffectRackAdaptiveLatencyController(options) {
 
 const LIVE_EFFECT_CHAIN_MAX_STAGES = 16;
 
-export class LiveEffectRackChain {
+export class LiveEffectRackChain extends EventTarget {
   constructor(options) {
+    super();
     const maxStages = boundedLiveEffectInteger(options.maxStages, LIVE_EFFECT_CHAIN_MAX_STAGES, 0, LIVE_EFFECT_CHAIN_MAX_STAGES);
     const stages = Array.from(
       { length: boundedLiveEffectInteger(options.stages?.length, 0, 0, maxStages) },
@@ -2047,6 +2048,23 @@ export class LiveEffectRackChain {
     this.processBudgetMisses = 0;
     this.lastError = void 0;
     this.unhealthyReason = void 0;
+    this.lastProcessDurationMs = void 0;
+    this.lastProcessBudgetExceeded = false;
+  }
+
+  get health() {
+    return {
+      healthy: this.unhealthyReason === void 0,
+      stageCount: this.stages.length,
+      processBudgetMs: this.processBudgetMs,
+      maxConsecutiveProcessBudgetMisses: this.maxConsecutiveProcessBudgetMisses,
+      processBudgetMisses: this.processBudgetMisses,
+      lastProcessDurationMs: this.lastProcessDurationMs,
+      processBudgetExceeded: this.lastProcessBudgetExceeded,
+      processBudgetTripped: this.unhealthyReason === "process-budget-exceeded",
+      unhealthyReason: this.unhealthyReason,
+      lastError: this.lastError
+    };
   }
 
   async processBlock(request, options = {}) {
@@ -2136,6 +2154,9 @@ export class LiveEffectRackChain {
     this.lastError = void 0;
     this.unhealthyReason = void 0;
     this.processBudgetMisses = 0;
+    this.lastProcessBudgetExceeded = false;
+    this.dispatchEvent(new CustomEvent("retry", { detail: { health: this.health } }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
     return true;
   }
 
@@ -2168,15 +2189,19 @@ export class LiveEffectRackChain {
   }
 
   finishChainResponse(response, processStartedAt, request, outputChannels) {
+    const previousMisses = this.processBudgetMisses;
+    const previousUnhealthyReason = this.unhealthyReason;
     const durationMs = boundedLiveEffectOptionalNumber(this.nowMs() - processStartedAt, 0, 60000);
     const chainProcessBudgetExceeded = this.processBudgetMs > 0 && (durationMs ?? 0) > this.processBudgetMs;
+    this.lastProcessDurationMs = durationMs;
+    this.lastProcessBudgetExceeded = chainProcessBudgetExceeded;
     this.processBudgetMisses = chainProcessBudgetExceeded ? Math.min(1024, this.processBudgetMisses + 1) : 0;
     const chainProcessBudgetTripped = response.healthy !== false && this.maxConsecutiveProcessBudgetMisses > 0 && this.processBudgetMisses >= this.maxConsecutiveProcessBudgetMisses;
     const error = chainProcessBudgetTripped ? response.error ?? new Error("chain_process_budget_exceeded") : response.error;
     if (chainProcessBudgetTripped) {
       this.lastError = error;
       this.unhealthyReason = "process-budget-exceeded";
-      return {
+      const finalResponse = {
         ...response,
         channels: dryLiveEffectChannels(request.channels, outputChannels, this.maxBlockSize),
         latencySamples: 0,
@@ -2193,8 +2218,10 @@ export class LiveEffectRackChain {
         chainProcessBudgetTripped,
         chainUnhealthyReason: this.unhealthyReason
       };
+      this.dispatchChainPressureEvents(finalResponse, previousMisses, previousUnhealthyReason);
+      return finalResponse;
     }
-    return {
+    const finalResponse = {
       ...response,
       healthy: response.healthy !== false,
       error,
@@ -2205,6 +2232,21 @@ export class LiveEffectRackChain {
       chainProcessBudgetTripped,
       chainUnhealthyReason: this.unhealthyReason
     };
+    this.dispatchChainPressureEvents(finalResponse, previousMisses, previousUnhealthyReason);
+    return finalResponse;
+  }
+
+  dispatchChainPressureEvents(response, previousMisses, previousUnhealthyReason) {
+    const health = this.health;
+    if (response.chainProcessBudgetExceeded) {
+      this.dispatchEvent(new CustomEvent("chain-process-budget-exceeded", { detail: { response, health } }));
+    }
+    if (response.chainProcessBudgetTripped) {
+      this.dispatchEvent(new CustomEvent("chain-process-budget-tripped", { detail: { response, health } }));
+    }
+    if (previousMisses !== this.processBudgetMisses || previousUnhealthyReason !== this.unhealthyReason || response.chainProcessBudgetExceeded) {
+      this.dispatchEvent(new CustomEvent("healthchange", { detail: health }));
+    }
   }
 }
 
