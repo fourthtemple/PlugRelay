@@ -703,6 +703,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.latencyRefreshes = 0;
     this.lastLatencyChangeDirection = undefined;
     this.responseDeadlineLeadSamples = 0;
+    this.responseJitterBlocks = 0;
     this.responseJitterSamples = 0;
     this.responseDeadlineMisses = 0;
     this.responseDeadlineMissesSinceLastStats = 0;
@@ -730,6 +731,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.audioErrorAutoBypassed = false;
     this.lastAudioError = undefined;
     this.unhealthyReason = undefined;
+    this.responseJitterThresholdBlocks = options.responseJitterThresholdBlocks;
     this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
       numberOfInputs: options.inputChannels > 0 ? 1 : 0,
       numberOfOutputs: 1,
@@ -914,7 +916,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       latencyRefreshes: this.latencyRefreshes,
       lastLatencyChangeDirection: this.lastLatencyChangeDirection,
       responseDeadlineLeadSamples: this.responseDeadlineLeadSamples,
+      responseJitterBlocks: this.responseJitterBlocks,
       responseJitterSamples: this.responseJitterSamples,
+      responseJitterThresholdBlocks: this.responseJitterThresholdBlocks,
       responseDeadlineMisses: this.responseDeadlineMisses,
       responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats,
       staleOutputBlocks: this.staleOutputBlocks,
@@ -1078,6 +1082,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.latencyDecreases = boundedAudioNodeInteger(stats.latencyDecreases, this.latencyDecreases, 0, Number.MAX_SAFE_INTEGER);
     this.responseDeadlineLeadSamples =
       boundedAudioNodeOptionalNumber(stats.responseDeadlineLeadSamples, -1048576, 1048576) ?? this.responseDeadlineLeadSamples;
+    this.responseJitterBlocks = boundedAudioNodeInteger(stats.responseJitterBlocks, this.responseJitterBlocks, 0, 64);
     this.responseJitterSamples = boundedAudioNodeInteger(stats.responseJitterSamples, this.responseJitterSamples, 0, 1048576);
     this.responseDeadlineMisses = boundedAudioNodeInteger(
       stats.responseDeadlineMisses,
@@ -1136,6 +1141,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   reportTransportPressure(previous, stats) {
     const reasons = [];
     if (this.responseDeadlineMisses > previous.responseDeadlineMisses) reasons.push("deadline-miss");
+    if (this.latencyIncreases > previous.latencyIncreases && this.responseJitterThresholdBlocks > 0 && boundedAudioNodeOptionalNumber(stats.responseJitterBlocks, 0, 64) !== undefined && this.responseJitterBlocks >= this.responseJitterThresholdBlocks) reasons.push("response-jitter");
     if (this.staleOutputBlocks > previous.staleOutputBlocks) reasons.push("stale-output");
     if (this.droppedInputBlocks > previous.droppedInputBlocks) reasons.push("dropped-input");
     if (this.underruns > previous.underruns) reasons.push("underrun");

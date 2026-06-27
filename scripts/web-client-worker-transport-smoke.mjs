@@ -310,6 +310,7 @@ const pressureStats = {
   latencyIncreases: 1,
   latencyDecreases: 0,
   responseDeadlineLeadSamples: -128,
+  responseJitterBlocks: 3,
   responseJitterSamples: 384,
   responseDeadlineMisses: 4,
   responseDeadlineMissesSinceLastStats: 1,
@@ -336,7 +337,7 @@ assert(liveNode.health.latencyDecreases === 0, "SoundBridgeAudioNode health trac
 assert(liveNode.health.latencyChangeEvents === 1, "SoundBridgeAudioNode health counts latency changes");
 assert(liveNode.health.lastLatencyChangeDirection === "increased", "SoundBridgeAudioNode health tracks latency direction");
 assert(liveNode.health.responseDeadlineLeadSamples === -128, "SoundBridgeAudioNode health tracks deadline lead");
-assert(liveNode.health.responseJitterSamples === 384, "SoundBridgeAudioNode health tracks response jitter");
+assert(liveNode.health.responseJitterSamples === 384 && liveNode.health.responseJitterBlocks === 3 && liveNode.health.responseJitterThresholdBlocks === 2, "SoundBridgeAudioNode health tracks response jitter against the live threshold");
 assert(liveNode.health.responseDeadlineMisses === 4, "SoundBridgeAudioNode health tracks deadline misses");
 assert(liveNode.health.responseDeadlineMissesSinceLastStats === 1, "SoundBridgeAudioNode health tracks recent deadline misses");
 assert(liveNode.health.staleOutputBlocks === 2, "SoundBridgeAudioNode health tracks stale output blocks");
@@ -351,7 +352,7 @@ assert(latencyDetail?.previous?.outputLatencyBlocks === 0, "latencychange includ
 assert(latencyDetail?.health?.transportLatencySamples === 256, "latencychange includes updated health");
 assert(transportPressureEvents === 1, "SoundBridgeAudioNode emits transport-pressure on increased pressure counters");
 assert(
-  transportPressureDetail?.reasons?.join(",") === "deadline-miss,stale-output,dropped-input,underrun,shared-input-drop,shared-output-drop",
+  transportPressureDetail?.reasons?.join(",") === "deadline-miss,response-jitter,stale-output,dropped-input,underrun,shared-input-drop,shared-output-drop",
   "transport-pressure reports bounded pressure reasons"
 );
 assert(transportPressureDetail?.health?.transportPressureEvents === 1, "transport-pressure includes updated health");

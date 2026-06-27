@@ -19,6 +19,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private readonly client: SoundBridgeClient;
   private readonly instanceId: string;
   private readonly sampleRate: number;
+  private readonly responseJitterThresholdBlocks: number;
   private inFlightBlocks = 0;
   private destroyed = false;
   private readonly maxInFlightBlocks: number;
@@ -38,6 +39,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private latencyRefreshes = 0;
   private lastLatencyChangeDirection?: SoundBridgeAudioNodeHealth["lastLatencyChangeDirection"];
   private responseDeadlineLeadSamples = 0;
+  private responseJitterBlocks = 0;
   private responseJitterSamples = 0;
   private responseDeadlineMisses = 0;
   private responseDeadlineMissesSinceLastStats = 0;
@@ -71,6 +73,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.client = client;
     this.instanceId = options.instanceId;
     this.sampleRate = context.sampleRate;
+    this.responseJitterThresholdBlocks = options.responseJitterThresholdBlocks;
     this.maxInFlightBlocks = options.maxInFlightBlocks;
     this.audioTransport = options.audioTransport;
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
@@ -270,7 +273,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       latencyRefreshes: this.latencyRefreshes,
       lastLatencyChangeDirection: this.lastLatencyChangeDirection,
       responseDeadlineLeadSamples: this.responseDeadlineLeadSamples,
+      responseJitterBlocks: this.responseJitterBlocks,
       responseJitterSamples: this.responseJitterSamples,
+      responseJitterThresholdBlocks: this.responseJitterThresholdBlocks,
       responseDeadlineMisses: this.responseDeadlineMisses,
       responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats,
       staleOutputBlocks: this.staleOutputBlocks,
@@ -473,6 +478,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     latencyIncreases?: number;
     latencyDecreases?: number;
     responseDeadlineLeadSamples?: number;
+    responseJitterBlocks?: number;
     responseJitterSamples?: number;
     responseDeadlineMisses?: number;
     responseDeadlineMissesSinceLastStats?: number;
@@ -505,6 +511,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.latencyDecreases = boundedInteger(stats.latencyDecreases, this.latencyDecreases, 0, Number.MAX_SAFE_INTEGER);
     this.responseDeadlineLeadSamples =
       boundedOptionalNumber(stats.responseDeadlineLeadSamples, -1_048_576, 1_048_576) ?? this.responseDeadlineLeadSamples;
+    this.responseJitterBlocks = boundedInteger(stats.responseJitterBlocks, this.responseJitterBlocks, 0, 64);
     this.responseJitterSamples = boundedInteger(stats.responseJitterSamples, this.responseJitterSamples, 0, 1_048_576);
     this.responseDeadlineMisses = boundedInteger(stats.responseDeadlineMisses, this.responseDeadlineMisses, 0, Number.MAX_SAFE_INTEGER);
     this.responseDeadlineMissesSinceLastStats = boundedInteger(
@@ -566,16 +573,18 @@ export class SoundBridgeAudioNode extends EventTarget {
   private reportTransportPressure(
     previous: {
       responseDeadlineMisses: number;
+      latencyIncreases: number;
       staleOutputBlocks: number;
       droppedInputBlocks: number;
       underruns: number;
       sharedInputDroppedBlocks: number;
       sharedOutputDroppedBlocks: number;
     },
-    stats: unknown
+    stats: { responseJitterBlocks?: number }
   ): void {
     const reasons: string[] = [];
     if (this.responseDeadlineMisses > previous.responseDeadlineMisses) reasons.push("deadline-miss");
+    if (this.latencyIncreases > previous.latencyIncreases && this.responseJitterThresholdBlocks > 0 && boundedOptionalNumber(stats.responseJitterBlocks, 0, 64) !== undefined && this.responseJitterBlocks >= this.responseJitterThresholdBlocks) reasons.push("response-jitter");
     if (this.staleOutputBlocks > previous.staleOutputBlocks) reasons.push("stale-output");
     if (this.droppedInputBlocks > previous.droppedInputBlocks) reasons.push("dropped-input");
     if (this.underruns > previous.underruns) reasons.push("underrun");

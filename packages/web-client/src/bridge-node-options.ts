@@ -51,7 +51,9 @@ export interface SoundBridgeAudioNodeHealth {
   latencyRefreshes: number;
   lastLatencyChangeDirection?: "increased" | "decreased" | "changed";
   responseDeadlineLeadSamples: number;
+  responseJitterBlocks: number;
   responseJitterSamples: number;
+  responseJitterThresholdBlocks: number;
   responseDeadlineMisses: number;
   responseDeadlineMissesSinceLastStats: number;
   staleOutputBlocks: number;

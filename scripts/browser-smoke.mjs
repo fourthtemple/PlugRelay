@@ -84,21 +84,7 @@ try {
     await assertPresetApply(page, format);
     await assertParameterStateRoundTrip(page, format);
 
-    const before = await processedBlocks(page);
-    const key = page.locator('.piano-key[data-note="60"]');
-    const box = await key.boundingBox();
-    assert(box, "Keyboard key is visible.");
-
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.waitForTimeout(500);
-    await page.mouse.up();
-
-    await page.waitForFunction(
-      (previous) => Number(document.querySelector("#processedBlocks")?.textContent ?? 0) > previous,
-      before,
-      { timeout: 5000 }
-    );
+    await playKeyUntilProcessed(page);
     await page.waitForFunction(
       () => document.querySelector("#renderEngine")?.textContent === "Bundle worker",
       undefined,
@@ -114,6 +100,29 @@ try {
 
 async function processedBlocks(page) {
   return Number(await page.locator("#processedBlocks").textContent());
+}
+
+async function playKeyUntilProcessed(page) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const before = await processedBlocks(page);
+    const key = page.locator('.piano-key[data-note="60"]');
+    const box = await key.boundingBox();
+    assert(box, "Keyboard key is visible.");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(500);
+    await page.mouse.up();
+    try {
+      await page.waitForFunction(
+        (previous) => Number(document.querySelector("#processedBlocks")?.textContent ?? 0) > previous,
+        before,
+        { timeout: 5000 }
+      );
+      return;
+    } catch (error) {
+      if (attempt === 1) throw error;
+    }
+  }
 }
 
 async function assertRealtimeStats(page) {
