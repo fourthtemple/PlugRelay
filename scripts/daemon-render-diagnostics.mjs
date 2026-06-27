@@ -12,8 +12,7 @@ export function boundedRenderDurationMs(startedAt) {
 }
 
 export function renderBudgetDiagnostics(renderDurationMs, frames, sampleRate) {
-  const budget = (Number(frames) / Number(sampleRate)) * 1000;
-  const renderBudgetMs = boundedRenderNumber(budget, MAX_RENDER_DIAGNOSTIC_MS);
+  const renderBudgetMs = boundedRenderBudgetMs(frames, sampleRate);
   return { renderBudgetMs, renderBudgetExceeded: renderBudgetMs > 0 && renderDurationMs > renderBudgetMs };
 }
 
@@ -63,12 +62,16 @@ function recordRenderTimeout(instance, context = {}) {
 }
 
 function renderDiagnosticDetails(instance, context = {}, options = {}) {
+  const renderTimeoutMs = boundedRenderTimeoutMs(context.renderTimeoutMs);
+  const renderBudgetMs = boundedRenderBudgetMs(context.frames, context.sampleRate);
   return {
     instanceId: boundedRenderText(instance?.instanceId, 96),
     pluginId: boundedRenderText(instance?.pluginId, 256),
     format: boundedRenderText(instance?.format, 16),
     renderEngine: boundedRenderText(instance?.renderEngine ?? instance?.worker?.renderEngine, 64),
-    renderTimeoutMs: boundedRenderTimeoutMs(context.renderTimeoutMs),
+    renderTimeoutMs,
+    renderBudgetMs,
+    renderTimeoutBudgetDeltaMs: renderTimeoutBudgetDeltaMs(renderTimeoutMs, renderBudgetMs),
     renderTimeouts: boundedRenderCount(instance?.renderTimeouts ?? 1),
     consecutiveRenderTimeouts: boundedRenderCount(instance?.consecutiveRenderTimeouts ?? 1),
     frames: boundedRenderInteger(context.frames, 0, 8192),
@@ -89,6 +92,11 @@ function boundedRenderCount(value) {
   return Number.isFinite(count) ? Math.max(0, Math.min(MAX_RENDER_TIMEOUT_COUNT, count)) : 0;
 }
 
+function boundedRenderBudgetMs(frames, sampleRate) {
+  const budget = (Number(frames) / Number(sampleRate)) * 1000;
+  return boundedRenderNumber(budget, MAX_RENDER_DIAGNOSTIC_MS);
+}
+
 function boundedRenderInteger(value, min, max) {
   const integer = Math.floor(Number(value));
   return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : min;
@@ -104,6 +112,18 @@ function boundedOptionalRenderInteger(value) {
 function boundedRenderNumber(value, max) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(max, Math.round(number * 1000) / 1000)) : 0;
+}
+
+function boundedRenderSignedNumber(value, max) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(-max, Math.min(max, Math.round(number * 1000) / 1000)) : 0;
+}
+
+function renderTimeoutBudgetDeltaMs(renderTimeoutMs, renderBudgetMs) {
+  if (renderTimeoutMs === undefined || renderBudgetMs <= 0) {
+    return undefined;
+  }
+  return boundedRenderSignedNumber(renderTimeoutMs - renderBudgetMs, MAX_RENDER_DIAGNOSTIC_MS);
 }
 
 function boundedRenderText(value, maxBytes) {

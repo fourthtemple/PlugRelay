@@ -24,6 +24,8 @@ const firstTimeout = renderTimeoutProtocolError(
 );
 check(firstTimeout?.code === "render_timeout", "worker command timeout maps to render_timeout");
 check(firstTimeout.details.renderTimeoutMs === 3, "render timeout details clamp timeout milliseconds");
+check(firstTimeout.details.renderBudgetMs === 2.667, "render timeout details include block budget");
+check(firstTimeout.details.renderTimeoutBudgetDeltaMs === 0.333, "render timeout details compare deadline to block budget");
 check(firstTimeout.details.renderTimeouts === 1, "render timeout details count total misses");
 check(firstTimeout.details.consecutiveRenderTimeouts === 1, "render timeout details count consecutive misses");
 check(firstTimeout.details.renderQuarantined === true, "render timeout details report quarantine");
@@ -36,6 +38,7 @@ const quarantined = renderQuarantineProtocolError(
 );
 check(quarantined?.code === "render_quarantined", "quarantined render workers fail fast");
 check(quarantined.details.renderTimeouts === 1, "quarantine errors do not increment timeout counters");
+check(quarantined.details.renderBudgetMs === 2.667, "quarantine errors keep block budget diagnostics");
 
 const secondTimeout = renderTimeoutProtocolError(
   instance,
@@ -45,6 +48,7 @@ const secondTimeout = renderTimeoutProtocolError(
 );
 check(secondTimeout.details.renderTimeouts === 2, "render timeout counter increments");
 check(secondTimeout.details.consecutiveRenderTimeouts === 2, "consecutive render timeout counter increments");
+check(secondTimeout.details.renderTimeoutBudgetDeltaMs === -0.333, "deadline budget delta can show stricter deadlines");
 recordRenderSuccess(instance);
 check(instance.consecutiveRenderTimeouts === 0, "successful render clears consecutive timeout counter");
 check(

@@ -19,7 +19,7 @@ SoundBridge already has the core security and host shape in place:
 - optional browser worker transport that owns WebSocket, JSON, and binary audio frame encode/decode, with direct `AudioWorklet` audio ports, initial `SharedArrayBuffer` audio rings sized from live in-flight and latency bounds, atomic wakeups where available, bounded shared-path in-flight audio requests and timeouts, newest-input/output overwrite under shared ring pressure, recycled worklet and transport-worker buffers, host-tunable adaptive output latency and recovery, controlled safety blocks for miss/shared-output/deadline-pressure latency raises, measured render-duration and response deadline/jitter stats, and transferred binary output buffers for live processing
 - generic parameter editor sessions
 - opt-in file grant broker foundation with path-free browser responses
-- native worker IPC limits for command size, pending commands, stdout/stderr lines, diagnostics, startup, timeout, termination, live per-render deadlines, bounded `render_timeout` diagnostics, and fail-fast `render_quarantined` responses until instance recreation
+- native worker IPC limits for command size, pending commands, stdout/stderr lines, diagnostics, startup, timeout, termination, live per-render deadlines, bounded `render_timeout` deadline-budget diagnostics, and fail-fast `render_quarantined` responses until instance recreation
 - source-size guardrails: source, schema, config, and documentation files must stay below 800 lines (799 lines maximum), with a 750-line near-limit threshold and zero reviewed exceptions
 
 ## Near-Term Core Hosting Work
