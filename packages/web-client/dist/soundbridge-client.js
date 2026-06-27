@@ -819,6 +819,9 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastError = void 0;
     this.unhealthyReason = void 0;
     this.recoveryDryBlocks = 0;
+    this.inFlightEpoch = 0;
+    this.inFlightBlocks = 0;
+    this.droppedInputBlocks = 0;
     this.renderBudgetMisses = 0;
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
@@ -830,6 +833,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.inputChannels = boundedLiveEffectChannelCount(options.inputChannels ?? options.plugin.inputs ?? 2);
     this.outputChannels = boundedLiveEffectChannelCount(options.outputChannels ?? options.plugin.outputs ?? this.inputChannels);
     this.audioTransport = options.audioTransport === "json" ? "json" : "binary";
+    this.maxInFlightBlocks = boundedLiveEffectInteger(options.maxInFlightBlocks, 1, 1, 32);
     this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, 0, 0, 60000);
     this.maxConsecutiveRenderBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 3, 0, 1024);
     this.renderBudgetRecoveryBlocks = boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, 0, 0, 4096);
@@ -859,7 +863,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       unhealthyReason: this.unhealthyReason,
       recoveryDryBlocks: this.recoveryDryBlocks,
       renderBudgetRecoveryBlocks: this.renderBudgetRecoveryBlocks,
-      processTimeoutMs: this.processTimeoutMs
+      processTimeoutMs: this.processTimeoutMs,
+      inFlightBlocks: this.inFlightBlocks,
+      maxInFlightBlocks: this.maxInFlightBlocks,
+      droppedInputBlocks: this.droppedInputBlocks
     };
   }
 
@@ -898,6 +905,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       this.maybeRecoverFromRenderPressure();
       return response;
     }
+    if (this.inFlightBlocks >= this.maxInFlightBlocks) {
+      this.droppedInputBlocks = Math.min(1024, this.droppedInputBlocks + 1);
+      const response = this.dryResponse(request, void 0, "dry-backpressure");
+      this.dispatchEvent(new CustomEvent("input-backpressure", { detail: { response, health: this.health } }));
+      return response;
+    }
 
     try {
       const processRequest = {
@@ -917,6 +930,9 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
               channels: cloneLiveEffectChannels(request.channels),
               inputBuses: cloneLiveEffectBusBlocks(request.inputBuses)
             });
+      this.inFlightBlocks += 1;
+      const inFlightEpoch = this.inFlightEpoch;
+      processed.then(() => this.releaseInFlightBlock(inFlightEpoch), () => this.releaseInFlightBlock(inFlightEpoch));
       const response = await withLiveEffectTimeout(processed, this.processTimeoutMs);
       if (this.recordRenderBudget(response)) {
         const error = new Error("render_budget_exceeded");
@@ -943,6 +959,9 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastError = void 0;
     this.unhealthyReason = void 0;
     this.recoveryDryBlocks = 0;
+    this.inFlightEpoch += 1;
+    this.inFlightBlocks = 0;
+    this.droppedInputBlocks = 0;
     this.renderBudgetMisses = 0;
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
@@ -953,19 +972,21 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   async destroyInstance() {
     const instanceId = this.instanceId;
     this.created = void 0;
+    this.inFlightEpoch += 1;
+    this.inFlightBlocks = 0;
     if (instanceId) {
       await this.client.destroyInstance(instanceId);
     }
   }
 
-  dryResponse(request, error) {
+  dryResponse(request, error, renderEngine = "dry-bypass") {
     return {
       blockId: request.blockId,
       channels: dryLiveEffectChannels(request.channels, this.outputChannels),
       latencySamples: 0,
       tailSamples: 0,
       infiniteTail: false,
-      renderEngine: "dry-bypass",
+      renderEngine,
       bypassed: true,
       healthy: this.healthy,
       error
@@ -1008,6 +1029,13 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.recoveryDryBlocks = 0;
     this.dispatchEvent(new CustomEvent("effect-error", { detail: { error, health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  releaseInFlightBlock(epoch) {
+    if (epoch !== this.inFlightEpoch) {
+      return;
+    }
+    this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
   }
 }
 

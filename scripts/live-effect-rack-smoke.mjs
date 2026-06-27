@@ -189,6 +189,29 @@ const pressureRecovered = await pressureRack.processBlock({ blockId: 11, channel
 assert(pressureRecovered.bypassed === false && pressureRack.health.renderBudgetMisses === 0, "recovered render pressure rack resumes wet processing");
 await pressureRack.destroy();
 
+const backpressureRack = await SoundBridgeLiveEffectRack.create({
+  client,
+  plugin,
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  maxInFlightBlocks: 1
+});
+let backpressureEvents = 0;
+backpressureRack.addEventListener("input-backpressure", () => {
+  backpressureEvents += 1;
+});
+client.processingDelayMs = 20;
+const slowBlock = backpressureRack.processBlock({ blockId: 12, channels: inputChannels });
+const backpressured = await backpressureRack.processBlock({ blockId: 13, channels: inputChannels });
+assert(backpressured.bypassed === true && backpressured.healthy === true, "live rack returns dry when its in-flight limit is full");
+assert(backpressured.renderEngine === "dry-backpressure", "in-flight pressure reports a dry backpressure render engine");
+assert(backpressureRack.health.droppedInputBlocks === 1 && backpressureRack.health.inFlightBlocks === 1, "live rack tracks in-flight pressure");
+assert(backpressureEvents === 1, "in-flight pressure emits a host-visible event");
+client.processingDelayMs = 0;
+const slowProcessed = await slowBlock;
+assert(slowProcessed.bypassed === false && backpressureRack.health.inFlightBlocks === 0, "first slow block completes after backpressure drop");
+await backpressureRack.destroy();
+
 const timeoutRack = await SoundBridgeLiveEffectRack.create({
   client,
   plugin,
@@ -197,10 +220,10 @@ const timeoutRack = await SoundBridgeLiveEffectRack.create({
   processTimeoutMs: 1
 });
 client.processingDelayMs = 20;
-const timedOut = await timeoutRack.processBlock({ blockId: 12, channels: inputChannels });
+const timedOut = await timeoutRack.processBlock({ blockId: 14, channels: inputChannels });
 assert(timedOut.bypassed === true && timedOut.healthy === false, "live rack fails dry when processBlock exceeds its timeout");
 assert(timeoutRack.health.unhealthyReason === "process-timeout", "live rack records process timeout as its health reason");
-const afterTimeout = await timeoutRack.processBlock({ blockId: 13, channels: inputChannels });
+const afterTimeout = await timeoutRack.processBlock({ blockId: 15, channels: inputChannels });
 assert(afterTimeout.bypassed === true && timeoutRack.health.healthy === false, "process timeout does not auto-recover");
 client.processingDelayMs = 0;
 await timeoutRack.destroy();
