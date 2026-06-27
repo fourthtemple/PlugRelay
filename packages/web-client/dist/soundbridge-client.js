@@ -820,6 +820,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.droppedInputBlocks = 0;
     this.underruns = 0;
     this.sharedAudioEnabled = false;
+    this.sharedInputQueuedBlocks = 0;
+    this.sharedOutputQueuedBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
     this.transportPressureEvents = 0;
@@ -1040,6 +1042,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       droppedInputBlocks: this.droppedInputBlocks,
       underruns: this.underruns,
       sharedAudioEnabled: this.sharedAudioEnabled,
+      sharedInputQueuedBlocks: this.sharedInputQueuedBlocks,
+      sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
       sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
       transportPressureEvents: this.transportPressureEvents,
@@ -1217,6 +1221,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.staleOutputBlocks = boundedAudioNodeInteger(stats.staleOutputBlocks, this.staleOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
     this.droppedInputBlocks = boundedAudioNodeInteger(stats.droppedInputBlocks, this.droppedInputBlocks, 0, Number.MAX_SAFE_INTEGER);
     this.underruns = boundedAudioNodeInteger(stats.underruns, this.underruns, 0, Number.MAX_SAFE_INTEGER);
+    this.sharedInputQueuedBlocks = boundedAudioNodeInteger(stats.sharedInputQueuedBlocks, this.sharedInputQueuedBlocks, 0, 64);
+    this.sharedOutputQueuedBlocks = boundedAudioNodeInteger(stats.sharedOutputQueuedBlocks, this.sharedOutputQueuedBlocks, 0, 64);
     this.sharedInputDroppedBlocks = boundedAudioNodeInteger(
       stats.sharedInputDroppedBlocks,
       this.sharedInputDroppedBlocks,

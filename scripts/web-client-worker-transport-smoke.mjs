@@ -313,6 +313,8 @@ const pressureStats = {
   droppedInputBlocks: 1,
   underruns: 7,
   sharedAudioEnabled: true,
+  sharedInputQueuedBlocks: 3,
+  sharedOutputQueuedBlocks: 4,
   sharedInputDroppedBlocks: 5,
   sharedOutputDroppedBlocks: 6
 };
@@ -337,7 +339,7 @@ assert(liveNode.health.fallbackOutputBlocks === 7 && liveNode.health.lastFallbac
 assert(liveNode.health.staleOutputBlocks === 2, "SoundBridgeAudioNode health tracks stale output blocks");
 assert(liveNode.health.droppedInputBlocks === 1, "SoundBridgeAudioNode health tracks dropped input blocks");
 assert(liveNode.health.underruns === 7, "SoundBridgeAudioNode health tracks underruns");
-assert(liveNode.health.sharedAudioEnabled === true, "SoundBridgeAudioNode health tracks shared audio mode");
+assert(liveNode.health.sharedAudioEnabled === true && liveNode.health.sharedInputQueuedBlocks === 3 && liveNode.health.sharedOutputQueuedBlocks === 4, "SoundBridgeAudioNode health tracks shared audio queue depth");
 assert(liveNode.health.sharedInputDroppedBlocks === 5, "SoundBridgeAudioNode health tracks shared input drops");
 assert(liveNode.health.sharedOutputDroppedBlocks === 6, "SoundBridgeAudioNode health tracks shared output drops");
 assert(latencyEvents === 1, "SoundBridgeAudioNode emits latencychange when worklet latency changes");

@@ -71,6 +71,8 @@ export interface SoundBridgeAudioNodeHealth {
   droppedInputBlocks: number;
   underruns: number;
   sharedAudioEnabled: boolean;
+  sharedInputQueuedBlocks: number;
+  sharedOutputQueuedBlocks: number;
   sharedInputDroppedBlocks: number;
   sharedOutputDroppedBlocks: number;
   transportPressureEvents: number;

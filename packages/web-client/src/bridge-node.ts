@@ -49,6 +49,8 @@ export class SoundBridgeAudioNode extends EventTarget {
   private droppedInputBlocks = 0;
   private underruns = 0;
   private sharedAudioEnabled = false;
+  private sharedInputQueuedBlocks = 0;
+  private sharedOutputQueuedBlocks = 0;
   private sharedInputDroppedBlocks = 0;
   private sharedOutputDroppedBlocks = 0;
   private transportPressureEvents = 0;
@@ -290,6 +292,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       droppedInputBlocks: this.droppedInputBlocks,
       underruns: this.underruns,
       sharedAudioEnabled: this.sharedAudioEnabled,
+      sharedInputQueuedBlocks: this.sharedInputQueuedBlocks,
+      sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
       sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
       transportPressureEvents: this.transportPressureEvents,
@@ -498,6 +502,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     droppedInputBlocks?: number;
     underruns?: number;
     sharedAudioEnabled?: boolean;
+    sharedInputQueuedBlocks?: number;
+    sharedOutputQueuedBlocks?: number;
     sharedInputDroppedBlocks?: number;
     sharedOutputDroppedBlocks?: number;
   }): void {
@@ -538,6 +544,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.staleOutputBlocks = boundedInteger(stats.staleOutputBlocks, this.staleOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
     this.droppedInputBlocks = boundedInteger(stats.droppedInputBlocks, this.droppedInputBlocks, 0, Number.MAX_SAFE_INTEGER);
     this.underruns = boundedInteger(stats.underruns, this.underruns, 0, Number.MAX_SAFE_INTEGER);
+    this.sharedInputQueuedBlocks = boundedInteger(stats.sharedInputQueuedBlocks, this.sharedInputQueuedBlocks, 0, 64);
+    this.sharedOutputQueuedBlocks = boundedInteger(stats.sharedOutputQueuedBlocks, this.sharedOutputQueuedBlocks, 0, 64);
     this.sharedInputDroppedBlocks = boundedInteger(
       stats.sharedInputDroppedBlocks,
       this.sharedInputDroppedBlocks,
