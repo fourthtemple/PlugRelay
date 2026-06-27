@@ -40,6 +40,9 @@ export interface SoundBridgeAudioNodeHealth {
   transportLatencySamples: number;
   pluginLatencySamples: number;
   reportedLatencySamples: number;
+  transportLatencyMs: number;
+  pluginLatencyMs: number;
+  reportedLatencyMs: number;
   latencyIncreases: number;
   latencyDecreases: number;
   latencyChangeEvents: number;
@@ -136,4 +139,10 @@ export function boundedOptionalNumber(value: unknown, min: number, max: number):
 
 export function combinedAudioNodeLatencySamples(pluginLatencySamples: number, transportLatencySamples: number): number {
   return Math.min(1_048_576, pluginLatencySamples + transportLatencySamples);
+}
+
+export function audioNodeLatencyMilliseconds(samples: number, sampleRate: number): number {
+  const boundedSamples = boundedInteger(samples, 0, 0, 1_048_576);
+  const boundedSampleRate = boundedInteger(sampleRate, 48000, 1, 384000);
+  return Number(((boundedSamples / boundedSampleRate) * 1000).toFixed(3));
 }

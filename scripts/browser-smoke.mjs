@@ -118,6 +118,7 @@ async function processedBlocks(page) {
 async function assertRealtimeStats(page) {
   for (const selector of [
     "#latencyDecreases",
+    "#reportedLatencyMs",
     "#responseDeadlineLeadSamples",
     "#responseJitterSamples",
     "#sharedDroppedBlocks",

@@ -57,6 +57,10 @@ export interface LiveEffectRackHealth {
   pluginLatencySamples: number;
   transportLatencySamples: number;
   reportedLatencySamples: number;
+  latencyMs: number;
+  pluginLatencyMs: number;
+  transportLatencyMs: number;
+  reportedLatencyMs: number;
   renderBudgetMisses: number;
   lastRenderDurationMs?: number;
   lastRenderBudgetMs?: number;
@@ -208,6 +212,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       pluginLatencySamples: this.created?.latencySamples ?? 0,
       transportLatencySamples: this.transportLatencySamples,
       reportedLatencySamples: this.reportedLatencySamples,
+      latencyMs: liveEffectLatencyMilliseconds(this.created?.latencySamples ?? 0, this.sampleRate),
+      pluginLatencyMs: liveEffectLatencyMilliseconds(this.created?.latencySamples ?? 0, this.sampleRate),
+      transportLatencyMs: liveEffectLatencyMilliseconds(this.transportLatencySamples, this.sampleRate),
+      reportedLatencyMs: liveEffectLatencyMilliseconds(this.reportedLatencySamples, this.sampleRate),
       renderBudgetMisses: this.renderBudgetMisses,
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
@@ -613,6 +621,12 @@ function boundedLatencySamples(value: unknown, fallback: number): number {
 
 function combinedLatencySamples(pluginLatencySamples: number, transportLatencySamples: number): number {
   return Math.min(LIVE_EFFECT_MAX_LATENCY_SAMPLES, pluginLatencySamples + transportLatencySamples);
+}
+
+function liveEffectLatencyMilliseconds(samples: number, sampleRate: number): number {
+  const boundedSamples = boundedLatencySamples(samples, 0);
+  const boundedSampleRate = boundedLiveEffectInteger(sampleRate, 48000, 1, 384000);
+  return Number(((boundedSamples / boundedSampleRate) * 1000).toFixed(3));
 }
 
 async function withLiveEffectTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

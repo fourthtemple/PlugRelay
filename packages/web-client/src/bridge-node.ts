@@ -1,5 +1,6 @@
 import type { AudioBlockResponse } from "../../protocol/src/messages";
 import {
+  audioNodeLatencyMilliseconds,
   boundedInteger,
   boundedOptionalNumber,
   combinedAudioNodeLatencySamples,
@@ -255,6 +256,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       transportLatencySamples: this.transportLatencySamples,
       pluginLatencySamples: this.pluginLatencySamples,
       reportedLatencySamples: this.reportedLatencySamples,
+      transportLatencyMs: audioNodeLatencyMilliseconds(this.transportLatencySamples, this.sampleRate),
+      pluginLatencyMs: audioNodeLatencyMilliseconds(this.pluginLatencySamples, this.sampleRate),
+      reportedLatencyMs: audioNodeLatencyMilliseconds(this.reportedLatencySamples, this.sampleRate),
       latencyIncreases: this.latencyIncreases,
       latencyDecreases: this.latencyDecreases,
       latencyChangeEvents: this.latencyChangeEvents,

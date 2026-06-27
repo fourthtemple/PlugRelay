@@ -159,7 +159,8 @@ assert(rack.health.healthy === true && rack.health.latencySamples === 12, "live 
 assert(
   rack.health.pluginLatencySamples === 12 &&
     rack.health.transportLatencySamples === 0 &&
-    rack.health.reportedLatencySamples === 12,
+    rack.health.reportedLatencySamples === 12 &&
+    rack.health.reportedLatencyMs === 0.25,
   "live effect rack starts with plugin-only latency health"
 );
 assert(rack.health.renderBudgetMisses === 0 && rack.health.renderBudgetExceeded === false, "live effect rack starts without budget pressure");
@@ -181,7 +182,8 @@ assert(client.latencyRequests.at(-1) === 256, "live rack bounds transport latenc
 assert(
   refreshedTransportLatency.pluginLatencySamples === 12 &&
     refreshedTransportLatency.transportLatencySamples === 256 &&
-    refreshedTransportLatency.reportedLatencySamples === 268,
+    refreshedTransportLatency.reportedLatencySamples === 268 &&
+    refreshedTransportLatency.reportedLatencyMs === 5.583,
   "live rack refresh normalizes plugin plus transport latency for host compensation"
 );
 assert(latencyEvents === 1, "live rack emits latencychange when refreshed latency changes");
@@ -207,7 +209,8 @@ assert(dynamicLatency.latencySamples === 48, "live rack receives dynamic plugin 
 assert(
   rack.health.pluginLatencySamples === 48 &&
     rack.health.transportLatencySamples === 256 &&
-    rack.health.reportedLatencySamples === 304,
+    rack.health.reportedLatencySamples === 304 &&
+    rack.health.reportedLatencyMs === 6.333,
   "live rack updates plugin plus transport latency from render responses"
 );
 assert(latencyEvents === 2, "live rack emits a latencychange event when render latency changes");

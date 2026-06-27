@@ -135,7 +135,7 @@ Then create a plugin instance and put it in your Web Audio graph:
 ```
 
 That is the core integration: scan, create an instance, connect `SoundBridgeAudioNode` with the live-performance Web Audio defaults.
-For live UIs, call `pluginNode.setBypassed(true)` for emergency fail-dry behavior, call `pluginNode.setBypassed(false)` for an explicit retry after an auto-bypass, call `pluginNode.refreshLatency()` when transport latency changes or from your compensation loop, read `pluginNode.health`, and listen for `latencychange` and `transport-pressure` to monitor plugin latency changes from render responses, deadline misses, stale output, dropped input, underruns, audio errors, render-budget pressure, transport-pressure auto-bypass, render-budget auto-bypass, and audio-error auto-bypass.
+For live UIs, call `pluginNode.setBypassed(true)` for emergency fail-dry behavior, call `pluginNode.setBypassed(false)` for an explicit retry after an auto-bypass, call `pluginNode.refreshLatency()` when transport latency changes or from your compensation loop, read `pluginNode.health` for bounded sample and millisecond latency totals, and listen for `latencychange` and `transport-pressure` to monitor plugin latency changes from render responses, deadline misses, stale output, dropped input, underruns, audio errors, render-budget pressure, transport-pressure auto-bypass, render-budget auto-bypass, and audio-error auto-bypass.
 
 If your host owns the audio blocks directly, such as a browser DJ deck or live effects rack, use the live-performance rack defaults:
 
@@ -150,7 +150,7 @@ const rack = await SoundBridgeLiveEffectRack.createLivePerformance({
 });
 ```
 
-That preset uses binary audio, one in-flight block, bounded audio request timeouts, block-time input freshness and processing deadlines, wet/dry transition fades, bounded recovery after render pressure, render-response latency updates plus `refreshLatency()` health for plugin and transport latency compensation, and `render_timeout`/`render_quarantined` handling with deadline-budget health details when a native worker misses the live render deadline.
+That preset uses binary audio, one in-flight block, bounded audio request timeouts, block-time input freshness and processing deadlines, wet/dry transition fades, bounded recovery after render pressure, render-response latency updates plus `refreshLatency()` health for plugin and transport latency compensation in samples and milliseconds, and `render_timeout`/`render_quarantined` handling with deadline-budget health details when a native worker misses the live render deadline.
 
 ## Try The Demo
 

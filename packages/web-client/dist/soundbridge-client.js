@@ -897,6 +897,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       transportLatencySamples: this.transportLatencySamples,
       pluginLatencySamples: this.pluginLatencySamples,
       reportedLatencySamples: this.reportedLatencySamples,
+      transportLatencyMs: audioNodeLatencyMilliseconds(this.transportLatencySamples, this.sampleRate),
+      pluginLatencyMs: audioNodeLatencyMilliseconds(this.pluginLatencySamples, this.sampleRate),
+      reportedLatencyMs: audioNodeLatencyMilliseconds(this.reportedLatencySamples, this.sampleRate),
       latencyIncreases: this.latencyIncreases,
       latencyDecreases: this.latencyDecreases,
       latencyChangeEvents: this.latencyChangeEvents,
@@ -1217,6 +1220,12 @@ function combinedAudioNodeLatencySamples(pluginLatencySamples, transportLatencyS
   return Math.min(1048576, pluginLatencySamples + transportLatencySamples);
 }
 
+function audioNodeLatencyMilliseconds(samples, sampleRate) {
+  const boundedSamples = boundedAudioNodeInteger(samples, 0, 0, 1048576);
+  const boundedSampleRate = boundedAudioNodeInteger(sampleRate, 48000, 1, 384000);
+  return Number(((boundedSamples / boundedSampleRate) * 1000).toFixed(3));
+}
+
 const LIVE_PERFORMANCE_INPUT_AGE_BLOCKS = 4;
 const LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS = 4;
 const LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS = 0.5;
@@ -1324,6 +1333,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       pluginLatencySamples: this.created?.latencySamples ?? 0,
       transportLatencySamples: this.transportLatencySamples,
       reportedLatencySamples: this.reportedLatencySamples,
+      latencyMs: liveEffectLatencyMilliseconds(this.created?.latencySamples ?? 0, this.sampleRate),
+      pluginLatencyMs: liveEffectLatencyMilliseconds(this.created?.latencySamples ?? 0, this.sampleRate),
+      transportLatencyMs: liveEffectLatencyMilliseconds(this.transportLatencySamples, this.sampleRate),
+      reportedLatencyMs: liveEffectLatencyMilliseconds(this.reportedLatencySamples, this.sampleRate),
       renderBudgetMisses: this.renderBudgetMisses,
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
@@ -1729,6 +1742,12 @@ function boundedLiveEffectLatencySamples(value, fallback) {
 
 function combinedLiveEffectLatencySamples(pluginLatencySamples, transportLatencySamples) {
   return Math.min(LIVE_EFFECT_MAX_LATENCY_SAMPLES, pluginLatencySamples + transportLatencySamples);
+}
+
+function liveEffectLatencyMilliseconds(samples, sampleRate) {
+  const boundedSamples = boundedLiveEffectLatencySamples(samples, 0);
+  const boundedSampleRate = boundedLiveEffectInteger(sampleRate, 48000, 1, 384000);
+  return Number(((boundedSamples / boundedSampleRate) * 1000).toFixed(3));
 }
 
 async function withLiveEffectTimeout(promise, timeoutMs) {

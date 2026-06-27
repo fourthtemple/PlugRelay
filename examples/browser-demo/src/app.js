@@ -361,6 +361,12 @@ async function doEnsureBridgeInstance(recreate = false) {
   bridge.addEventListener("stats", (event) => {
     realtimeStats.update(event.detail);
   });
+  bridge.addEventListener("latencychange", (event) => {
+    realtimeStats.updateLatencyHealth(event.detail?.health ?? event.detail);
+  });
+  bridge.addEventListener("healthchange", (event) => {
+    realtimeStats.updateLatencyHealth(event.detail);
+  });
   bridge.addEventListener("audio-error", (event) => {
     logError(event.detail);
   });
@@ -484,8 +490,12 @@ async function refreshLatency() {
     return;
   }
   try {
-    const latency = await client.getLatency(selectedInstanceId, latestTransportLatencySamples);
-    setStatus(elements.latencyStatus, `${latency.reportedLatencySamples} samples`, "ready");
+    const latency = bridge
+      ? await bridge.refreshLatency(latestTransportLatencySamples)
+      : await client.getLatency(selectedInstanceId, latestTransportLatencySamples);
+    const reportedLatencyMs = latency.reportedLatencyMs ?? latencySamplesToMilliseconds(latency.reportedLatencySamples);
+    realtimeStats.updateLatencyHealth({ reportedLatencyMs });
+    setStatus(elements.latencyStatus, `${latency.reportedLatencySamples} samples / ${formatMilliseconds(reportedLatencyMs)} ms`, "ready");
   } catch (error) {
     setStatus(elements.latencyStatus, "Latency unknown", "");
     logError(error);
@@ -529,6 +539,17 @@ function formatRenderEngine(renderEngine) {
     default:
       return renderEngine ? String(renderEngine) : "Unknown";
   }
+}
+
+function formatMilliseconds(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(60000, number)).toFixed(3) : "0";
+}
+
+function latencySamplesToMilliseconds(samples) {
+  const sampleRate = Number(audioContext?.sampleRate);
+  const sampleCount = Math.max(0, Math.min(1048576, Math.floor(Number(samples ?? 0))));
+  return Number.isFinite(sampleRate) && sampleRate > 0 ? (sampleCount / sampleRate) * 1000 : 0;
 }
 
 function setControlsEnabled(enabled) {

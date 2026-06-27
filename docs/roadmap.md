@@ -15,7 +15,7 @@ SoundBridge already has the core security and host shape in place:
 - bounded plugin scanning metadata for VST3, AU, and LV2 without exposing launch paths to browsers
 - bounded parameters, automation events, automation curves, timeline lanes, MIDI events, transport context, latency, tail, state, bus layouts, and file-grant operations
 - binary WebSocket audio frames for main-bus and bus-indexed `processAudioBlock` buffers used by the web client and live effect rack
-- live-performance defaults for Web Audio graph effects and host-owned DJ/effects block processing, including binary audio, bounded in-flight work, bounded audio request timeouts, shared-memory-capable transfer, adaptive latency limits, block-time input freshness and processing deadlines, wet/dry transition fades, plugin/transport/reported latency health with render-response plugin latency updates, bounded render-pressure recovery, and one bounded process-timeout recreation attempt
+- live-performance defaults for Web Audio graph effects and host-owned DJ/effects block processing, including binary audio, bounded in-flight work, bounded audio request timeouts, shared-memory-capable transfer, adaptive latency limits, block-time input freshness and processing deadlines, wet/dry transition fades, plugin/transport/reported latency health in samples and milliseconds with render-response plugin latency updates, bounded render-pressure recovery, and one bounded process-timeout recreation attempt
 - optional browser worker transport that owns WebSocket, JSON, and binary audio frame encode/decode, with direct `AudioWorklet` audio ports, initial `SharedArrayBuffer` audio rings sized from live in-flight and latency bounds, atomic wakeups where available, bounded shared-path in-flight audio requests and timeouts, newest-input/output overwrite under shared ring pressure, recycled worklet and transport-worker buffers, host-tunable adaptive output latency and recovery, controlled safety blocks for miss/shared-output/deadline-pressure latency raises, measured render-duration and response deadline/jitter stats, and transferred binary output buffers for live processing
 - generic parameter editor sessions
 - opt-in file grant broker foundation with path-free browser responses
@@ -75,7 +75,7 @@ The current worker-owned WebSocket audio path is good for correctness and demos.
 
 - Tune the `SharedArrayBuffer` ring path for sustained live sets, including ring-depth policy, underrun recovery, fallback timer behavior, and jitter thresholds.
 - Refine daemon/native worker render quarantine beyond first-cut per-render deadline termination and one rack-level auto-recreate attempt, especially host policy for plugins that are usable after occasional misses but should not respawn indefinitely.
-- Extend latency compensation from host-readable health into more scheduling examples and monitoring UIs.
+- Extend latency compensation from host-readable sample and millisecond health into more scheduling examples and monitoring UIs.
 - Keep the protocol transport abstraction open for WebRTC data channels, shared-memory helpers, or desktop-host transports.
 - Keep the same pairing, origin, session, instance, and resource-limit model across browser and local desktop hosts.
 

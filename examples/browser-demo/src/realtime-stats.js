@@ -8,6 +8,7 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
     inFlightBlocks: document.querySelector("#inFlightBlocks"),
     outputLatencyBlocks: document.querySelector("#outputLatencyBlocks"),
     transportLatencySamples: document.querySelector("#transportLatencySamples"),
+    reportedLatencyMs: document.querySelector("#reportedLatencyMs"),
     latencyIncreases: document.querySelector("#latencyIncreases"),
     latencyDecreases: document.querySelector("#latencyDecreases"),
     responseDeadlineLeadSamples: document.querySelector("#responseDeadlineLeadSamples"),
@@ -49,6 +50,9 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
       if (elements.renderBudgetStatus) {
         elements.renderBudgetStatus.textContent = diagnostics.renderBudgetExceeded === true ? "Over" : "OK";
       }
+    },
+    updateLatencyHealth(health = {}) {
+      setText(elements.reportedLatencyMs, formatMilliseconds(health.reportedLatencyMs));
     }
   };
 }
