@@ -1489,9 +1489,10 @@ export function calibrateLiveEffectRackPolicy(options) {
     recommendedTransportLatencyBlocks * policy.maxBlockSize,
     policy.transportLatencySamples
   );
+  const observedBudgetWithSafetyMs = Math.max(observedProcessP95Ms ?? 0, observedRenderP95Ms ?? 0) + safetyMs;
   const recommendedProcessBudgetMs = roundedLiveEffectPolicyNumber(
     boundedLiveEffectNumber(
-      Math.max(policy.processBudgetMs, observedProcessP95Ms ?? 0, observedRenderP95Ms ?? 0) + safetyMs,
+      Math.max(policy.processBudgetMs, observedBudgetWithSafetyMs),
       policy.processBudgetMs,
       0,
       60000
@@ -1574,6 +1575,74 @@ function roundedLiveEffectPolicyNumber(value) {
 
 function exceedsLiveEffectPolicy(value, policyValue) {
   return value - policyValue > 0.001;
+}
+
+export class LiveEffectRackCalibrationWindow {
+  constructor(options) {
+    this.processDurationsMs = [];
+    this.renderDurationsMs = [];
+    this.responseJitterBlocks = [];
+    this.deadlineLeadBlocks = [];
+    this.droppedSamples = 0;
+    this.options = { ...options };
+    this.maxSamples = boundedLiveEffectInteger(options.maxSamples, LIVE_EFFECT_CALIBRATION_SAMPLES, 1, LIVE_EFFECT_CALIBRATION_SAMPLES);
+  }
+
+  record(health) {
+    let accepted = false;
+    let dropped = false;
+    const processDuration = boundedLiveEffectOptionalNumber(health.lastProcessDurationMs, 0, 60000);
+    const renderDuration = boundedLiveEffectOptionalNumber(health.lastRenderDurationMs, 0, 60000);
+    const responseJitter = boundedLiveEffectOptionalNumber(health.responseJitterBlocks, 0, 64);
+    const deadlineLead = boundedLiveEffectOptionalNumber(health.lastResponseDeadlineLeadBlocks, -64, 64);
+    if (processDuration !== void 0) { dropped = this.append(this.processDurationsMs, processDuration) || dropped; accepted = true; }
+    if (renderDuration !== void 0) { dropped = this.append(this.renderDurationsMs, renderDuration) || dropped; accepted = true; }
+    if (responseJitter !== void 0) { dropped = this.append(this.responseJitterBlocks, responseJitter) || dropped; accepted = true; }
+    if (deadlineLead !== void 0) { dropped = this.append(this.deadlineLeadBlocks, deadlineLead) || dropped; accepted = true; }
+    if (accepted && dropped) this.droppedSamples += 1;
+    return this.snapshot();
+  }
+
+  reset() {
+    this.processDurationsMs = [];
+    this.renderDurationsMs = [];
+    this.responseJitterBlocks = [];
+    this.deadlineLeadBlocks = [];
+    this.droppedSamples = 0;
+  }
+
+  snapshot() {
+    return {
+      samples: this.samples,
+      droppedSamples: this.droppedSamples,
+      calibration: this.calibrate()
+    };
+  }
+
+  calibrate() {
+    return calibrateLiveEffectRackPolicy({
+      ...this.options,
+      processDurationsMs: this.processDurationsMs,
+      renderDurationsMs: this.renderDurationsMs,
+      responseJitterBlocks: this.responseJitterBlocks,
+      deadlineLeadBlocks: this.deadlineLeadBlocks
+    });
+  }
+
+  get samples() {
+    return Math.max(this.processDurationsMs.length, this.renderDurationsMs.length, this.responseJitterBlocks.length, this.deadlineLeadBlocks.length);
+  }
+
+  append(samples, value) {
+    samples.push(value);
+    if (samples.length <= this.maxSamples) return false;
+    samples.splice(0, samples.length - this.maxSamples);
+    return true;
+  }
+}
+
+export function createLiveEffectRackCalibrationWindow(options) {
+  return new LiveEffectRackCalibrationWindow(options);
 }
 
 export function liveTransportForBlock(options) {

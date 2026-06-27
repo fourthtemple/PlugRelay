@@ -153,9 +153,10 @@ export function calibrateLiveEffectRackPolicy(options: LiveEffectRackCalibration
     recommendedTransportLatencyBlocks * policy.maxBlockSize,
     policy.transportLatencySamples
   );
+  const observedBudgetWithSafetyMs = Math.max(observedProcessP95Ms ?? 0, observedRenderP95Ms ?? 0) + safetyMs;
   const recommendedProcessBudgetMs = roundedPolicyNumber(
     boundedLiveEffectNumber(
-      Math.max(policy.processBudgetMs, observedProcessP95Ms ?? 0, observedRenderP95Ms ?? 0) + safetyMs,
+      Math.max(policy.processBudgetMs, observedBudgetWithSafetyMs),
       policy.processBudgetMs,
       0,
       60000
