@@ -293,6 +293,33 @@ const timed = await timedChain.processBlock({ blockId: 5, channels: [[1, 1]], sa
 assert(timed.chainProcessDurationMs === 9, "live rack chain reports bounded chain process duration");
 assert(timed.chainProcessBudgetMs === 12 && timed.chainProcessBudgetExceeded === false, "live rack chain reports in-budget chain timing");
 assert(timed.stageResults[0].durationMs === 4 && timed.stageResults[1].durationMs === 5, "live rack chain reports per-stage duration");
+assert(
+  timedChain.health.lastProcessBudgetMs === 12 &&
+    timedChain.health.lastResponseDeadlineLeadMs === 3 &&
+    timedChain.health.lastResponseDeadlineLeadBlocks === 72 &&
+    timedChain.health.responseDeadlineMisses === 0,
+  "live rack chain exposes process deadline lead for host scheduling"
+);
+
+fakeNowMs = 0;
+const deadlineStage = new FakeStage("deadline", 1, 0, 0, 3);
+const deadlineChain = createLiveEffectRackChain({
+  stages: [deadlineStage],
+  outputChannels: 1,
+  maxBlockSize: 128,
+  processBudgetMs: 2,
+  nowMs: () => fakeNowMs
+});
+await deadlineChain.processBlock({ blockId: 59, channels: [[1, 1]], sampleRate: 48000 });
+deadlineStage.durationMs = 1;
+await deadlineChain.processBlock({ blockId: 60, channels: [[1, 1]], sampleRate: 48000 });
+assert(
+  deadlineChain.health.lastResponseDeadlineLeadMs === 1 &&
+    deadlineChain.health.lastResponseDeadlineLeadBlocks === 0.375 &&
+    deadlineChain.health.responseDeadlineMisses === 1 &&
+    deadlineChain.health.responseJitterBlocks === 0.75,
+  "live rack chain derives deadline miss and jitter telemetry"
+);
 
 fakeNowMs = 0;
 const fadeStage = new FakeStage("fade", 4, 0, 0, 0);

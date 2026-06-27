@@ -1879,8 +1879,11 @@ export class LiveEffectRackChainCalibrationWindow {
     }
     return this.window.record({
       lastProcessDurationMs: health.lastProcessDurationMs,
+      responseJitterBlocks: health.responseJitterBlocks,
+      lastResponseDeadlineLeadBlocks: health.lastResponseDeadlineLeadBlocks,
       latencySamples: health.latencySamples,
-      dryOutputBlocks: this.dryOutputBlocks
+      dryOutputBlocks: this.dryOutputBlocks,
+      responseDeadlineMisses: health.responseDeadlineMisses
     });
   }
 
@@ -2123,7 +2126,14 @@ export class LiveEffectRackChain extends EventTarget {
     this.lastError = void 0;
     this.unhealthyReason = void 0;
     this.lastProcessDurationMs = void 0;
+    this.lastProcessBudgetMs = void 0;
     this.lastProcessBudgetExceeded = false;
+    this.lastResponseDeadlineLeadMs = void 0;
+    this.lastResponseDeadlineLeadBlocks = void 0;
+    this.responseDeadlineLeadMinBlocks = void 0;
+    this.responseDeadlineLeadMaxBlocks = void 0;
+    this.responseJitterBlocks = 0;
+    this.responseDeadlineMisses = 0;
     this.lastOutputPath = void 0;
     this.lastOutputTail = void 0;
   }
@@ -2152,7 +2162,12 @@ export class LiveEffectRackChain extends EventTarget {
       transitionFadeSamples: this.transitionFadeSamples,
       processBudgetMisses: this.processBudgetMisses,
       lastProcessDurationMs: this.lastProcessDurationMs,
+      lastProcessBudgetMs: this.lastProcessBudgetMs,
       processBudgetExceeded: this.lastProcessBudgetExceeded,
+      lastResponseDeadlineLeadMs: this.lastResponseDeadlineLeadMs,
+      lastResponseDeadlineLeadBlocks: this.lastResponseDeadlineLeadBlocks,
+      responseJitterBlocks: this.responseJitterBlocks,
+      responseDeadlineMisses: this.responseDeadlineMisses,
       processBudgetTripped: this.unhealthyReason === "process-budget-exceeded",
       recoveryDryBlocks: this.recoveryDryBlocks,
       unhealthyReason: this.unhealthyReason,
@@ -2319,6 +2334,8 @@ export class LiveEffectRackChain extends EventTarget {
     const durationMs = boundedLiveEffectOptionalNumber(this.nowMs() - processStartedAt, 0, 60000);
     const chainProcessBudgetExceeded = this.processBudgetMs > 0 && (durationMs ?? 0) > this.processBudgetMs;
     this.lastProcessDurationMs = durationMs;
+    this.lastProcessBudgetMs = this.processBudgetMs > 0 ? this.processBudgetMs : void 0;
+    this.recordResponseDeadlineLead(request.sampleRate);
     this.lastProcessBudgetExceeded = chainProcessBudgetExceeded;
     this.processBudgetMisses = chainProcessBudgetExceeded ? Math.min(1024, this.processBudgetMisses + 1) : 0;
     const chainProcessBudgetTripped = response.healthy !== false && this.maxConsecutiveProcessBudgetMisses > 0 && this.processBudgetMisses >= this.maxConsecutiveProcessBudgetMisses;
@@ -2422,6 +2439,30 @@ export class LiveEffectRackChain extends EventTarget {
 
   chainHealthy() {
     return this.unhealthyReason === void 0 && this.stageHealthy;
+  }
+
+  recordResponseDeadlineLead(sampleRate) {
+    if (!this.lastProcessBudgetMs || this.lastProcessDurationMs === void 0) {
+      return;
+    }
+    const boundedSampleRate = boundedLiveEffectInteger(sampleRate, this.sampleRate, 1, 384000);
+    const blockDurationMs = this.maxBlockSize / boundedSampleRate * 1000;
+    this.lastResponseDeadlineLeadMs = boundedLiveEffectOptionalNumber(this.lastProcessBudgetMs - this.lastProcessDurationMs, -60000, 60000);
+    this.lastResponseDeadlineLeadBlocks = this.lastResponseDeadlineLeadMs === void 0 || blockDurationMs <= 0
+      ? void 0
+      : Number((this.lastResponseDeadlineLeadMs / blockDurationMs).toFixed(3));
+    this.responseDeadlineLeadMinBlocks = Math.min(
+      this.responseDeadlineLeadMinBlocks ?? this.lastResponseDeadlineLeadBlocks ?? 0,
+      this.lastResponseDeadlineLeadBlocks ?? 0
+    );
+    this.responseDeadlineLeadMaxBlocks = Math.max(
+      this.responseDeadlineLeadMaxBlocks ?? this.lastResponseDeadlineLeadBlocks ?? 0,
+      this.lastResponseDeadlineLeadBlocks ?? 0
+    );
+    this.responseJitterBlocks = Number(((this.responseDeadlineLeadMaxBlocks ?? 0) - (this.responseDeadlineLeadMinBlocks ?? 0)).toFixed(3));
+    if ((this.lastResponseDeadlineLeadMs ?? 0) < 0) {
+      this.responseDeadlineMisses = Math.min(1024, this.responseDeadlineMisses + 1);
+    }
   }
 
   dispatchChainPressureEvents(response, previousMisses, previousUnhealthyReason) {

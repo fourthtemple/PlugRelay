@@ -50,7 +50,10 @@ interface LiveEffectRackCalibrationPressureCounters {
 }
 
 export interface LiveEffectRackChainCalibrationHealthSample
-  extends Pick<LiveEffectRackChainHealth, "lastProcessDurationMs" | "latencySamples"> {
+  extends Pick<
+    LiveEffectRackChainHealth,
+    "lastProcessDurationMs" | "latencySamples" | "lastResponseDeadlineLeadBlocks" | "responseJitterBlocks" | "responseDeadlineMisses"
+  > {
   lastDryReason?: unknown;
 }
 
@@ -207,8 +210,11 @@ export class LiveEffectRackChainCalibrationWindow {
     }
     return this.window.record({
       lastProcessDurationMs: health.lastProcessDurationMs,
+      responseJitterBlocks: health.responseJitterBlocks,
+      lastResponseDeadlineLeadBlocks: health.lastResponseDeadlineLeadBlocks,
       latencySamples: health.latencySamples,
-      dryOutputBlocks: this.dryOutputBlocks
+      dryOutputBlocks: this.dryOutputBlocks,
+      responseDeadlineMisses: health.responseDeadlineMisses
     });
   }
 

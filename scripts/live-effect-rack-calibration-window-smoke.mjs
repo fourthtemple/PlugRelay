@@ -209,6 +209,7 @@ chainStage.durationMs = 6;
 await chain.processBlock({ blockId: 21, channels: [[1, 1]], sampleRate: 48000 });
 const chainStressed = chainWindow.record(chain.health);
 assert(chainStressed.calibration.warnings.includes("process-over-budget"), "live chain calibration window detects chain budget pressure");
+assert(chainStressed.calibration.warnings.includes("deadline-miss"), "live chain calibration window detects chain deadline misses");
 assert(chainStressed.recommendedPolicyOptions.processBudgetMs === 8.667, "live chain calibration window recommends a chain process budget");
 
 chain.setBypassed(true);
