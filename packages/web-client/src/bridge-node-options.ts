@@ -125,6 +125,7 @@ export interface LivePerformanceAudioNodeCalibrationOptions extends LivePerforma
   sharedOutputQueuedBlocks?: number;
   sharedInputDroppedBlocks?: number;
   sharedOutputDroppedBlocks?: number;
+  responseDeadlineMisses?: number;
   safetyMarginBlocks?: number;
 }
 
@@ -177,12 +178,14 @@ export interface LivePerformanceAudioNodeCalibrationHealthSample {
   responseJitterBlocks?: number;
   responseDeadlineLeadSamples?: number;
   underruns?: number;
+  fallbackOutputBlocks?: number;
   droppedInputBlocks?: number;
   staleOutputBlocks?: number;
   sharedInputQueuedBlocks?: number;
   sharedOutputQueuedBlocks?: number;
   sharedInputDroppedBlocks?: number;
   sharedOutputDroppedBlocks?: number;
+  responseDeadlineMisses?: number;
 }
 
 export interface LivePerformanceAudioNodeCalibrationWindowOptions extends LivePerformanceAudioNodePolicyOptions {
@@ -208,6 +211,7 @@ interface LivePerformanceAudioNodeCalibrationPressureCounters {
   staleOutputBlocks: number;
   sharedInputDroppedBlocks: number;
   sharedOutputDroppedBlocks: number;
+  responseDeadlineMisses: number;
 }
 
 export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAudioNodeOptions): SoundBridgeAudioNodeOptions {
@@ -298,9 +302,11 @@ export function calibrateLivePerformanceAudioNodePolicy(options: LivePerformance
   const observedSharedQueueMaxBlocks = audioNodeSharedQueueMaxBlocks(options);
   const currentLatencyBlocks = audioNodeLatencyBlocks(policy.transportLatencySamples, policy.maxBlockFrames);
   const hasDropPressure = audioNodeDropPressure(options);
+  const hasResponseDeadlineMisses = boundedInteger(options.responseDeadlineMisses, 0, 0, Number.MAX_SAFE_INTEGER) > 0;
   const pressureBlocks =
     Math.ceil((observedResponseJitterP95Blocks ?? 0) + Math.max(0, -(observedDeadlineLeadMinBlocks ?? 0)) + safetyBlocks) +
-    (hasDropPressure ? 1 : 0);
+    (hasDropPressure ? 1 : 0) +
+    (hasResponseDeadlineMisses ? 1 : 0);
   const recommendedOutputLatencyBlocks = boundedInteger(
     Math.max(currentLatencyBlocks, pressureBlocks),
     currentLatencyBlocks,
@@ -342,7 +348,8 @@ export function calibrateLivePerformanceAudioNodePolicy(options: LivePerformance
     recommendedSharedBufferBlocks,
     recommendedAudioRequestTimeoutMs,
     currentLatencyBlocks,
-    hasDropPressure
+    hasDropPressure,
+    hasResponseDeadlineMisses
   });
   return {
     policy,
@@ -441,10 +448,11 @@ function audioNodeCalibrationWarnings(calibration: {
   recommendedAudioRequestTimeoutMs: number;
   currentLatencyBlocks: number;
   hasDropPressure: boolean;
+  hasResponseDeadlineMisses: boolean;
 }): string[] {
   const warnings: string[] = [];
   if (calibration.hasDropPressure) warnings.push("audio-drop-pressure");
-  if ((calibration.observedDeadlineLeadMinBlocks ?? 0) < 0) warnings.push("deadline-miss");
+  if ((calibration.observedDeadlineLeadMinBlocks ?? 0) < 0 || calibration.hasResponseDeadlineMisses) warnings.push("deadline-miss");
   if ((calibration.observedResponseJitterP95Blocks ?? 0) > calibration.policy.responseJitterThresholdBlocks) warnings.push("response-jitter");
   if ((calibration.observedSharedQueueMaxBlocks ?? 0) >= Math.max(1, calibration.policy.sharedBufferBlocks - 1)) warnings.push("shared-ring-pressure");
   if (exceedsAudioNodePolicy(calibration.observedRenderP95Ms ?? 0, calibration.policy.blockDurationMs)) warnings.push("render-over-block-budget");
@@ -475,6 +483,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
   private staleOutputBlocks = 0;
   private sharedInputDroppedBlocks = 0;
   private sharedOutputDroppedBlocks = 0;
+  private responseDeadlineMisses = 0;
   private sharedInputQueuedBlocks = 0;
   private sharedOutputQueuedBlocks = 0;
   private pressureBaseline?: LivePerformanceAudioNodeCalibrationPressureCounters;
@@ -509,6 +518,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.responseDeadlineMisses = 0;
     this.sharedInputQueuedBlocks = 0;
     this.sharedOutputQueuedBlocks = 0;
     this.pressureBaseline = undefined;
@@ -537,6 +547,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       staleOutputBlocks: this.staleOutputBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
       sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
+      responseDeadlineMisses: this.responseDeadlineMisses,
       sharedInputQueuedBlocks: this.sharedInputQueuedBlocks,
       sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks
     });
@@ -571,6 +582,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = Math.max(this.staleOutputBlocks, pressureCounterDelta(counters.staleOutputBlocks, this.pressureBaseline.staleOutputBlocks));
     this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, pressureCounterDelta(counters.sharedInputDroppedBlocks, this.pressureBaseline.sharedInputDroppedBlocks));
     this.sharedOutputDroppedBlocks = Math.max(this.sharedOutputDroppedBlocks, pressureCounterDelta(counters.sharedOutputDroppedBlocks, this.pressureBaseline.sharedOutputDroppedBlocks));
+    this.responseDeadlineMisses = Math.max(this.responseDeadlineMisses, pressureCounterDelta(counters.responseDeadlineMisses, this.pressureBaseline.responseDeadlineMisses));
   }
 
   private pressureCounters(health: LivePerformanceAudioNodeCalibrationHealthSample): LivePerformanceAudioNodeCalibrationPressureCounters {
@@ -580,7 +592,8 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       droppedInputBlocks: boundedInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       staleOutputBlocks: boundedInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       sharedInputDroppedBlocks: boundedInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
-      sharedOutputDroppedBlocks: boundedInteger(health.sharedOutputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER)
+      sharedOutputDroppedBlocks: boundedInteger(health.sharedOutputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      responseDeadlineMisses: boundedInteger(health.responseDeadlineMisses, 0, 0, Number.MAX_SAFE_INTEGER)
     };
   }
 }

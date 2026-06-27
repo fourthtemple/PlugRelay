@@ -92,7 +92,8 @@ const baselineSnapshot = baselineWindow.record({
   droppedInputBlocks: 3,
   staleOutputBlocks: 2,
   sharedInputDroppedBlocks: 1,
-  sharedOutputDroppedBlocks: 1
+  sharedOutputDroppedBlocks: 1,
+  responseDeadlineMisses: 4
 });
 assert(baselineSnapshot.calibration.realtimeReady === true, "live AudioNode calibration window treats first pressure counters as the baseline");
 assert(!baselineSnapshot.calibration.warnings.includes("audio-drop-pressure"), "live AudioNode calibration window ignores pressure before the window starts");
@@ -105,9 +106,11 @@ const deltaSnapshot = baselineWindow.record({
   droppedInputBlocks: 3,
   staleOutputBlocks: 2,
   sharedInputDroppedBlocks: 1,
-  sharedOutputDroppedBlocks: 1
+  sharedOutputDroppedBlocks: 1,
+  responseDeadlineMisses: 5
 });
 assert(deltaSnapshot.calibration.warnings.includes("audio-drop-pressure"), "live AudioNode calibration window counts pressure deltas after the baseline");
+assert(deltaSnapshot.calibration.warnings.includes("deadline-miss"), "live AudioNode calibration window counts deadline-miss deltas after the baseline");
 baselineWindow.reset();
 const resetBaselineSnapshot = baselineWindow.record({
   lastRenderDurationMs: 0.4,
@@ -148,6 +151,19 @@ const sharedQueueSnapshot = sharedQueueWindow.record({
 });
 assert(sharedQueueSnapshot.calibration.observedSharedQueueMaxBlocks === 7, "live AudioNode calibration window keeps shared queue gauges");
 assert(sharedQueueSnapshot.recommendedOptions.sharedBufferBlocks === 9, "live AudioNode calibration window recommends shared ring headroom");
+
+const deadlineCounterCalibration = calibrateLivePerformanceAudioNodePolicy({
+  instanceId: "inst-deadline-counter",
+  sampleRate: 48000,
+  maxBlockFrames: 128,
+  transportLatencySamples: 128,
+  deadlineLeadBlocks: [1],
+  responseDeadlineMisses: 1,
+  safetyMarginBlocks: 1
+});
+assert(deadlineCounterCalibration.warnings.includes("deadline-miss"), "live AudioNode calibration uses explicit deadline-miss counters");
+assert(deadlineCounterCalibration.recommendedOutputLatencyBlocks === 2, "live AudioNode deadline-miss counters add latency headroom");
+assert(deadlineCounterCalibration.recommendedTransportLatencySamples === 256, "live AudioNode deadline-miss counters update transport latency advice");
 
 const stressedCalibration = calibrateLivePerformanceAudioNodePolicy({
   instanceId: "inst-stress",
