@@ -242,6 +242,57 @@ assert(
   "transport worker forwards shared path render timing diagnostics"
 );
 
+const outputPressureAudio = createSharedAudio(2, 1, 2);
+writeSharedInput(outputPressureAudio, 30, [Float32Array.from([0.3, 0.3])]);
+writeSharedInput(outputPressureAudio, 31, [Float32Array.from([0.31, 0.31])]);
+const outputPressurePort = new TestPort();
+self.onmessage({
+  data: {
+    type: "audio-port",
+    port: outputPressurePort,
+    instanceId: "inst-output-pressure",
+    sampleRate: 48000,
+    sessionToken: "session-1",
+    maxInFlightBlocks: 2,
+    audioTransport: "binary",
+    sharedAudio: outputPressureAudio
+  }
+});
+assert(socket.sent.length === 5, "transport worker drains multiple shared inputs up to capacity");
+writeSharedInput(outputPressureAudio, 32, [Float32Array.from([0.32, 0.32])]);
+socket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: "audio-4",
+    ok: true,
+    payload: { blockId: 30, channels: [Float32Array.from([0.3, 0.3])], latencySamples: 0 }
+  })
+});
+assert(socket.sent.length === 6, "transport worker drains new shared input after one output response");
+socket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: "audio-5",
+    ok: true,
+    payload: { blockId: 31, channels: [Float32Array.from([0.31, 0.31])], latencySamples: 0 }
+  })
+});
+socket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: "audio-6",
+    ok: true,
+    payload: { blockId: 32, channels: [Float32Array.from([0.32, 0.32])], latencySamples: 0 }
+  })
+});
+const outputPressureControl = new Int32Array(outputPressureAudio.outputControl);
+const outputPressureSamples = new Float32Array(outputPressureAudio.outputAudio);
+assert(Atomics.load(outputPressureControl, 2) === 2, "transport worker keeps a full shared output ring bounded");
+assert(Atomics.load(outputPressureControl, 3) === 1, "transport worker records overwritten shared output blocks");
+assert(Atomics.load(outputPressureControl, 0) === 1 && Atomics.load(outputPressureControl, 1) === 1, "transport worker advances a full shared output ring after overwrite");
+assert(Atomics.load(outputPressureControl, 8) === 32, "transport worker overwrites the oldest output slot with the newest block");
+assert(Math.abs(outputPressureSamples[0] - 0.32) < 0.000001, "transport worker keeps the newest output audio under pressure");
+
 console.log("Transport worker audio port smoke checks passed.");
 
 function createSharedAudio(slots, channels, frames) {

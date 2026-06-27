@@ -357,11 +357,13 @@ function writeSharedOutputBlock(shared, blockId, channels) {
   const frames = Math.min(shared.frames, boundedFrames(channels[0]?.length ?? shared.frames));
   const channelCount = Math.min(shared.channels, channels.length);
   const available = Atomics.load(shared.outputControl, SHARED_AVAILABLE);
-  if (available >= shared.slots) {
+  const outputFull = available >= shared.slots;
+  if (outputFull) {
     Atomics.add(shared.outputControl, SHARED_DROPPED, 1);
-    return;
   }
-  const writeIndex = Atomics.load(shared.outputControl, SHARED_WRITE_INDEX) % shared.slots;
+  const writeIndex = outputFull
+    ? Atomics.load(shared.outputControl, SHARED_READ_INDEX) % shared.slots
+    : Atomics.load(shared.outputControl, SHARED_WRITE_INDEX) % shared.slots;
   const metadataOffset = sharedSlotMetadataOffset(writeIndex);
   Atomics.store(shared.outputControl, metadataOffset + SHARED_BLOCK_ID_OFFSET, blockId);
   Atomics.store(shared.outputControl, metadataOffset + SHARED_BLOCK_FRAMES_OFFSET, frames);
@@ -383,7 +385,11 @@ function writeSharedOutputBlock(shared, blockId, channels) {
     }
   }
   Atomics.store(shared.outputControl, SHARED_WRITE_INDEX, (writeIndex + 1) % shared.slots);
-  Atomics.add(shared.outputControl, SHARED_AVAILABLE, 1);
+  if (outputFull) {
+    Atomics.store(shared.outputControl, SHARED_READ_INDEX, (writeIndex + 1) % shared.slots);
+  } else {
+    Atomics.add(shared.outputControl, SHARED_AVAILABLE, 1);
+  }
   Atomics.notify(shared.outputControl, SHARED_AVAILABLE, 1);
 }
 
