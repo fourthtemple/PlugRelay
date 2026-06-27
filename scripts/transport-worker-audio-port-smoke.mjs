@@ -452,6 +452,37 @@ socket.emit("message", {
 });
 assert(postedMessages.length === postedBeforeLateGeneric, "transport worker suppresses late generic responses after timeout");
 
+const sentBeforeStaleCap = socket.sent.length;
+for (let index = 0; index < 1030; index += 1) {
+  self.onmessage({
+    data: {
+      type: "request",
+      envelope: { type: "request", id: `generic-cap-${index}`, command: "hello", payload: {} },
+      timeoutMs: 19
+    }
+  });
+  runTimerWithDelay(19);
+}
+assert(
+  socket.sent.length === sentBeforeStaleCap + 1030,
+  "transport worker keeps sending timed generic requests while bounding stale ids"
+);
+const postedBeforeRecentLate = postedMessages.length;
+socket.emit("message", {
+  data: JSON.stringify({ type: "response", id: "generic-cap-1029", ok: true, payload: {} })
+});
+assert(postedMessages.length === postedBeforeRecentLate, "transport worker suppresses recent stale responses inside the bounded cache");
+const postedBeforeEvictedLate = postedMessages.length;
+socket.emit("message", {
+  data: JSON.stringify({ type: "response", id: "generic-cap-0", ok: true, payload: {} })
+});
+assert(
+  postedMessages.length === postedBeforeEvictedLate + 1 &&
+    postedMessages.at(-1)?.type === "message" &&
+    postedMessages.at(-1)?.envelope?.id === "generic-cap-0",
+  "transport worker evicts oldest stale response ids after the bounded cache fills"
+);
+
 clearTimersWithDelay(1);
 const closeFallbackAudio = createSharedAudio(2, 1, 2);
 const closeFallbackPort = new TestPort();

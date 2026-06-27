@@ -21,6 +21,7 @@ const SHARED_BLOCK_FRAMES_OFFSET = 1;
 const SHARED_BLOCK_CHANNELS_OFFSET = 2;
 const SHARED_AUDIO_WAIT_TIMEOUT_MS = 100;
 const SHARED_AUDIO_TIMER_POLL_MS = 1;
+const STALE_REQUEST_ID_LIMIT = 1024;
 
 interface AudioPortConfig {
   instanceId: string;
@@ -182,7 +183,7 @@ function sendAudioProcess(port: MessagePort, config: AudioPortConfig, message: {
       blockId,
       timeout: startAudioRequestTimeout(config.audioRequestTimeoutMs, () => {
         pendingAudioPorts.delete(envelope.id);
-        staleRequestIds.add(envelope.id);
+        rememberStaleRequestId(envelope.id);
         port.postMessage({ type: "audio-error", blockId, error: audioTimeoutMessage(config.audioRequestTimeoutMs) });
       })
     });
@@ -382,7 +383,7 @@ function sendSharedAudioProcess(
           return;
         }
         pendingSharedAudio.delete(envelope.id);
-        staleRequestIds.add(envelope.id);
+        rememberStaleRequestId(envelope.id);
         shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
         shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: audioTimeoutMessage(config.audioRequestTimeoutMs) });
         pumpSharedAudio(config, shared);
@@ -600,7 +601,7 @@ function sendRequest(envelope: unknown, binaryAudioChannels?: ArrayLike<number>[
     if (id) {
       pendingRequests.set(id, startAudioRequestTimeout(boundedTimeoutMs, () => {
         pendingRequests.delete(id);
-        staleRequestIds.add(id);
+        rememberStaleRequestId(id);
         post({ type: "send-error", id, message: requestTimeoutMessage(boundedTimeoutMs) });
       }));
     }
@@ -616,6 +617,17 @@ function sendRequest(envelope: unknown, binaryAudioChannels?: ArrayLike<number>[
 
 function requestId(envelope: unknown): string | undefined {
   return envelope && typeof envelope === "object" ? String((envelope as { id?: unknown }).id ?? "") : undefined;
+}
+
+function rememberStaleRequestId(id: string): void {
+  staleRequestIds.add(id);
+  while (staleRequestIds.size > STALE_REQUEST_ID_LIMIT) {
+    const oldest = staleRequestIds.values().next().value;
+    if (oldest === undefined) {
+      return;
+    }
+    staleRequestIds.delete(oldest);
+  }
 }
 
 function routeGenericResponse(envelope: { type?: string; id?: string }): boolean {

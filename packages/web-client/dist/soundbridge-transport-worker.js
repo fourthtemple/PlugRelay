@@ -21,6 +21,7 @@ const SHARED_BLOCK_FRAMES_OFFSET = 1;
 const SHARED_BLOCK_CHANNELS_OFFSET = 2;
 const SHARED_AUDIO_WAIT_TIMEOUT_MS = 100;
 const SHARED_AUDIO_TIMER_POLL_MS = 1;
+const STALE_REQUEST_ID_LIMIT = 1024;
 
 self.onmessage = (event) => {
   const message = event.data;
@@ -141,7 +142,7 @@ function sendAudioProcess(port, config, message) {
       blockId,
       timeout: startAudioRequestTimeout(config.audioRequestTimeoutMs, () => {
         pendingAudioPorts.delete(envelope.id);
-        staleRequestIds.add(envelope.id);
+        rememberStaleRequestId(envelope.id);
         port.postMessage({ type: "audio-error", blockId, error: audioTimeoutMessage(config.audioRequestTimeoutMs) });
       })
     });
@@ -336,7 +337,7 @@ function sendSharedAudioProcess(config, shared, block) {
           return;
         }
         pendingSharedAudio.delete(envelope.id);
-        staleRequestIds.add(envelope.id);
+        rememberStaleRequestId(envelope.id);
         shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
         shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: audioTimeoutMessage(config.audioRequestTimeoutMs) });
         pumpSharedAudio(config, shared);
@@ -545,7 +546,7 @@ function sendRequest(envelope, binaryAudioChannels, timeoutMs) {
     if (id) {
       pendingRequests.set(id, startAudioRequestTimeout(boundedTimeoutMs, () => {
         pendingRequests.delete(id);
-        staleRequestIds.add(id);
+        rememberStaleRequestId(id);
         post({ type: "send-error", id, message: requestTimeoutMessage(boundedTimeoutMs) });
       }));
     }
@@ -561,6 +562,17 @@ function sendRequest(envelope, binaryAudioChannels, timeoutMs) {
 
 function requestId(envelope) {
   return envelope && typeof envelope === "object" ? String(envelope.id ?? "") : undefined;
+}
+
+function rememberStaleRequestId(id) {
+  staleRequestIds.add(id);
+  while (staleRequestIds.size > STALE_REQUEST_ID_LIMIT) {
+    const oldest = staleRequestIds.values().next().value;
+    if (oldest === undefined) {
+      return;
+    }
+    staleRequestIds.delete(oldest);
+  }
 }
 
 function routeGenericResponse(envelope) {
