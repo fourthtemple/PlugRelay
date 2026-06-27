@@ -250,32 +250,42 @@ export class SoundBridgeClient extends EventTarget {
 const BINARY_AUDIO_MAGIC = 0x53424131;
 const BINARY_AUDIO_HEADER_BYTES = 8;
 const FLOAT_BYTES = 4;
+const MAX_BINARY_CHANNELS = 32;
+const MAX_BINARY_FRAMES = 8192;
+const MAX_BINARY_BUSES = 32;
 
 function encodeBinaryAudioEnvelope(envelope, channels) {
-  const normalized = normalizeBinaryChannels(channels);
+  const mainBlock = normalizeBinaryBlock(channels);
   const payload = envelope.payload && typeof envelope.payload === "object" ? envelope.payload : {};
+  const inputBuses = normalizeBinaryBuses(payload.inputBuses);
+  const outputBuses = normalizeBinaryBuses(payload.outputBuses);
   const header = {
     ...envelope,
     payload: {
       ...payload,
       channels: void 0,
+      inputBuses: void 0,
       outputBuses: void 0
     },
     binaryAudio: {
-      channels: normalized.length,
-      frames: normalized[0]?.length ?? 0
+      channels: mainBlock.channels.length,
+      frames: mainBlock.frames,
+      ...(inputBuses.length > 0 ? { inputBuses: busHeaders(inputBuses) } : {}),
+      ...(outputBuses.length > 0 ? { outputBuses: busHeaders(outputBuses) } : {})
     }
   };
   delete header.payload.channels;
+  delete header.payload.inputBuses;
   delete header.payload.outputBuses;
   const headerBytes = new TextEncoder().encode(JSON.stringify(header));
-  const sampleBytes = normalized.length * (normalized[0]?.length ?? 0) * FLOAT_BYTES;
+  const blocks = [mainBlock, ...inputBuses, ...outputBuses];
+  const sampleBytes = blocks.reduce((total, block) => total + block.channels.length * block.frames * FLOAT_BYTES, 0);
   const buffer = new ArrayBuffer(BINARY_AUDIO_HEADER_BYTES + headerBytes.length + sampleBytes);
   const view = new DataView(buffer);
   view.setUint32(0, BINARY_AUDIO_MAGIC, false);
   view.setUint32(4, headerBytes.length, false);
   new Uint8Array(buffer, BINARY_AUDIO_HEADER_BYTES, headerBytes.length).set(headerBytes);
-  writeBinaryChannels(view, BINARY_AUDIO_HEADER_BYTES + headerBytes.length, normalized);
+  writeBinaryBlocks(view, BINARY_AUDIO_HEADER_BYTES + headerBytes.length, blocks);
   return buffer;
 }
 
@@ -297,39 +307,111 @@ function decodeBinaryAudioEnvelope(data) {
 
   const headerBytes = bytes.subarray(BINARY_AUDIO_HEADER_BYTES, headerEnd);
   const envelope = JSON.parse(new TextDecoder().decode(headerBytes));
-  const channelCount = boundedBinaryInteger(envelope.binaryAudio?.channels, 0, 32);
-  const frames = boundedBinaryInteger(envelope.binaryAudio?.frames, 1, 8192);
-  if (bytes.byteLength !== headerEnd + channelCount * frames * FLOAT_BYTES) {
+  const channelCount = boundedBinaryInteger(envelope.binaryAudio?.channels, 0, MAX_BINARY_CHANNELS);
+  const frames = boundedBinaryInteger(envelope.binaryAudio?.frames, 1, MAX_BINARY_FRAMES);
+  let offset = headerEnd;
+  const mainBlock = readBinaryBlock(view, offset, channelCount, frames);
+  offset = mainBlock.offset;
+  const inputBuses = readBinaryBuses(view, offset, envelope.binaryAudio?.inputBuses);
+  offset = inputBuses.offset;
+  const outputBuses = readBinaryBuses(view, offset, envelope.binaryAudio?.outputBuses);
+  offset = outputBuses.offset;
+  if (bytes.byteLength !== offset) {
     throw new Error("invalid_binary_audio_payload");
   }
 
   if (envelope.ok && envelope.payload && typeof envelope.payload === "object") {
-    envelope.payload.channels = readBinaryChannels(view, headerEnd, channelCount, frames);
+    envelope.payload.channels = mainBlock.channels;
+    if (inputBuses.blocks.length > 0) {
+      envelope.payload.inputBuses = inputBuses.blocks;
+    }
+    if (outputBuses.blocks.length > 0) {
+      envelope.payload.outputBuses = outputBuses.blocks;
+    }
   }
   delete envelope.binaryAudio;
   return envelope;
 }
 
-function normalizeBinaryChannels(channels) {
-  const limited = channels.slice(0, 32);
-  const frames = Math.min(8192, Math.max(0, ...limited.map((channel) => Math.max(0, Math.floor(Number(channel.length ?? 0)) || 0))));
-  return limited.map((channel) => {
-    const normalized = new Float32Array(frames);
-    for (let index = 0; index < frames; index += 1) {
-      const value = Number(channel[index] ?? 0);
-      normalized[index] = Number.isFinite(value) ? value : 0;
+function normalizeBinaryBlock(channels) {
+  const limited = channels.slice(0, MAX_BINARY_CHANNELS);
+  const frames = Math.max(1, Math.min(MAX_BINARY_FRAMES, Math.max(0, ...limited.map((channel) => Math.max(0, Math.floor(Number(channel.length ?? 0)) || 0)))));
+  return {
+    channels: limited.map((channel) => {
+      const normalized = new Float32Array(frames);
+      for (let index = 0; index < frames; index += 1) {
+        const value = Number(channel[index] ?? 0);
+        normalized[index] = Number.isFinite(value) ? value : 0;
+      }
+      return normalized;
+    }),
+    frames
+  };
+}
+
+function normalizeBinaryBuses(buses) {
+  if (!Array.isArray(buses)) {
+    return [];
+  }
+  const seen = /* @__PURE__ */ new Set();
+  return buses.slice(0, MAX_BINARY_BUSES).map((bus) => {
+    const index = boundedBinaryInteger(bus?.index, 0, MAX_BINARY_BUSES - 1);
+    if (seen.has(index)) {
+      throw new Error("binary_audio_duplicate_bus");
     }
-    return normalized;
+    seen.add(index);
+    return { index, ...normalizeBinaryBlock(Array.isArray(bus?.channels) ? bus.channels : []) };
   });
 }
 
-function writeBinaryChannels(view, offset, channels) {
-  for (const channel of channels) {
-    for (const sample of channel) {
-      view.setFloat32(offset, sample, true);
-      offset += FLOAT_BYTES;
+function busHeaders(buses) {
+  return buses.map((bus) => ({ index: bus.index, channels: bus.channels.length, frames: bus.frames }));
+}
+
+function writeBinaryBlocks(view, offset, blocks) {
+  for (const block of blocks) {
+    for (const channel of block.channels) {
+      for (const sample of channel) {
+        view.setFloat32(offset, sample, true);
+        offset += FLOAT_BYTES;
+      }
     }
   }
+}
+
+function readBinaryBlock(view, offset, channelCount, frames) {
+  const byteLength = channelCount * frames * FLOAT_BYTES;
+  if (offset + byteLength > view.byteLength) {
+    throw new Error("invalid_binary_audio_payload");
+  }
+  return {
+    channels: readBinaryChannels(view, offset, channelCount, frames),
+    offset: offset + byteLength
+  };
+}
+
+function readBinaryBuses(view, offset, specs) {
+  if (specs === void 0) {
+    return { blocks: [], offset };
+  }
+  if (!Array.isArray(specs) || specs.length > MAX_BINARY_BUSES) {
+    throw new Error("binary_audio_bus_out_of_range");
+  }
+  const seen = /* @__PURE__ */ new Set();
+  const blocks = [];
+  for (const spec of specs) {
+    const index = boundedBinaryInteger(spec?.index, 0, MAX_BINARY_BUSES - 1);
+    if (seen.has(index)) {
+      throw new Error("binary_audio_duplicate_bus");
+    }
+    seen.add(index);
+    const channelCount = boundedBinaryInteger(spec?.channels, 0, MAX_BINARY_CHANNELS);
+    const frames = boundedBinaryInteger(spec?.frames, 1, MAX_BINARY_FRAMES);
+    const block = readBinaryBlock(view, offset, channelCount, frames);
+    offset = block.offset;
+    blocks.push({ index, channels: block.channels });
+  }
+  return { blocks, offset };
 }
 
 function readBinaryChannels(view, offset, channelCount, frames) {
@@ -583,16 +665,17 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
         blockId: request.blockId,
         sampleRate: request.sampleRate ?? this.sampleRate,
         channels: request.channels,
+        inputBuses: request.inputBuses,
         transport: request.transport,
         timestamp: request.timestamp
       };
       const response =
-        this.audioTransport === "binary" && !request.inputBuses
+        this.audioTransport === "binary"
           ? await this.client.processAudioBlockBinary(processRequest)
           : await this.client.processAudioBlock({
               ...processRequest,
               channels: cloneLiveEffectChannels(request.channels),
-              inputBuses: request.inputBuses
+              inputBuses: cloneLiveEffectBusBlocks(request.inputBuses)
             });
       return { ...response, bypassed: false, healthy: true };
     } catch (error) {
@@ -648,6 +731,10 @@ function boundedLiveEffectChannelCount(value) {
 
 function cloneLiveEffectChannels(channels) {
   return channels.map((channel) => Array.from(channel));
+}
+
+function cloneLiveEffectBusBlocks(buses) {
+  return buses?.map((bus) => ({ index: bus.index, channels: cloneLiveEffectChannels(bus.channels) }));
 }
 
 function dryLiveEffectChannels(channels, outputChannels) {

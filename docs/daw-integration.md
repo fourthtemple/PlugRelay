@@ -57,11 +57,11 @@ The web client exports `SoundBridgeLiveEffectRack` as a small host-side pattern 
 - return dry audio and mark the rack unhealthy when `processAudioBlock` fails
 - call `recreate()` only from a non-audio-control path after the UI/user decides to retry the plugin
 
-This is the right policy for live sets: a failed effect should become a dry bypass, not silence and not an app crash. Main-bus binary frames reduce serialization overhead, but production DJ use still needs worker-thread transport, shared-memory/ring-buffer transport, and bus-indexed binary frames for sidechains and multi-output effects.
+This is the right policy for live sets: a failed effect should become a dry bypass, not silence and not an app crash. Binary frames reduce serialization overhead for main, sidechain, and multi-output bus buffers, but production DJ use still needs worker-thread transport and shared-memory/ring-buffer transport.
 
 ## Current Prototype Limitations
 
-- Main-bus audio blocks use binary WebSocket frames in the reference web client. JSON audio blocks remain the compatibility path for explicit multi-bus payloads until bus-indexed binary frames exist.
+- Main-bus and bus-indexed audio blocks use binary WebSocket frames in the reference web client. JSON audio blocks remain the compatibility path for hosts that opt out of binary transport.
 - Parameter automation supports bounded event lists, bounded per-block step/linear curves with sample offsets, and stored absolute-sample timeline lanes applied from `processAudioBlock.transport.samplePosition`.
 - Editor support currently means bounded generic parameter editor sessions plus an opt-in native editor broker contract; platform-specific native plugin windows remain future broker implementation work.
 - The mock plugin is a gain effect.

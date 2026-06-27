@@ -96,7 +96,7 @@ Protocol:
 
 ## Latency Tradeoffs
 
-The MVP prioritizes correctness over ultra-low latency. WebSocket plus JSON audio blocks is not a final real-time transport. It is useful because it exposes:
+The MVP prioritizes correctness over ultra-low latency. Binary WebSocket audio blocks reduce serialization overhead, but the current browser-owned socket path is not a final real-time transport. It is useful because it exposes:
 
 - browser scheduling behavior
 - AudioWorklet queue depth requirements
@@ -106,8 +106,7 @@ The MVP prioritizes correctness over ultra-low latency. WebSocket plus JSON audi
 
 The production path should add:
 
-- binary audio frames for the main-bus `processAudioBlock` path, with bus-indexed binary frames still to add for sidechains and multi-output effects
-- a dedicated browser worker for transport
+- a dedicated browser worker for socket and transport work
 - `SharedArrayBuffer` ring buffers where available
 - adaptive buffering and latency compensation
 - daemon-side plugin worker processes

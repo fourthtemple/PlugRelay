@@ -463,7 +463,7 @@ assert(binaryBlock.blockId === 63, "binary processAudioBlock preserves block id"
 assert(blockHasSignal(binaryBlock.channels), "binary processAudioBlock returns processed Float32 audio");
 assert(binaryBlock.channels.length === created.layout.outputChannels, "binary processAudioBlock returns negotiated output channels");
 assert(binaryBlock.transport?.samplePosition === 8064, "binary processAudioBlock preserves bounded host transport");
-assert(!("outputBuses" in binaryBlock), "binary processAudioBlock keeps bus audio out of JSON response metadata");
+assertOutputBuses(binaryBlock, created.layout, "binary processAudioBlock returns binary output bus buffers");
 
 const automated = await request(
   socket,
@@ -638,6 +638,33 @@ const busProcessed = await request(
 );
 assert(busProcessed.channels.length === mockLayout.outputChannels, "processAudioBlock accepts explicit input bus buffers");
 assertOutputBuses(busProcessed, mockLayout, "bus-aware mock render reports bounded output buses");
+
+const binaryBusProcessed = await requestBinaryAudio(
+  socket,
+  "processAudioBlock",
+  {
+    instanceId: created.instanceId,
+    blockId: 9,
+    sampleRate: 48000,
+    inputBuses: [
+      {
+        index: 0,
+        channels: [
+          Float32Array.from([0.2, 0.2, 0.2, 0.2]),
+          Float32Array.from([0.2, 0.2, 0.2, 0.2])
+        ]
+      },
+      {
+        index: 1,
+        channels: [Float32Array.from([0.4, 0.4, 0.4, 0.4])]
+      }
+    ]
+  },
+  true,
+  pair.sessionToken
+);
+assert(binaryBusProcessed.channels.length === mockLayout.outputChannels, "binary processAudioBlock accepts input bus buffers");
+assertOutputBuses(binaryBusProcessed, mockLayout, "binary bus-aware mock render reports output bus buffers");
 
 const state = await request(socket, "getState", { instanceId: created.instanceId }, true, pair.sessionToken);
 assert(typeof state.state === "string" && state.state.length > 0, "getState returned opaque state");

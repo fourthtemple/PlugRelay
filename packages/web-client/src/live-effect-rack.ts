@@ -6,7 +6,7 @@ import type {
   PluginMetadata
 } from "../../protocol/src/messages";
 import { SoundBridgeClient } from "./client";
-import type { BinaryAudioBlockRequest } from "./client";
+import type { BinaryAudioBlockRequest, BinaryAudioBusBlock } from "./client";
 
 export interface LiveEffectRackOptions {
   client: SoundBridgeClient;
@@ -22,7 +22,7 @@ export interface LiveEffectBlockRequest {
   blockId: number;
   channels: ArrayLike<number>[];
   sampleRate?: number;
-  inputBuses?: AudioBlockRequest["inputBuses"];
+  inputBuses?: BinaryAudioBlockRequest["inputBuses"];
   transport?: HostTransportState;
   timestamp?: number;
 }
@@ -126,16 +126,17 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
         blockId: request.blockId,
         sampleRate: request.sampleRate ?? this.sampleRate,
         channels: request.channels,
+        inputBuses: request.inputBuses,
         transport: request.transport,
         timestamp: request.timestamp
       };
       const response =
-        this.audioTransport === "binary" && !request.inputBuses
+        this.audioTransport === "binary"
           ? await this.client.processAudioBlockBinary(processRequest)
           : await this.client.processAudioBlock({
               ...processRequest,
               channels: cloneChannels(request.channels),
-              inputBuses: request.inputBuses
+              inputBuses: cloneBusBlocks(request.inputBuses)
             });
       return { ...response, bypassed: false, healthy: true };
     } catch (error) {
@@ -191,6 +192,10 @@ function boundedChannelCount(value: number): number {
 
 function cloneChannels(channels: ArrayLike<number>[]): number[][] {
   return channels.map((channel) => Array.from(channel));
+}
+
+function cloneBusBlocks(buses?: BinaryAudioBusBlock[]): AudioBlockRequest["inputBuses"] {
+  return buses?.map((bus) => ({ index: bus.index, channels: cloneChannels(bus.channels) }));
 }
 
 function dryChannels(channels: ArrayLike<number>[], outputChannels: number): number[][] {

@@ -13,6 +13,10 @@ const requestEnvelope = {
       [0, 0.25, -0.25],
       Float32Array.from([0.5, -0.5, 1])
     ],
+    inputBuses: [
+      { index: 0, channels: [Float32Array.from([0.1, 0.2, 0.3])] },
+      { index: 2, channels: [[0.9, 0.8, 0.7], [0.6, 0.5, 0.4]] }
+    ],
     transport: { playing: true, samplePosition: 896 }
   }
 };
@@ -23,7 +27,11 @@ assert(decodedRequest.id === "binary-smoke-1", "binary request preserves envelop
 assert(decodedRequest.payload.blockId === 7, "binary request preserves JSON payload fields");
 assert(decodedRequest.payload.channels.length === 2, "binary request restores channel count");
 assert(Math.abs(decodedRequest.payload.channels[1][1] + 0.5) < 0.000001, "binary request restores Float32 samples");
+assert(decodedRequest.payload.inputBuses.length === 2, "binary request restores input bus count");
+assert(decodedRequest.payload.inputBuses[1].index === 2, "binary request restores input bus indexes");
+assert(Math.abs(decodedRequest.payload.inputBuses[1].channels[0][2] - 0.7) < 0.000001, "binary request restores input bus samples");
 assert(!("channels" in readBinaryHeader(encodedRequest).payload), "binary request keeps samples out of JSON header");
+assert(!("inputBuses" in readBinaryHeader(encodedRequest).payload), "binary request keeps input bus samples out of JSON header");
 
 const typedOnlyRequest = {
   ...requestEnvelope,
@@ -58,7 +66,8 @@ const responseEnvelope = {
 const decodedResponse = decodeBinaryAudioEnvelope(encodeBinaryAudioEnvelope(responseEnvelope));
 assert(decodedResponse.ok === true, "binary response preserves ok status");
 assert(decodedResponse.payload.latencySamples === 3, "binary response preserves non-audio payload metadata");
-assert(!("outputBuses" in decodedResponse.payload), "binary response omits duplicated bus sample arrays");
+assert(decodedResponse.payload.outputBuses[0].channels[0][0] === 999, "binary response restores output bus samples");
+assert(!("outputBuses" in readBinaryHeader(encodeBinaryAudioEnvelope(responseEnvelope)).payload), "binary response keeps output bus samples out of JSON header");
 assert(decodedResponse.payload.channels[0][2] < 0, "binary response restores output samples");
 
 for (const malformed of [Buffer.alloc(0), Buffer.from("nope"), encodeBinaryAudioEnvelope(responseEnvelope).subarray(0, 10)]) {

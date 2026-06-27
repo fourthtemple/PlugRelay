@@ -130,6 +130,13 @@ const recovered = await rack.processBlock({ blockId: 5, channels: inputChannels 
 assert(rack.instanceId === "inst-live-2", "recreate replaces the effect instance");
 assert(recovered.bypassed === false && recovered.channels[0][1] === 0.25, "recreated rack processes audio again");
 
+await rack.processBlock({
+  blockId: 6,
+  channels: inputChannels,
+  inputBuses: [{ index: 1, channels: [Float32Array.from([0.1, 0.2, 0.3, 0.4])] }]
+});
+assert(client.binaryProcessed.at(-1)?.inputBuses?.[0]?.index === 1, "binary live rack forwards indexed input buses");
+
 const jsonRack = await SoundBridgeLiveEffectRack.create({
   client,
   plugin,
@@ -139,9 +146,14 @@ const jsonRack = await SoundBridgeLiveEffectRack.create({
 });
 const beforeJsonProcessed = client.processed.length;
 const beforeJsonBinaryProcessed = client.binaryProcessed.length;
-await jsonRack.processBlock({ blockId: 6, channels: inputChannels });
+await jsonRack.processBlock({
+  blockId: 7,
+  channels: inputChannels,
+  inputBuses: [{ index: 1, channels: [Float32Array.from([0.4, 0.3, 0.2, 0.1])] }]
+});
 assert(client.processed.length === beforeJsonProcessed + 1, "json live rack calls processAudioBlock");
 assert(client.binaryProcessed.length === beforeJsonBinaryProcessed, "json live rack avoids processAudioBlockBinary");
+assert(Array.isArray(client.processed.at(-1)?.inputBuses?.[0]?.channels?.[0]), "json live rack clones input bus channels to arrays");
 await jsonRack.destroy();
 
 await rack.destroy();
