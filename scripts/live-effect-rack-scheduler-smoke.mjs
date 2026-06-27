@@ -1,6 +1,7 @@
 import {
   createLiveEffectRackBlockScheduler,
-  createLiveEffectRackChain
+  createLiveEffectRackChain,
+  createLiveEffectRackChainCalibrationWindow
 } from "../packages/web-client/dist/soundbridge-client.js";
 
 function assert(condition, message) {
@@ -72,6 +73,20 @@ now = 1011;
 const chainCompensated = scheduler.schedule([[0.2]], { timestamp: now });
 assert(chainCompensated.transport.samplePosition === 2304, "live rack scheduler can compensate from chain aggregate latency");
 
+const chainWindow = createLiveEffectRackChainCalibrationWindow({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  transportLatencySamples: 128,
+  processBudgetMs: 12,
+  processTimeoutMs: 16,
+  safetyMarginBlocks: 1
+});
+const chainCalibration = chainWindow.record(chain.health).calibration;
+scheduler.updateFromChainCalibration(chain.health, chainCalibration);
+now = 1012;
+const calibratedChain = scheduler.schedule([[0.3]], { timestamp: now });
+assert(calibratedChain.transport.samplePosition === 2560, "live rack scheduler applies calibrated chain latency compensation");
+
 const explicitTransport = { playing: false, samplePosition: 7 };
 const explicit = scheduler.schedule([[0.1]], { transport: explicitTransport, timestamp: now });
 assert(explicit.transport === explicitTransport, "live rack scheduler preserves explicit host transport");
@@ -81,6 +96,6 @@ scheduler.reset({ nextBlockId: 4, nextSamplePosition: 512 });
 const reset = scheduler.schedule([[0.2]]);
 assert(reset.blockId === 4 && reset.samplePosition === 512, "live rack scheduler reset sets the next block position");
 assert(scheduler.snapshot().nextBlockId === 5, "live rack scheduler snapshot reports the next block id");
-assert(scheduler.snapshot().transportLatencySamples === 640, "live rack scheduler snapshot reports current latency compensation");
+assert(scheduler.snapshot().transportLatencySamples === 768, "live rack scheduler snapshot reports current latency compensation");
 
 console.log("Live effect rack scheduler smoke checks passed.");

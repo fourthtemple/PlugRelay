@@ -2600,6 +2600,13 @@ export class LiveEffectRackBlockScheduler {
     return this.updateLatency(health.latencySamples);
   }
 
+  updateFromChainCalibration(health, calibration) {
+    return this.updateLatency(combinedLiveEffectLatencySamples(
+      boundedLiveEffectLatencySamples(health.latencySamples, 0),
+      boundedLiveEffectLatencySamples(calibration.recommendedTransportLatencySamples, 0)
+    ));
+  }
+
   reset(options = {}) {
     this.nextBlockId = boundedLiveEffectInteger(options.nextBlockId, 0, 0, LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID);
     this.nextSamplePosition = optionalLiveEffectSchedulerInteger(options.nextSamplePosition, 0, LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION);

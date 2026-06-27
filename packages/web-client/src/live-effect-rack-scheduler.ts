@@ -4,8 +4,10 @@ import {
   boundedLatencySamples,
   boundedLiveEffectInteger,
   boundedLiveEffectNumber,
+  combinedLatencySamples,
   liveEffectNowMs
 } from "./live-effect-rack-metrics";
+import type { LiveEffectRackCalibration } from "./live-effect-rack-policy";
 import { liveTransportForBlock } from "./live-transport";
 import type { LiveTransportBlockOptions } from "./live-transport";
 
@@ -116,6 +118,16 @@ export class LiveEffectRackBlockScheduler {
 
   updateFromChainHealth(health: { latencySamples: unknown }): number {
     return this.updateLatency(health.latencySamples);
+  }
+
+  updateFromChainCalibration(
+    health: { latencySamples: unknown },
+    calibration: Pick<LiveEffectRackCalibration, "recommendedTransportLatencySamples">
+  ): number {
+    return this.updateLatency(combinedLatencySamples(
+      boundedLatencySamples(health.latencySamples, 0),
+      boundedLatencySamples(calibration.recommendedTransportLatencySamples, 0)
+    ));
   }
 
   reset(options: { nextBlockId?: number; nextSamplePosition?: number } = {}): void {
