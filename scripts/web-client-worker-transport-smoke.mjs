@@ -98,6 +98,7 @@ assert(audioPort, "worker transport creates an audio worklet port after pairing"
 assert(audioPortMessage.type === "audio-port", "worker transport registers audio worklet ports with the worker");
 assert(audioPortMessage.instanceId === "inst-1", "worker audio port registration includes instance id");
 assert(audioPortMessage.maxInFlightBlocks === 3, "worker audio port registration includes the bounded in-flight limit");
+assert(audioPortMessage.audioRequestTimeoutMs === 2000, "worker audio port registration includes the default audio timeout");
 assert(audioPortMessage.sharedAudio?.inputControl instanceof SharedArrayBuffer, "worker audio port registration includes shared input control when isolated");
 assert(audioPortMessage.sharedAudio?.outputAudio instanceof SharedArrayBuffer, "worker audio port registration includes shared output audio when isolated");
 audioPort.close();
@@ -122,6 +123,7 @@ const liveNodeOptions = createLivePerformanceAudioNodeOptions({
   outputChannels: 2
 });
 assert(liveNodeOptions.audioTransport === "binary", "live AudioNode preset uses binary audio");
+assert(liveNodeOptions.audioRequestTimeoutMs === 250, "live AudioNode preset uses a bounded audio request timeout");
 assert(liveNodeOptions.audioTransferMode === "auto", "live AudioNode preset stays shared-memory capable");
 assert(liveNodeOptions.maxInFlightBlocks === 4, "live AudioNode preset bounds in-flight work");
 assert(liveNodeOptions.maxQueuedOutputBlocks === 8, "live AudioNode preset bounds queued output");
@@ -138,6 +140,7 @@ const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
   inputChannels: 2,
   outputChannels: 2,
   audioTransport: "json",
+  audioRequestTimeoutMs: 333,
   audioTransferMode: "message",
   maxInFlightBlocks: 9,
   maxQueuedOutputBlocks: 6,
@@ -150,6 +153,7 @@ const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
   maxBlockFrames: 256
 });
 assert(overriddenLiveNodeOptions.audioTransport === "json", "live AudioNode preset preserves explicit transport overrides");
+assert(overriddenLiveNodeOptions.audioRequestTimeoutMs === 333, "live AudioNode preset preserves explicit timeout overrides");
 assert(overriddenLiveNodeOptions.audioTransferMode === "message", "live AudioNode preset preserves explicit transfer-mode overrides");
 assert(overriddenLiveNodeOptions.maxInFlightBlocks === 9, "live AudioNode preset preserves explicit in-flight overrides");
 assert(overriddenLiveNodeOptions.maxQueuedOutputBlocks === 6, "live AudioNode preset preserves explicit queue overrides");
@@ -187,6 +191,7 @@ assert(processorOptions.latencyRecoveryBlocks === 128, "createLivePerformance fo
 const liveAudioPortMessage = FakeWorker.last.messages.at(-1);
 assert(liveAudioPortMessage.type === "audio-port", "createLivePerformance registers a worker audio port");
 assert(liveAudioPortMessage.maxInFlightBlocks === 4, "createLivePerformance forwards live in-flight limits to the worker");
+assert(liveAudioPortMessage.audioRequestTimeoutMs === 250, "createLivePerformance forwards live audio timeouts to the worker");
 assert(liveAudioPortMessage.audioTransport === "binary", "createLivePerformance registers binary worker audio");
 assert(liveAudioPortMessage.sharedAudio?.slots === 4, "createLivePerformance registers the live shared ring depth");
 assert(

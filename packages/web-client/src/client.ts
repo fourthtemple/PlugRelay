@@ -46,11 +46,11 @@ export interface BinaryAudioBlockRequest extends Omit<AudioBlockRequest, "channe
   channels: ArrayLike<number>[];
   inputBuses?: BinaryAudioBusBlock[];
 }
-
 export interface AudioWorkletTransportOptions extends SharedAudioTransportOptions {
   instanceId: string;
   sampleRate: number;
   maxInFlightBlocks?: number;
+  audioRequestTimeoutMs?: number;
   audioTransport?: "binary" | "json";
 }
 
@@ -296,6 +296,7 @@ export class SoundBridgeClient extends EventTarget {
         sampleRate: options.sampleRate,
         sessionToken: this.sessionToken,
         maxInFlightBlocks: boundedAudioWorkletInteger(options.maxInFlightBlocks, 8, 1, 64),
+        audioRequestTimeoutMs: boundedAudioWorkletInteger(options.audioRequestTimeoutMs, 2000, 0, 60000),
         audioTransport: options.audioTransport === "json" ? "json" : "binary",
         sharedAudio
       },

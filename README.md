@@ -132,7 +132,7 @@ const rack = await SoundBridgeLiveEffectRack.createLivePerformance({
 });
 ```
 
-That preset uses binary audio, one in-flight block, block-time input freshness and processing deadlines, wet/dry transition fades, and bounded recovery after render pressure.
+That preset uses binary audio, one in-flight block, bounded audio request timeouts, block-time input freshness and processing deadlines, wet/dry transition fades, and bounded recovery after render pressure.
 
 ## Try The Demo
 

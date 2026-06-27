@@ -11,7 +11,10 @@ const encodeBinaryAudioEnvelope = globalThis.encodeBinaryAudioEnvelope;
 `
 );
 const postedMessages = [];
+const timers = new Map();
 const encodedBinaryChannels = [];
+const encodedBinaryEnvelopes = [];
+let timerSeq = 0;
 let waitAsyncCalls = 0;
 const testAtomics = {
   add: Atomics.add.bind(Atomics),
@@ -101,7 +104,8 @@ const context = {
   decodeBinaryAudioEnvelope() {
     throw new Error("binary response decoding is not used by this smoke test");
   },
-  encodeBinaryAudioEnvelope(_envelope, channels = []) {
+  encodeBinaryAudioEnvelope(envelope, channels = []) {
+    encodedBinaryEnvelopes.push(envelope);
     encodedBinaryChannels.push(channels);
     return new ArrayBuffer(8);
   },
@@ -110,8 +114,13 @@ const context = {
       return 123;
     }
   },
-  setTimeout() {
-    return 0;
+  setTimeout(callback, ms) {
+    const id = ++timerSeq;
+    timers.set(id, { callback, ms });
+    return id;
+  },
+  clearTimeout(id) {
+    timers.delete(id);
   },
   self
 };
@@ -293,6 +302,68 @@ assert(Atomics.load(outputPressureControl, 0) === 1 && Atomics.load(outputPressu
 assert(Atomics.load(outputPressureControl, 8) === 32, "transport worker overwrites the oldest output slot with the newest block");
 assert(Math.abs(outputPressureSamples[0] - 0.32) < 0.000001, "transport worker keeps the newest output audio under pressure");
 
+const timeoutPort = new TestPort();
+self.onmessage({
+  data: {
+    type: "audio-port",
+    port: timeoutPort,
+    instanceId: "inst-timeout",
+    sampleRate: 48000,
+    sessionToken: "session-1",
+    audioRequestTimeoutMs: 25,
+    audioTransport: "binary"
+  }
+});
+timeoutPort.onmessage({
+  data: {
+    type: "process",
+    blockId: 40,
+    frames: 2,
+    channels: [Float32Array.from([0.4, 0.4])]
+  }
+});
+runTimerWithDelay(25);
+assert(
+  timeoutPort.messages.some((message) => message.type === "audio-error" && message.blockId === 40 && /timed out/.test(message.error)),
+  "transport worker times out direct audio requests"
+);
+const timedOutDirectId = encodedBinaryEnvelopes.at(-1)?.id;
+socket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: timedOutDirectId,
+    ok: true,
+    payload: { blockId: 40, channels: [Float32Array.from([0.4, 0.4])], latencySamples: 0 }
+  })
+});
+assert(!timeoutPort.messages.some((message) => message.type === "processed" && message.blockId === 40), "transport worker ignores late direct audio responses after timeout");
+
+const sharedTimeoutAudio = createSharedAudio(2, 1, 2);
+writeSharedInput(sharedTimeoutAudio, 50, [Float32Array.from([0.5, 0.5])]);
+writeSharedInput(sharedTimeoutAudio, 51, [Float32Array.from([0.51, 0.51])]);
+const sharedTimeoutPort = new TestPort();
+const sentBeforeSharedTimeout = socket.sent.length;
+self.onmessage({
+  data: {
+    type: "audio-port",
+    port: sharedTimeoutPort,
+    instanceId: "inst-shared-timeout",
+    sampleRate: 48000,
+    sessionToken: "session-1",
+    maxInFlightBlocks: 1,
+    audioRequestTimeoutMs: 30,
+    audioTransport: "binary",
+    sharedAudio: sharedTimeoutAudio
+  }
+});
+assert(socket.sent.length === sentBeforeSharedTimeout + 1, "transport worker sends one shared block before timeout backpressure");
+runTimerWithDelay(30);
+assert(
+  sharedTimeoutPort.messages.some((message) => message.type === "audio-error" && message.blockId === 50 && /timed out/.test(message.error)),
+  "transport worker times out shared audio requests"
+);
+assert(socket.sent.length === sentBeforeSharedTimeout + 2, "shared timeout releases capacity and drains the next queued block");
+
 console.log("Transport worker audio port smoke checks passed.");
 
 function createSharedAudio(slots, channels, frames) {
@@ -329,4 +400,12 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function runTimerWithDelay(ms) {
+  const entry = [...timers.entries()].find(([, timer]) => timer.ms === ms);
+  assert(entry, `expected timer with ${ms}ms delay`);
+  const [id, timer] = entry;
+  timers.delete(id);
+  timer.callback();
 }

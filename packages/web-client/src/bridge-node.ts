@@ -16,6 +16,7 @@ export interface SoundBridgeAudioNodeOptions {
   targetResponseDeadlineLeadBlocks?: number;
   latencyPressureThresholdBlocks?: number;
   audioTransport?: "binary" | "json";
+  audioRequestTimeoutMs?: number;
   audioTransferMode?: "auto" | "message" | "shared";
   sharedBufferBlocks?: number;
   maxBlockFrames?: number;
@@ -31,6 +32,7 @@ const LIVE_AUDIO_NODE_MAX_OUTPUT_LATENCY_BLOCKS = 4;
 const LIVE_AUDIO_NODE_LATENCY_RECOVERY_BLOCKS = 128;
 const LIVE_AUDIO_NODE_LATENCY_PRESSURE_THRESHOLD_BLOCKS = 2;
 const LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS = 4;
+const LIVE_AUDIO_NODE_AUDIO_REQUEST_TIMEOUT_MS = 250;
 
 export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAudioNodeOptions): SoundBridgeAudioNodeOptions {
   const maxQueuedOutputBlocks = boundedInteger(
@@ -70,6 +72,7 @@ export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAu
       64
     ),
     audioTransport: options.audioTransport === "json" ? "json" : "binary",
+    audioRequestTimeoutMs: boundedInteger(options.audioRequestTimeoutMs, LIVE_AUDIO_NODE_AUDIO_REQUEST_TIMEOUT_MS, 0, 60000),
     audioTransferMode: options.audioTransferMode ?? "auto",
     sharedBufferBlocks: boundedInteger(options.sharedBufferBlocks, LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS, 2, 64),
     maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192)
@@ -122,6 +125,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       sampleRate: context.sampleRate,
       maxInFlightBlocks: options.maxInFlightBlocks,
       audioTransport: options.audioTransport,
+      audioRequestTimeoutMs: options.audioRequestTimeoutMs,
       audioTransferMode: options.audioTransferMode,
       channels: Math.max(options.inputChannels, options.outputChannels),
       maxBlockFrames: options.maxBlockFrames,
@@ -155,6 +159,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       targetResponseDeadlineLeadBlocks: boundedInteger(options.targetResponseDeadlineLeadBlocks, 1, 0, 16),
       latencyPressureThresholdBlocks: boundedInteger(options.latencyPressureThresholdBlocks, 4, 1, 64),
       audioTransport: options.audioTransport === "json" ? "json" : "binary",
+      audioRequestTimeoutMs: boundedInteger(options.audioRequestTimeoutMs, 2000, 0, 60000),
       audioTransferMode: options.audioTransferMode ?? "auto",
       sharedBufferBlocks: boundedInteger(options.sharedBufferBlocks, 8, 2, 64),
       maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192),

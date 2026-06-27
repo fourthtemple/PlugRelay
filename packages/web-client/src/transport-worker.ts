@@ -5,7 +5,7 @@ import {
 
 let socket: WebSocket | undefined;
 let audioRequestSeq = 0;
-const pendingAudioPorts = new Map<string, MessagePort>();
+const pendingAudioPorts = new Map<string, PendingAudioPortRequest>();
 const pendingSharedAudio = new Map<string, PendingSharedAudioRequest>();
 const SHARED_AUDIO_HEADER_INTS = 8;
 const SHARED_AUDIO_SLOT_INTS = 4;
@@ -23,12 +23,21 @@ interface AudioPortConfig {
   sampleRate: number;
   sessionToken: string;
   maxInFlightBlocks: number;
+  audioRequestTimeoutMs: number;
   audioTransport: "binary" | "json";
+}
+
+interface PendingAudioPortRequest {
+  port: MessagePort;
+  blockId: number;
+  timeout?: ReturnType<typeof setTimeout>;
 }
 
 interface PendingSharedAudioRequest {
   shared: SharedAudioPort;
   config: AudioPortConfig;
+  blockId: number;
+  timeout?: ReturnType<typeof setTimeout>;
 }
 
 interface SharedAudioPort {
@@ -69,6 +78,7 @@ self.onmessage = (event: MessageEvent) => {
       sampleRate: Number(message.sampleRate ?? 48000),
       sessionToken: String(message.sessionToken ?? ""),
       maxInFlightBlocks: boundedSharedInteger(message.maxInFlightBlocks, 8, 1, 64),
+      audioRequestTimeoutMs: boundedSharedInteger(message.audioRequestTimeoutMs, 2000, 0, 60000),
       audioTransport: message.audioTransport === "json" ? "json" : "binary"
     }, message.sharedAudio);
     return;
@@ -89,6 +99,7 @@ function connect(url: string): void {
     post({ type: "connect-error", message: `Unable to connect to ${url}` });
   });
   socket.addEventListener("close", () => {
+    rejectPendingAudioRequests("SoundBridge worker transport closed before audio response.");
     post({ type: "closed" });
   });
   socket.addEventListener("message", (event) => {
@@ -154,10 +165,19 @@ function sendAudioProcess(port: MessagePort, config: AudioPortConfig, message: {
     return;
   }
   try {
-    pendingAudioPorts.set(envelope.id, port);
+    pendingAudioPorts.set(envelope.id, {
+      port,
+      blockId,
+      timeout: startAudioRequestTimeout(config.audioRequestTimeoutMs, () => {
+        pendingAudioPorts.delete(envelope.id);
+        port.postMessage({ type: "audio-error", blockId, error: audioTimeoutMessage(config.audioRequestTimeoutMs) });
+      })
+    });
     socket.send(binary ? encodeBinaryAudioEnvelope(envelope, channels) : JSON.stringify(envelope));
     recycleAudioInput(port, recyclableInput, frames);
   } catch (error) {
+    const pending = pendingAudioPorts.get(envelope.id);
+    clearAudioRequestTimeout(pending?.timeout);
     pendingAudioPorts.delete(envelope.id);
     recycleAudioInput(port, recyclableInput, frames);
     port.postMessage({ type: "audio-error", blockId, error: String(error instanceof Error ? error.message : error) });
@@ -202,6 +222,7 @@ function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unk
   const pendingShared = envelope.id ? pendingSharedAudio.get(envelope.id) : undefined;
   if (pendingShared) {
     const { shared, config } = pendingShared;
+    clearAudioRequestTimeout(pendingShared.timeout);
     pendingSharedAudio.delete(envelope.id ?? "");
     shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
     if (envelope.ok && envelope.payload && typeof envelope.payload === "object") {
@@ -216,15 +237,16 @@ function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unk
     pumpSharedAudio(config, shared);
     return true;
   }
-  const port = envelope.id ? pendingAudioPorts.get(envelope.id) : undefined;
-  if (!port) {
+  const pendingPort = envelope.id ? pendingAudioPorts.get(envelope.id) : undefined;
+  if (!pendingPort) {
     return false;
   }
+  clearAudioRequestTimeout(pendingPort.timeout);
   pendingAudioPorts.delete(envelope.id ?? "");
   if (envelope.ok && envelope.payload && typeof envelope.payload === "object") {
     const payload = envelope.payload as { blockId?: number; channels?: ArrayLike<number>[]; latencySamples?: number; renderDurationMs?: number; renderBudgetMs?: number; renderBudgetExceeded?: boolean; renderEngine?: string };
     const channels = Array.isArray(payload.channels) ? payload.channels : [];
-    port.postMessage(
+    pendingPort.port.postMessage(
       {
         type: "processed",
         blockId: payload.blockId,
@@ -238,7 +260,7 @@ function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unk
       transferableChannelBuffers(channels)
     );
   } else {
-    port.postMessage({ type: "audio-error", error: envelope.error });
+    pendingPort.port.postMessage({ type: "audio-error", blockId: pendingPort.blockId, error: envelope.error });
   }
   return true;
 }
@@ -326,14 +348,58 @@ function sendSharedAudioProcess(
   };
   try {
     shared.inFlightBlocks += 1;
-    pendingSharedAudio.set(envelope.id, { shared, config });
+    pendingSharedAudio.set(envelope.id, {
+      shared,
+      config,
+      blockId: block.blockId,
+      timeout: startAudioRequestTimeout(config.audioRequestTimeoutMs, () => {
+        const pending = pendingSharedAudio.get(envelope.id);
+        if (!pending) {
+          return;
+        }
+        pendingSharedAudio.delete(envelope.id);
+        shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
+        shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: audioTimeoutMessage(config.audioRequestTimeoutMs) });
+        pumpSharedAudio(config, shared);
+      })
+    });
     socket.send(binary ? encodeBinaryAudioEnvelope(envelope, block.channels) : JSON.stringify(envelope));
     recycleSharedInputBlock(shared, block.channels, block.frames);
   } catch (error) {
+    const pending = pendingSharedAudio.get(envelope.id);
+    clearAudioRequestTimeout(pending?.timeout);
     pendingSharedAudio.delete(envelope.id);
     shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
     recycleSharedInputBlock(shared, block.channels, block.frames);
     shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: String(error instanceof Error ? error.message : error) });
+  }
+}
+
+function startAudioRequestTimeout(timeoutMs: number, onTimeout: () => void): ReturnType<typeof setTimeout> | undefined {
+  return timeoutMs > 0 ? setTimeout(onTimeout, timeoutMs) : undefined;
+}
+
+function clearAudioRequestTimeout(timeout: ReturnType<typeof setTimeout> | undefined): void {
+  if (timeout !== undefined) {
+    clearTimeout(timeout);
+  }
+}
+
+function audioTimeoutMessage(timeoutMs: number): string {
+  return `SoundBridge audio request timed out after ${timeoutMs} ms.`;
+}
+
+function rejectPendingAudioRequests(error: string): void {
+  for (const [id, pending] of pendingAudioPorts) {
+    clearAudioRequestTimeout(pending.timeout);
+    pending.port.postMessage({ type: "audio-error", blockId: pending.blockId, error });
+    pendingAudioPorts.delete(id);
+  }
+  for (const [id, pending] of pendingSharedAudio) {
+    clearAudioRequestTimeout(pending.timeout);
+    pending.shared.inFlightBlocks = Math.max(0, pending.shared.inFlightBlocks - 1);
+    pending.shared.port.postMessage({ type: "audio-error", blockId: pending.blockId, error });
+    pendingSharedAudio.delete(id);
   }
 }
 
