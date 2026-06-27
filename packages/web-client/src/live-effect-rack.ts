@@ -74,6 +74,7 @@ export interface LiveEffectRackHealth {
   maxInFlightBlocks: number;
   droppedInputBlocks: number;
   staleInputBlocks: number;
+  staleOutputBlocks: number;
   transitionFadeSamples: number;
 }
 
@@ -140,6 +141,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   private inFlightBlocks = 0;
   private droppedInputBlocks = 0;
   private staleInputBlocks = 0;
+  private staleOutputBlocks = 0;
   private renderBudgetMisses = 0;
   private lastRenderDurationMs?: number;
   private lastRenderBudgetMs?: number;
@@ -209,6 +211,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       maxInFlightBlocks: this.maxInFlightBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
       staleInputBlocks: this.staleInputBlocks,
+      staleOutputBlocks: this.staleOutputBlocks,
       transitionFadeSamples: this.transitionFadeSamples
     };
   }
@@ -295,6 +298,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       const inFlightEpoch = this.inFlightEpoch;
       processed.then(() => this.releaseInFlightBlock(inFlightEpoch), () => this.releaseInFlightBlock(inFlightEpoch));
       const response = await withLiveEffectTimeout(processed, this.processTimeoutMs);
+      if (this.isStaleInput(request.timestamp)) {
+        this.staleOutputBlocks = Math.min(1024, this.staleOutputBlocks + 1);
+        const dry = this.dryResponse(request, undefined, "dry-stale-output");
+        this.dispatchEvent(new CustomEvent("stale-output", { detail: { response: dry, health: this.health } }));
+        return dry;
+      }
       this.recordResponseLatency(response);
       if (this.recordRenderBudget(response)) {
         const error = new Error("render_budget_exceeded");
@@ -327,6 +336,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.inFlightBlocks = 0;
     this.droppedInputBlocks = 0;
     this.staleInputBlocks = 0;
+    this.staleOutputBlocks = 0;
     this.transportLatencySamples = 0;
     this.reportedLatencySamples = this.created.latencySamples;
     this.renderBudgetMisses = 0;

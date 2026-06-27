@@ -338,6 +338,18 @@ assert(staleRack.health.staleInputBlocks === 1 && staleEvents === 1, "live rack 
 assert(client.processed.length === beforeStaleProcessed, "stale input avoids plugin processing");
 const fresh = await staleRack.processBlock({ blockId: 15, channels: inputChannels, timestamp: liveEffectTestNowMs() });
 assert(fresh.bypassed === false && client.processed.length === beforeStaleProcessed + 1, "fresh timestamped input still processes");
+let staleOutputEvents = 0;
+staleRack.addEventListener("stale-output", () => {
+  staleOutputEvents += 1;
+});
+client.processingDelayMs = 5;
+const beforeStaleOutputProcessed = client.processed.length;
+const staleOutput = await staleRack.processBlock({ blockId: 16, channels: inputChannels, timestamp: liveEffectTestNowMs() });
+assert(staleOutput.bypassed === true && staleOutput.healthy === true, "live rack drops late render output to dry");
+assert(staleOutput.renderEngine === "dry-stale-output", "late render output reports a dry stale-output render engine");
+assert(staleRack.health.staleOutputBlocks === 1 && staleOutputEvents === 1, "live rack reports stale output pressure");
+assert(client.processed.length === beforeStaleOutputProcessed + 1, "stale output still records that native rendering happened");
+client.processingDelayMs = 0;
 await staleRack.destroy();
 
 const timeoutRack = await SoundBridgeLiveEffectRack.create({
