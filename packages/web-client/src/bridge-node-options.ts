@@ -28,6 +28,8 @@ export interface SoundBridgeAudioNodeOptions {
 
 export interface LivePerformanceAudioNodeOptions extends SoundBridgeAudioNodeOptions {}
 
+export type SoundBridgeAudioNodeFallbackReason = "bypass" | "latency-safety" | "underrun";
+
 export interface SoundBridgeAudioNodeHealth {
   healthy: boolean;
   instanceId: string;
@@ -56,6 +58,8 @@ export interface SoundBridgeAudioNodeHealth {
   responseJitterThresholdBlocks: number;
   responseDeadlineMisses: number;
   responseDeadlineMissesSinceLastStats: number;
+  fallbackOutputBlocks: number;
+  lastFallbackReason?: SoundBridgeAudioNodeFallbackReason;
   staleOutputBlocks: number;
   droppedInputBlocks: number;
   underruns: number;
@@ -105,6 +109,7 @@ export interface LivePerformanceAudioNodeCalibrationOptions extends LivePerforma
   responseJitterBlocks?: ArrayLike<number>;
   deadlineLeadBlocks?: ArrayLike<number>;
   underruns?: number;
+  fallbackOutputBlocks?: number;
   droppedInputBlocks?: number;
   staleOutputBlocks?: number;
   sharedInputDroppedBlocks?: number;
@@ -184,6 +189,7 @@ export interface LivePerformanceAudioNodeLatencyRefresher<T = unknown> {
 
 interface LivePerformanceAudioNodeCalibrationPressureCounters {
   underruns: number;
+  fallbackOutputBlocks: number;
   droppedInputBlocks: number;
   staleOutputBlocks: number;
   sharedInputDroppedBlocks: number;
@@ -395,7 +401,7 @@ function boundedAudioNodeSamples(samples: ArrayLike<number> | undefined, min: nu
 }
 
 function audioNodeDropPressure(options: LivePerformanceAudioNodeCalibrationOptions): boolean {
-  return [options.underruns, options.droppedInputBlocks, options.staleOutputBlocks, options.sharedInputDroppedBlocks, options.sharedOutputDroppedBlocks]
+  return [options.underruns, options.fallbackOutputBlocks, options.droppedInputBlocks, options.staleOutputBlocks, options.sharedInputDroppedBlocks, options.sharedOutputDroppedBlocks]
     .some((value) => boundedInteger(value, 0, 0, Number.MAX_SAFE_INTEGER) > 0);
 }
 
@@ -438,6 +444,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
   private responseJitterBlocks: number[] = [];
   private deadlineLeadBlocks: number[] = [];
   private underruns = 0;
+  private fallbackOutputBlocks = 0;
   private droppedInputBlocks = 0;
   private staleOutputBlocks = 0;
   private sharedInputDroppedBlocks = 0;
@@ -469,6 +476,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.responseJitterBlocks = [];
     this.deadlineLeadBlocks = [];
     this.underruns = 0;
+    this.fallbackOutputBlocks = 0;
     this.droppedInputBlocks = 0;
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
@@ -494,6 +502,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       responseJitterBlocks: this.responseJitterBlocks,
       deadlineLeadBlocks: this.deadlineLeadBlocks,
       underruns: this.underruns,
+      fallbackOutputBlocks: this.fallbackOutputBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
       staleOutputBlocks: this.staleOutputBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
@@ -523,6 +532,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       return;
     }
     this.underruns = Math.max(this.underruns, pressureCounterDelta(counters.underruns, this.pressureBaseline.underruns));
+    this.fallbackOutputBlocks = Math.max(this.fallbackOutputBlocks, pressureCounterDelta(counters.fallbackOutputBlocks, this.pressureBaseline.fallbackOutputBlocks));
     this.droppedInputBlocks = Math.max(this.droppedInputBlocks, pressureCounterDelta(counters.droppedInputBlocks, this.pressureBaseline.droppedInputBlocks));
     this.staleOutputBlocks = Math.max(this.staleOutputBlocks, pressureCounterDelta(counters.staleOutputBlocks, this.pressureBaseline.staleOutputBlocks));
     this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, pressureCounterDelta(counters.sharedInputDroppedBlocks, this.pressureBaseline.sharedInputDroppedBlocks));
@@ -532,6 +542,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
   private pressureCounters(health: LivePerformanceAudioNodeCalibrationHealthSample): LivePerformanceAudioNodeCalibrationPressureCounters {
     return {
       underruns: boundedInteger(health.underruns, 0, 0, Number.MAX_SAFE_INTEGER),
+      fallbackOutputBlocks: boundedInteger(health.fallbackOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       droppedInputBlocks: boundedInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       staleOutputBlocks: boundedInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       sharedInputDroppedBlocks: boundedInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER),

@@ -353,7 +353,7 @@ async function doEnsureBridgeInstance(recreate = false) {
     inputChannels,
     outputChannels,
     maxBlockFrames: 128,
-    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627c"
+    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627e"
   });
 
   analyser = audioContext.createAnalyser();

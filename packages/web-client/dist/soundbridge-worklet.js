@@ -32,6 +32,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.blockId = 0;
     this.lastFrames = 128;
     this.underruns = 0;
+    this.fallbackOutputBlocks = 0;
+    this.lastFallbackReason = "none";
     this.processedBlocks = 0;
     this.staleOutputBlocks = 0;
     this.droppedInputBlocks = 0;
@@ -79,7 +81,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     if (this.destroyed) { this.writeBlock(output, [], frames); return false; }
     this.lastFrames = frames;
     const outgoing = this.copyInputBlock(input, frames);
-    if (this.bypassed) { this.blockId += 1; this.writeBlock(output, outgoing, frames); return true; }
+    if (this.bypassed) { this.blockId += 1; this.writeFallbackBlock(output, outgoing, frames, "bypass"); return true; }
     this.drainSharedOutput();
     const currentBlockId = this.blockId++;
     const insertingSafetyBlock = this.latencySafetyBlocks > 0;
@@ -89,14 +91,15 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     if (queued) {
       this.outputBlocks.delete(targetBlockId);
       this.writeBlock(output, queued, frames);
+      this.lastFallbackReason = "none";
       this.recycleOutputBlock(queued, frames);
       this.processedBlocks += 1;
     } else if (insertingSafetyBlock) {
-      this.writeBlock(output, outgoing, frames);
+      this.writeFallbackBlock(output, outgoing, frames, "latency-safety");
       this.latencySafetyBlocks -= 1;
       this.latencySafetyInsertions += 1;
     } else {
-      this.writeBlock(output, outgoing, frames);
+      this.writeFallbackBlock(output, outgoing, frames, "underrun");
       this.underruns += 1;
     }
     if (!insertingSafetyBlock) {
@@ -141,6 +144,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
         staleOutputBlocks: this.staleOutputBlocks,
         droppedInputBlocks: this.droppedInputBlocks,
+        fallbackOutputBlocks: this.fallbackOutputBlocks,
+        lastFallbackReason: this.lastFallbackReason,
         inputBufferAllocations: this.inputBufferAllocations,
         inputBufferReuses: this.inputBufferReuses,
         pooledInputBuffers: this.pooledInputBuffers,
@@ -276,6 +281,12 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         destination.fill(0);
       }
     }
+  }
+
+  writeFallbackBlock(output, block, frames, reason) {
+    this.writeBlock(output, block, frames);
+    this.fallbackOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.fallbackOutputBlocks + 1);
+    this.lastFallbackReason = reason;
   }
 
   outputChannelBlock(channel) {

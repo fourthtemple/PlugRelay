@@ -814,6 +814,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.responseJitterSamples = 0;
     this.responseDeadlineMisses = 0;
     this.responseDeadlineMissesSinceLastStats = 0;
+    this.fallbackOutputBlocks = 0;
+    this.lastFallbackReason = undefined;
     this.staleOutputBlocks = 0;
     this.droppedInputBlocks = 0;
     this.underruns = 0;
@@ -1028,6 +1030,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       responseJitterThresholdBlocks: this.responseJitterThresholdBlocks,
       responseDeadlineMisses: this.responseDeadlineMisses,
       responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats,
+      fallbackOutputBlocks: this.fallbackOutputBlocks,
+      lastFallbackReason: this.lastFallbackReason,
       staleOutputBlocks: this.staleOutputBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
       underruns: this.underruns,
@@ -1173,6 +1177,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       latencyIncreases: this.latencyIncreases,
       latencyDecreases: this.latencyDecreases,
       responseDeadlineMisses: this.responseDeadlineMisses,
+      fallbackOutputBlocks: this.fallbackOutputBlocks,
       staleOutputBlocks: this.staleOutputBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
       underruns: this.underruns,
@@ -1203,6 +1208,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       0,
       Number.MAX_SAFE_INTEGER
     );
+    this.fallbackOutputBlocks = boundedAudioNodeInteger(stats.fallbackOutputBlocks, this.fallbackOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
+    this.lastFallbackReason = audioNodeFallbackReason(stats.lastFallbackReason);
     this.staleOutputBlocks = boundedAudioNodeInteger(stats.staleOutputBlocks, this.staleOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
     this.droppedInputBlocks = boundedAudioNodeInteger(stats.droppedInputBlocks, this.droppedInputBlocks, 0, Number.MAX_SAFE_INTEGER);
     this.underruns = boundedAudioNodeInteger(stats.underruns, this.underruns, 0, Number.MAX_SAFE_INTEGER);
@@ -1249,6 +1256,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     const reasons = [];
     if (this.responseDeadlineMisses > previous.responseDeadlineMisses) reasons.push("deadline-miss");
     if (this.latencyIncreases > previous.latencyIncreases && this.responseJitterThresholdBlocks > 0 && boundedAudioNodeOptionalNumber(stats.responseJitterBlocks, 0, 64) !== undefined && this.responseJitterBlocks >= this.responseJitterThresholdBlocks) reasons.push("response-jitter");
+    if (this.fallbackOutputBlocks > previous.fallbackOutputBlocks && this.lastFallbackReason === "latency-safety") reasons.push("latency-safety");
     if (this.staleOutputBlocks > previous.staleOutputBlocks) reasons.push("stale-output");
     if (this.droppedInputBlocks > previous.droppedInputBlocks) reasons.push("dropped-input");
     if (this.underruns > previous.underruns) reasons.push("underrun");
@@ -1382,8 +1390,12 @@ function boundedLiveAudioNodeSamples(samples, min, max) {
 }
 
 function audioNodeDropPressure(options) {
-  return [options.underruns, options.droppedInputBlocks, options.staleOutputBlocks, options.sharedInputDroppedBlocks, options.sharedOutputDroppedBlocks]
+  return [options.underruns, options.fallbackOutputBlocks, options.droppedInputBlocks, options.staleOutputBlocks, options.sharedInputDroppedBlocks, options.sharedOutputDroppedBlocks]
     .some((value) => boundedAudioNodeInteger(value, 0, 0, Number.MAX_SAFE_INTEGER) > 0);
+}
+
+function audioNodeFallbackReason(reason) {
+  return reason === "bypass" || reason === "latency-safety" || reason === "underrun" ? reason : undefined;
 }
 
 function audioNodeCalibrationWarnings(calibration) {
@@ -1413,6 +1425,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.responseJitterBlocks = [];
     this.deadlineLeadBlocks = [];
     this.underruns = 0;
+    this.fallbackOutputBlocks = 0;
     this.droppedInputBlocks = 0;
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
@@ -1442,6 +1455,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.responseJitterBlocks = [];
     this.deadlineLeadBlocks = [];
     this.underruns = 0;
+    this.fallbackOutputBlocks = 0;
     this.droppedInputBlocks = 0;
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
@@ -1467,6 +1481,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       responseJitterBlocks: this.responseJitterBlocks,
       deadlineLeadBlocks: this.deadlineLeadBlocks,
       underruns: this.underruns,
+      fallbackOutputBlocks: this.fallbackOutputBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
       staleOutputBlocks: this.staleOutputBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
@@ -1496,6 +1511,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       return;
     }
     this.underruns = Math.max(this.underruns, audioNodePressureCounterDelta(counters.underruns, this.pressureBaseline.underruns));
+    this.fallbackOutputBlocks = Math.max(this.fallbackOutputBlocks, audioNodePressureCounterDelta(counters.fallbackOutputBlocks, this.pressureBaseline.fallbackOutputBlocks));
     this.droppedInputBlocks = Math.max(this.droppedInputBlocks, audioNodePressureCounterDelta(counters.droppedInputBlocks, this.pressureBaseline.droppedInputBlocks));
     this.staleOutputBlocks = Math.max(this.staleOutputBlocks, audioNodePressureCounterDelta(counters.staleOutputBlocks, this.pressureBaseline.staleOutputBlocks));
     this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, audioNodePressureCounterDelta(counters.sharedInputDroppedBlocks, this.pressureBaseline.sharedInputDroppedBlocks));
@@ -1505,6 +1521,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
   pressureCounters(health) {
     return {
       underruns: boundedAudioNodeInteger(health.underruns, 0, 0, Number.MAX_SAFE_INTEGER),
+      fallbackOutputBlocks: boundedAudioNodeInteger(health.fallbackOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       droppedInputBlocks: boundedAudioNodeInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       staleOutputBlocks: boundedAudioNodeInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       sharedInputDroppedBlocks: boundedAudioNodeInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER),

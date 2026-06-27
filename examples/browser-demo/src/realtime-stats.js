@@ -2,6 +2,8 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
   const elements = {
     processedBlocks: document.querySelector("#processedBlocks"),
     underruns: document.querySelector("#underruns"),
+    fallbackOutputBlocks: document.querySelector("#fallbackOutputBlocks"),
+    lastFallbackReason: document.querySelector("#lastFallbackReason"),
     queuedBlocks: document.querySelector("#queuedBlocks"),
     staleOutputBlocks: document.querySelector("#staleOutputBlocks"),
     droppedInputBlocks: document.querySelector("#droppedInputBlocks"),
@@ -32,6 +34,8 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
     update(stats = {}) {
       setText(elements.processedBlocks, stats.processedBlocks);
       setText(elements.underruns, stats.underruns);
+      setText(elements.fallbackOutputBlocks, stats.fallbackOutputBlocks);
+      setFallbackReason(elements.lastFallbackReason, stats.lastFallbackReason);
       setText(elements.queuedBlocks, stats.queuedOutputBlocks);
       setText(elements.staleOutputBlocks, stats.staleOutputBlocks);
       setText(elements.droppedInputBlocks, stats.droppedInputBlocks);
@@ -60,6 +64,8 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
     updateLatencyHealth(health = {}) {
       setText(elements.reportedLatencyMs, formatMilliseconds(health.reportedLatencyMs));
       setText(elements.latencyDirection, formatDirection(health.lastLatencyChangeDirection));
+      setText(elements.fallbackOutputBlocks, health.fallbackOutputBlocks);
+      setFallbackReason(elements.lastFallbackReason, health.lastFallbackReason);
       setReasons(elements.transportPressureReasons, health.lastTransportPressureReasons);
     },
     updateTransportPressure(detail = {}) {
@@ -77,6 +83,12 @@ function setText(element, value) {
 function setReasons(element, reasons) {
   if (element) {
     element.textContent = Array.isArray(reasons) && reasons.length > 0 ? reasons.join(", ") : "None";
+  }
+}
+
+function setFallbackReason(element, reason) {
+  if (element) {
+    element.textContent = typeof reason === "string" && reason.length > 0 && reason !== "none" ? reason : "None";
   }
 }
 

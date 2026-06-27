@@ -314,6 +314,8 @@ const pressureStats = {
   responseJitterSamples: 384,
   responseDeadlineMisses: 4,
   responseDeadlineMissesSinceLastStats: 1,
+  fallbackOutputBlocks: 7,
+  lastFallbackReason: "underrun",
   staleOutputBlocks: 2,
   droppedInputBlocks: 1,
   underruns: 7,
@@ -321,11 +323,9 @@ const pressureStats = {
   sharedInputDroppedBlocks: 5,
   sharedOutputDroppedBlocks: 6
 };
-FakeAudioWorkletNode.last.port.onmessage({
-  data: pressureStats
-});
+FakeAudioWorkletNode.last.port.onmessage({ data: pressureStats });
 assert(statsEvents === 1, "SoundBridgeAudioNode emits one stats event per worklet stats message");
-assert(statsDetail.transportLatencySamples === 256, "SoundBridgeAudioNode preserves stats event details");
+assert(statsDetail.transportLatencySamples === 256 && statsDetail.fallbackOutputBlocks === 7, "SoundBridgeAudioNode preserves stats event details");
 assert(liveNode.health.inFlightBlocks === 3, "SoundBridgeAudioNode health tracks worklet in-flight blocks");
 assert(liveNode.health.queuedOutputBlocks === 2, "SoundBridgeAudioNode health tracks queued output blocks");
 assert(liveNode.health.outputLatencyBlocks === 2, "SoundBridgeAudioNode health tracks output latency blocks");
@@ -338,8 +338,8 @@ assert(liveNode.health.latencyChangeEvents === 1, "SoundBridgeAudioNode health c
 assert(liveNode.health.lastLatencyChangeDirection === "increased", "SoundBridgeAudioNode health tracks latency direction");
 assert(liveNode.health.responseDeadlineLeadSamples === -128, "SoundBridgeAudioNode health tracks deadline lead");
 assert(liveNode.health.responseJitterSamples === 384 && liveNode.health.responseJitterBlocks === 3 && liveNode.health.responseJitterThresholdBlocks === 2, "SoundBridgeAudioNode health tracks response jitter against the live threshold");
-assert(liveNode.health.responseDeadlineMisses === 4, "SoundBridgeAudioNode health tracks deadline misses");
-assert(liveNode.health.responseDeadlineMissesSinceLastStats === 1, "SoundBridgeAudioNode health tracks recent deadline misses");
+assert(liveNode.health.responseDeadlineMisses === 4 && liveNode.health.responseDeadlineMissesSinceLastStats === 1, "SoundBridgeAudioNode health tracks deadline misses");
+assert(liveNode.health.fallbackOutputBlocks === 7 && liveNode.health.lastFallbackReason === "underrun", "SoundBridgeAudioNode health tracks fallback output");
 assert(liveNode.health.staleOutputBlocks === 2, "SoundBridgeAudioNode health tracks stale output blocks");
 assert(liveNode.health.droppedInputBlocks === 1, "SoundBridgeAudioNode health tracks dropped input blocks");
 assert(liveNode.health.underruns === 7, "SoundBridgeAudioNode health tracks underruns");

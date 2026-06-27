@@ -170,6 +170,7 @@ async function playKeyUntilProcessed(page, label) {
 async function assertRealtimeStats(page) {
   for (const selector of [
     "#latencyDecreases",
+    "#fallbackOutputBlocks",
     "#reportedLatencyMs",
     "#responseDeadlineLeadSamples",
     "#responseJitterSamples",
@@ -186,6 +187,8 @@ async function assertRealtimeStats(page) {
   assert(/^(OK|Over)$/.test((renderBudgetStatus ?? "").trim()), "Render budget status reports live render pressure.");
   const latencyDirection = await page.locator("#latencyDirection").textContent();
   assert(/^(None|Changed|Increased|Decreased)$/.test((latencyDirection ?? "").trim()), "Latency direction reports live latency health.");
+  const fallbackReason = await page.locator("#lastFallbackReason").textContent();
+  assert(/^(None|bypass|latency-safety|underrun)$/.test((fallbackReason ?? "").trim()), "Fallback reason reports live worklet fallback output.");
   const pressureReasons = await page.locator("#transportPressureReasons").textContent();
   assert(/^(None|[a-z-]+(, [a-z-]+)*)$/.test((pressureReasons ?? "").trim()), "Pressure reason reports latest live transport pressure.");
 }

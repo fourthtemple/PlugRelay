@@ -69,6 +69,7 @@ function deliver(blockId, samples) {
 
 assert(equal(renderBlock([0, 0]), [0, 0]), "block 0 starts as dry warmup");
 assert(equal(renderBlock([1, 1]), [1, 1]), "block 1 starts as dry warmup");
+assert(processor.fallbackOutputBlocks === 2 && processor.lastFallbackReason === "underrun", "worklet counts initial fallback output blocks");
 
 deliver(1, [101, 101]);
 assert(equal(renderBlock([2, 2]), [2, 2]), "out-of-order block 1 is not played in block 0's slot");
@@ -78,6 +79,7 @@ assert(processor.responseDeadlineMisses === 1, "late worklet responses count dea
 deliver(2, [102, 102]);
 assert(processor.staleOutputBlocks === 1, "late block 0 is counted as stale");
 assert(equal(renderBlock([3, 3]), [101, 101]), "block 1 plays in its scheduled output slot");
+assert(processor.lastFallbackReason === "none", "worklet clears the fallback reason after wet output");
 assert(equal(renderBlock([4, 4]), [102, 102]), "block 2 plays in its scheduled output slot");
 
 lastPort.onmessage({ data: { type: "dropped", blockId: 99 } });
@@ -186,6 +188,7 @@ bypassMainPort.onmessage({ data: { type: "connect-transport", port: bypassTransp
 const bypassOutput = [new Float32Array(2)];
 bypassProcessor.process([[Float32Array.from([30, 31])]], [bypassOutput]);
 assert(equal(Array.from(bypassOutput[0]), [30, 31]), "bypassed worklet outputs dry input");
+assert(bypassProcessor.fallbackOutputBlocks === 1 && bypassProcessor.lastFallbackReason === "bypass", "bypassed worklet counts dry fallback output");
 assert(bypassTransportPort.messages.length === 0, "bypassed worklet does not post render work");
 bypassTransportPort.onmessage({ data: { type: "processed", blockId: 0, channels: [Float32Array.from([300, 300])] } });
 assert(bypassProcessor.outputBlocks.size === 0, "bypassed worklet ignores late wet responses");
@@ -313,6 +316,7 @@ const adaptiveUnderrunsBeforeSafety = adaptiveProcessor.underruns;
 adaptiveProcessor.process([[Float32Array.from([3])]], [[new Float32Array(1)]]);
 assert(adaptiveProcessor.latencySafetyInsertions === 1, "miss-driven adaptive latency raises insert a controlled safety block");
 assert(adaptiveProcessor.underruns === adaptiveUnderrunsBeforeSafety, "miss-driven safety blocks are not counted as underruns");
+assert(adaptiveProcessor.lastFallbackReason === "latency-safety", "miss-driven safety blocks report fallback reason");
 
 const recoveryProcessor = new processorCtor({
   processorOptions: {
@@ -404,6 +408,8 @@ assert(typeof statsMessage?.sharedAudioEnabled === "boolean", "worklet stats rep
 assert(typeof statsMessage?.sharedAudioWakeMode === "string", "worklet stats report shared audio wake mode");
 assert(typeof statsMessage?.sharedInputDroppedBlocks === "number", "worklet stats report shared input drops");
 assert(typeof statsMessage?.sharedOutputDroppedBlocks === "number", "worklet stats report shared output drops");
+assert(typeof statsMessage?.fallbackOutputBlocks === "number", "worklet stats report fallback output blocks");
+assert(typeof statsMessage?.lastFallbackReason === "string", "worklet stats report the last fallback reason");
 assert(typeof statsMessage?.inputBufferAllocations === "number", "worklet stats report input buffer allocations");
 assert(typeof statsMessage?.inputBufferReuses === "number", "worklet stats report input buffer reuse");
 assert(typeof statsMessage?.pooledInputBuffers === "number", "worklet stats report pooled input buffers");

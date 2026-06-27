@@ -6,7 +6,7 @@ import {
   combinedAudioNodeLatencySamples,
   createLivePerformanceAudioNodeOptions
 } from "./bridge-node-options";
-import type { LivePerformanceAudioNodeOptions, SoundBridgeAudioNodeHealth, SoundBridgeAudioNodeOptions } from "./bridge-node-options";
+import type { LivePerformanceAudioNodeOptions, SoundBridgeAudioNodeFallbackReason, SoundBridgeAudioNodeHealth, SoundBridgeAudioNodeOptions } from "./bridge-node-options";
 import { SoundBridgeClient } from "./client";
 import { liveTransportForBlock } from "./live-transport";
 
@@ -43,6 +43,8 @@ export class SoundBridgeAudioNode extends EventTarget {
   private responseJitterSamples = 0;
   private responseDeadlineMisses = 0;
   private responseDeadlineMissesSinceLastStats = 0;
+  private fallbackOutputBlocks = 0;
+  private lastFallbackReason?: SoundBridgeAudioNodeFallbackReason;
   private staleOutputBlocks = 0;
   private droppedInputBlocks = 0;
   private underruns = 0;
@@ -278,6 +280,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       responseJitterThresholdBlocks: this.responseJitterThresholdBlocks,
       responseDeadlineMisses: this.responseDeadlineMisses,
       responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats,
+      fallbackOutputBlocks: this.fallbackOutputBlocks,
+      lastFallbackReason: this.lastFallbackReason,
       staleOutputBlocks: this.staleOutputBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
       underruns: this.underruns,
@@ -363,6 +367,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       responseJitterSamples?: number;
       responseDeadlineMisses?: number;
       responseDeadlineMissesSinceLastStats?: number;
+      fallbackOutputBlocks?: number;
+      lastFallbackReason?: string;
       renderDurationMs?: number;
       renderBudgetMs?: number;
       renderBudgetExceeded?: boolean;
@@ -482,6 +488,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     responseJitterSamples?: number;
     responseDeadlineMisses?: number;
     responseDeadlineMissesSinceLastStats?: number;
+    fallbackOutputBlocks?: number;
+    lastFallbackReason?: string;
     staleOutputBlocks?: number;
     droppedInputBlocks?: number;
     underruns?: number;
@@ -495,6 +503,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       latencyIncreases: this.latencyIncreases,
       latencyDecreases: this.latencyDecreases,
       responseDeadlineMisses: this.responseDeadlineMisses,
+      fallbackOutputBlocks: this.fallbackOutputBlocks,
       staleOutputBlocks: this.staleOutputBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
       underruns: this.underruns,
@@ -520,6 +529,8 @@ export class SoundBridgeAudioNode extends EventTarget {
       0,
       Number.MAX_SAFE_INTEGER
     );
+    this.fallbackOutputBlocks = boundedInteger(stats.fallbackOutputBlocks, this.fallbackOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
+    this.lastFallbackReason = audioNodeFallbackReason(stats.lastFallbackReason);
     this.staleOutputBlocks = boundedInteger(stats.staleOutputBlocks, this.staleOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
     this.droppedInputBlocks = boundedInteger(stats.droppedInputBlocks, this.droppedInputBlocks, 0, Number.MAX_SAFE_INTEGER);
     this.underruns = boundedInteger(stats.underruns, this.underruns, 0, Number.MAX_SAFE_INTEGER);
@@ -573,6 +584,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private reportTransportPressure(
     previous: {
       responseDeadlineMisses: number;
+      fallbackOutputBlocks: number;
       latencyIncreases: number;
       staleOutputBlocks: number;
       droppedInputBlocks: number;
@@ -585,6 +597,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     const reasons: string[] = [];
     if (this.responseDeadlineMisses > previous.responseDeadlineMisses) reasons.push("deadline-miss");
     if (this.latencyIncreases > previous.latencyIncreases && this.responseJitterThresholdBlocks > 0 && boundedOptionalNumber(stats.responseJitterBlocks, 0, 64) !== undefined && this.responseJitterBlocks >= this.responseJitterThresholdBlocks) reasons.push("response-jitter");
+    if (this.fallbackOutputBlocks > previous.fallbackOutputBlocks && this.lastFallbackReason === "latency-safety") reasons.push("latency-safety");
     if (this.staleOutputBlocks > previous.staleOutputBlocks) reasons.push("stale-output");
     if (this.droppedInputBlocks > previous.droppedInputBlocks) reasons.push("dropped-input");
     if (this.underruns > previous.underruns) reasons.push("underrun");
@@ -666,4 +679,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.dispatchEvent(new CustomEvent("latencychange", { detail: { direction: "changed", previous, diagnostics, health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
+}
+
+function audioNodeFallbackReason(reason: unknown): SoundBridgeAudioNodeFallbackReason | undefined {
+  return reason === "bypass" || reason === "latency-safety" || reason === "underrun" ? reason : undefined;
 }
