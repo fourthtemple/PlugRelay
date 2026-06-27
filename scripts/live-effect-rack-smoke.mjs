@@ -29,6 +29,7 @@ class FakeLiveClient {
     this.renderDurationMs = 0.5;
     this.renderBudgetMs = 2.667;
     this.renderBudgetExceeded = false;
+    this.latencySamples = 12;
     this.protocolErrorCode = undefined;
   }
 
@@ -49,7 +50,7 @@ class FakeLiveClient {
         sampleRate: request.sampleRate,
         maxBlockSize: request.maxBlockSize
       },
-      latencySamples: 12,
+      latencySamples: this.latencySamples,
       tailSamples: 0,
       infiniteTail: false
     };
@@ -70,7 +71,7 @@ class FakeLiveClient {
     return {
       blockId: request.blockId,
       channels: request.channels.map((channel) => channel.map((sample) => sample * 0.5)),
-      latencySamples: 12,
+      latencySamples: this.latencySamples,
       tailSamples: 0,
       infiniteTail: false,
       renderDurationMs: this.renderDurationMs,
@@ -88,9 +89,9 @@ class FakeLiveClient {
 
   async getLatency(_instanceId, transportLatencySamples = 0) {
     return {
-      pluginLatencySamples: 12,
+      pluginLatencySamples: this.latencySamples,
       transportLatencySamples,
-      reportedLatencySamples: 12 + transportLatencySamples
+      reportedLatencySamples: this.latencySamples + transportLatencySamples
     };
   }
 
@@ -183,16 +184,33 @@ assert(rack.health.lastRenderBudgetMs === 2.667, "live rack records render budge
 assert(client.binaryProcessed.length === 1, "healthy live rack uses binary processAudioBlock by default");
 assert(client.processed.length === 1, "binary live rack still reaches the fake processor");
 
+let latencyEvents = 0;
+rack.addEventListener("latencychange", () => {
+  latencyEvents += 1;
+});
+client.latencySamples = 48;
+const dynamicLatency = await rack.processBlock({ blockId: 2, channels: inputChannels });
+assert(dynamicLatency.latencySamples === 48, "live rack receives dynamic plugin latency from render responses");
+assert(
+  rack.health.pluginLatencySamples === 48 &&
+    rack.health.transportLatencySamples === 128 &&
+    rack.health.reportedLatencySamples === 176,
+  "live rack updates plugin plus transport latency from render responses"
+);
+assert(latencyEvents === 1, "live rack emits a latencychange event when render latency changes");
+client.latencySamples = 12;
+
 rack.setBypassed(true);
 const bypassed = await rack.processBlock({ blockId: 2, channels: inputChannels });
 assert(bypassed.bypassed === true && bypassed.channels[0][0] === 1, "manual bypass returns dry audio");
-assert(client.processed.length === 1, "manual bypass avoids plugin processing");
+assert(client.processed.length === 2, "manual bypass avoids plugin processing");
 
 let errorEvents = 0;
 rack.addEventListener("effect-error", () => {
   errorEvents += 1;
 });
 rack.setBypassed(false);
+const processedBeforeFailure = client.processed.length;
 client.failProcessing = true;
 const failed = await rack.processBlock({ blockId: 3, channels: inputChannels });
 assert(failed.bypassed === true && failed.healthy === false, "processing failure fails closed to dry audio");
@@ -201,7 +219,7 @@ assert(errorEvents === 1, "processing failure emits one effect-error event");
 assert(rack.health.unhealthyReason === "processing-error", "processing failure records a non-recoverable reason");
 
 const stillDry = await rack.processBlock({ blockId: 4, channels: inputChannels });
-assert(stillDry.bypassed === true && client.processed.length === 2, "unhealthy rack stays dry until recreated");
+assert(stillDry.bypassed === true && client.processed.length === processedBeforeFailure + 1, "unhealthy rack stays dry until recreated");
 assert(rack.health.healthy === false, "processing-error rack does not auto-recover");
 
 client.failProcessing = false;

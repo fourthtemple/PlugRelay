@@ -295,6 +295,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       const inFlightEpoch = this.inFlightEpoch;
       processed.then(() => this.releaseInFlightBlock(inFlightEpoch), () => this.releaseInFlightBlock(inFlightEpoch));
       const response = await withLiveEffectTimeout(processed, this.processTimeoutMs);
+      this.recordResponseLatency(response);
       if (this.recordRenderBudget(response)) {
         const error = new Error("render_budget_exceeded");
         this.failClosed(error, "render-budget-exceeded");
@@ -370,6 +371,21 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       this.dispatchEvent(new CustomEvent("render-budget-exceeded", { detail: { response, health: this.health } }));
     }
     return this.maxConsecutiveRenderBudgetMisses > 0 && this.renderBudgetMisses >= this.maxConsecutiveRenderBudgetMisses;
+  }
+
+  private recordResponseLatency(response: AudioBlockResponse): void {
+    if (!this.created) {
+      return;
+    }
+    const latencySamples = boundedOptionalNumber(response.latencySamples, 0, 1048576);
+    const boundedLatencySamples = latencySamples === undefined ? undefined : Math.floor(latencySamples);
+    if (boundedLatencySamples === undefined || boundedLatencySamples === this.created.latencySamples) {
+      return;
+    }
+    this.created.latencySamples = boundedLatencySamples;
+    this.reportedLatencySamples = Math.min(1048576, boundedLatencySamples + this.transportLatencySamples);
+    this.dispatchEvent(new CustomEvent("latencychange", { detail: this.health }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
   private maybeRecoverFromFailure(): void {
