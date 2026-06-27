@@ -16,6 +16,7 @@ export interface LiveEffectRackOptions {
   inputChannels?: number;
   outputChannels?: number;
   audioTransport?: "binary" | "json";
+  maxInputAgeMs?: number;
   maxInFlightBlocks?: number;
   processTimeoutMs?: number;
   maxConsecutiveRenderBudgetMisses?: number;
@@ -52,9 +53,11 @@ export interface LiveEffectRackHealth {
   recoveryDryBlocks: number;
   renderBudgetRecoveryBlocks: number;
   processTimeoutMs: number;
+  maxInputAgeMs: number;
   inFlightBlocks: number;
   maxInFlightBlocks: number;
   droppedInputBlocks: number;
+  staleInputBlocks: number;
 }
 
 export class SoundBridgeLiveEffectRack extends EventTarget {
@@ -65,6 +68,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   readonly inputChannels: number;
   readonly outputChannels: number;
   readonly audioTransport: "binary" | "json";
+  readonly maxInputAgeMs: number;
   readonly maxInFlightBlocks: number;
   readonly processTimeoutMs: number;
   readonly maxConsecutiveRenderBudgetMisses: number;
@@ -79,6 +83,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   private inFlightEpoch = 0;
   private inFlightBlocks = 0;
   private droppedInputBlocks = 0;
+  private staleInputBlocks = 0;
   private renderBudgetMisses = 0;
   private lastRenderDurationMs?: number;
   private lastRenderBudgetMs?: number;
@@ -93,6 +98,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.inputChannels = boundedChannelCount(options.inputChannels ?? options.plugin.inputs ?? 2);
     this.outputChannels = boundedChannelCount(options.outputChannels ?? options.plugin.outputs ?? this.inputChannels);
     this.audioTransport = options.audioTransport === "json" ? "json" : "binary";
+    this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, 0, 0, 60000);
     this.maxInFlightBlocks = boundedLiveEffectInteger(options.maxInFlightBlocks, 1, 1, 32);
     this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, 0, 0, 60000);
     this.maxConsecutiveRenderBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 3, 0, 1024);
@@ -124,9 +130,11 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       recoveryDryBlocks: this.recoveryDryBlocks,
       renderBudgetRecoveryBlocks: this.renderBudgetRecoveryBlocks,
       processTimeoutMs: this.processTimeoutMs,
+      maxInputAgeMs: this.maxInputAgeMs,
       inFlightBlocks: this.inFlightBlocks,
       maxInFlightBlocks: this.maxInFlightBlocks,
-      droppedInputBlocks: this.droppedInputBlocks
+      droppedInputBlocks: this.droppedInputBlocks,
+      staleInputBlocks: this.staleInputBlocks
     };
   }
 
@@ -163,6 +171,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     if (this.bypassed || !this.instanceId || !this.healthy) {
       const response = this.dryResponse(request, undefined);
       this.maybeRecoverFromRenderPressure();
+      return response;
+    }
+    if (this.isStaleInput(request.timestamp)) {
+      this.staleInputBlocks = Math.min(1024, this.staleInputBlocks + 1);
+      const response = this.dryResponse(request, undefined, "dry-stale-input");
+      this.dispatchEvent(new CustomEvent("stale-input", { detail: { response, health: this.health } }));
       return response;
     }
     if (this.inFlightBlocks >= this.maxInFlightBlocks) {
@@ -222,6 +236,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.inFlightEpoch += 1;
     this.inFlightBlocks = 0;
     this.droppedInputBlocks = 0;
+    this.staleInputBlocks = 0;
     this.renderBudgetMisses = 0;
     this.lastRenderDurationMs = undefined;
     this.lastRenderBudgetMs = undefined;
@@ -291,6 +306,11 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
+  private isStaleInput(timestamp: unknown): boolean {
+    const capturedAt = Number(timestamp);
+    return this.maxInputAgeMs > 0 && Number.isFinite(capturedAt) && liveEffectNowMs() - capturedAt > this.maxInputAgeMs;
+  }
+
   private releaseInFlightBlock(epoch: number): void {
     if (epoch !== this.inFlightEpoch) {
       return;
@@ -344,6 +364,10 @@ function liveEffectTimeoutError(): Error {
 
 function liveEffectFailureReason(error: unknown): LiveEffectRackHealth["unhealthyReason"] {
   return error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout" ? "process-timeout" : "processing-error";
+}
+
+function liveEffectNowMs(): number {
+  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
 }
 
 function cloneChannels(channels: ArrayLike<number>[]): number[][] {

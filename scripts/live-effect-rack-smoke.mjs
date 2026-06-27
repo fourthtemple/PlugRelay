@@ -212,6 +212,27 @@ const slowProcessed = await slowBlock;
 assert(slowProcessed.bypassed === false && backpressureRack.health.inFlightBlocks === 0, "first slow block completes after backpressure drop");
 await backpressureRack.destroy();
 
+const staleRack = await SoundBridgeLiveEffectRack.create({
+  client,
+  plugin,
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  maxInputAgeMs: 1
+});
+let staleEvents = 0;
+staleRack.addEventListener("stale-input", () => {
+  staleEvents += 1;
+});
+const beforeStaleProcessed = client.processed.length;
+const stale = await staleRack.processBlock({ blockId: 14, channels: inputChannels, timestamp: liveEffectTestNowMs() - 20 });
+assert(stale.bypassed === true && stale.healthy === true, "live rack drops stale timestamped input to dry");
+assert(stale.renderEngine === "dry-stale-input", "stale input reports a dry stale render engine");
+assert(staleRack.health.staleInputBlocks === 1 && staleEvents === 1, "live rack reports stale input pressure");
+assert(client.processed.length === beforeStaleProcessed, "stale input avoids plugin processing");
+const fresh = await staleRack.processBlock({ blockId: 15, channels: inputChannels, timestamp: liveEffectTestNowMs() });
+assert(fresh.bypassed === false && client.processed.length === beforeStaleProcessed + 1, "fresh timestamped input still processes");
+await staleRack.destroy();
+
 const timeoutRack = await SoundBridgeLiveEffectRack.create({
   client,
   plugin,
@@ -220,10 +241,10 @@ const timeoutRack = await SoundBridgeLiveEffectRack.create({
   processTimeoutMs: 1
 });
 client.processingDelayMs = 20;
-const timedOut = await timeoutRack.processBlock({ blockId: 14, channels: inputChannels });
+const timedOut = await timeoutRack.processBlock({ blockId: 16, channels: inputChannels });
 assert(timedOut.bypassed === true && timedOut.healthy === false, "live rack fails dry when processBlock exceeds its timeout");
 assert(timeoutRack.health.unhealthyReason === "process-timeout", "live rack records process timeout as its health reason");
-const afterTimeout = await timeoutRack.processBlock({ blockId: 15, channels: inputChannels });
+const afterTimeout = await timeoutRack.processBlock({ blockId: 17, channels: inputChannels });
 assert(afterTimeout.bypassed === true && timeoutRack.health.healthy === false, "process timeout does not auto-recover");
 client.processingDelayMs = 0;
 await timeoutRack.destroy();
@@ -261,4 +282,8 @@ function assert(condition, message) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function liveEffectTestNowMs() {
+  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
 }
