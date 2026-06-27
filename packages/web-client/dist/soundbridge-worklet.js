@@ -60,6 +60,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.inputBufferPool = new Map();
     this.outputBufferPool = new Map();
     this.destroyed = false;
+    this.bypassed = processorOptions.bypassed === true;
     this.maxInFlightBlocks = this.boundedInteger(processorOptions.maxInFlightBlocks, 8, 1, 64);
     this.maxRecycledInputBuffers = this.outputChannels * Math.max(2, this.maxInFlightBlocks);
     this.maxRecycledOutputBuffers = this.outputChannels * Math.max(2, this.maxQueuedOutputBlocks + this.maxOutputLatencyBlocks);
@@ -74,8 +75,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     const frames = output[0]?.length ?? input[0]?.length ?? 128;
     if (this.destroyed) { this.writeBlock(output, [], frames); return false; }
     this.lastFrames = frames;
-    this.drainSharedOutput();
     const outgoing = this.copyInputBlock(input, frames);
+    if (this.bypassed) { this.blockId += 1; this.writeBlock(output, outgoing, frames); return true; }
+    this.drainSharedOutput();
     const currentBlockId = this.blockId++;
     const insertingSafetyBlock = this.latencySafetyBlocks > 0;
     const targetBlockId = insertingSafetyBlock ? -1 : currentBlockId - this.outputLatencyBlocks;
@@ -166,15 +168,10 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     if (message.type === "destroy") {
       this.destroyed = true;
-      this.outputBlocks.clear();
-      this.inputBufferPool.clear();
-      this.outputBufferPool.clear();
+      this.outputBlocks.clear(); this.inputBufferPool.clear(); this.outputBufferPool.clear();
       this.resetResponseDeadlineState();
-      this.inFlightBlocks = 0;
-      this.pooledInputBuffers = 0;
-      this.pooledOutputBuffers = 0;
-      this.sharedAudio = void 0;
-      this.sharedAudioWakeMode = "none";
+      this.inFlightBlocks = 0; this.pooledInputBuffers = 0; this.pooledOutputBuffers = 0;
+      this.sharedAudio = void 0; this.sharedAudioWakeMode = "none"; this.bypassed = false;
       this.transportPort?.postMessage({ type: "destroy" });
       this.transportPort = void 0;
       return;
@@ -189,18 +186,18 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    if (message.type === "shared-audio-status") {
-      if (message.wakeMode === "atomics" || message.wakeMode === "timer") {
-        this.sharedAudioWakeMode = message.wakeMode;
-      }
+    if (message.type === "set-bypassed") {
+      this.bypassed = message.bypassed === true;
+      if (this.bypassed) { this.outputBlocks.clear(); this.latencySafetyBlocks = 0; this.resetResponseDeadlineState(); }
       return;
     }
 
-    if (message.type === "dropped") {
-      this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
-      this.droppedInputBlocks += 1;
+    if (message.type === "shared-audio-status") {
+      if (message.wakeMode === "atomics" || message.wakeMode === "timer") this.sharedAudioWakeMode = message.wakeMode;
       return;
     }
+
+    if (message.type === "dropped") { this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1); this.droppedInputBlocks += 1; return; }
 
     if (message.type === "recycle-input" && Array.isArray(message.channels)) {
       this.recycleInputBlock(message.channels, message.frames);
@@ -222,6 +219,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
     this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
+    if (this.bypassed) return;
 
     const blockId = Math.floor(Number(message.blockId));
     if (!Number.isFinite(blockId) || blockId < 0) {

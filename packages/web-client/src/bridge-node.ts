@@ -20,6 +20,7 @@ export interface SoundBridgeAudioNodeOptions {
   audioTransferMode?: "auto" | "message" | "shared";
   sharedBufferBlocks?: number;
   maxBlockFrames?: number;
+  bypassed?: boolean;
   workletUrl?: string;
 }
 
@@ -28,6 +29,8 @@ export interface LivePerformanceAudioNodeOptions extends SoundBridgeAudioNodeOpt
 export interface SoundBridgeAudioNodeHealth {
   healthy: boolean;
   instanceId: string;
+  bypassed: boolean;
+  bypassEvents: number;
   audioTransport: "binary" | "json";
   audioRequestTimeoutMs: number;
   inFlightBlocks: number;
@@ -133,6 +136,8 @@ export class SoundBridgeAudioNode extends EventTarget {
   private readonly maxInFlightBlocks: number;
   private readonly audioTransport: "binary" | "json";
   private readonly audioRequestTimeoutMs: number;
+  private bypassed = false;
+  private bypassEvents = 0;
   private workletInFlightBlocks?: number;
   private queuedOutputBlocks = 0;
   private outputLatencyBlocks = 0;
@@ -170,6 +175,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.maxInFlightBlocks = options.maxInFlightBlocks;
     this.audioTransport = options.audioTransport;
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
+    this.bypassed = options.bypassed;
     this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
       numberOfInputs: 1,
       numberOfOutputs: 1,
@@ -189,7 +195,8 @@ export class SoundBridgeAudioNode extends EventTarget {
         latencyMissThresholdBlocks: options.latencyMissThresholdBlocks,
         latencyRecoveryBlocks: options.latencyRecoveryBlocks,
         targetResponseDeadlineLeadBlocks: options.targetResponseDeadlineLeadBlocks,
-        latencyPressureThresholdBlocks: options.latencyPressureThresholdBlocks
+        latencyPressureThresholdBlocks: options.latencyPressureThresholdBlocks,
+        bypassed: options.bypassed
       }
     });
     this.node.port.onmessage = (event) => this.handleWorkletMessage(event.data);
@@ -236,6 +243,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       audioTransferMode: options.audioTransferMode ?? "auto",
       sharedBufferBlocks: boundedInteger(options.sharedBufferBlocks, 8, 2, 64),
       maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192),
+      bypassed: options.bypassed === true,
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
     normalized.outputLatencyBlocks = boundedInteger(
@@ -272,6 +280,16 @@ export class SoundBridgeAudioNode extends EventTarget {
     return this.node.connect(destination, output, input);
   }
 
+  setBypassed(bypassed: boolean): void {
+    if (this.destroyed || this.bypassed === bypassed) {
+      return;
+    }
+    this.bypassed = bypassed;
+    this.bypassEvents = Math.min(1024, this.bypassEvents + 1);
+    this.node.port.postMessage({ type: "set-bypassed", bypassed });
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
   disconnect(): void {
     this.node.disconnect();
   }
@@ -280,6 +298,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     return {
       healthy: !this.destroyed && this.unhealthyReason === undefined,
       instanceId: this.instanceId,
+      bypassed: this.bypassed,
+      bypassEvents: this.bypassEvents,
       audioTransport: this.audioTransport,
       audioRequestTimeoutMs: this.audioRequestTimeoutMs,
       inFlightBlocks: this.workletInFlightBlocks ?? this.inFlightBlocks,

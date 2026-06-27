@@ -61,6 +61,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   private transportPort?: MessagePort;
   private sharedAudio?: NormalizedSharedAudio;
   private destroyed = false;
+  private bypassed = false;
   private sharedAudioWakeMode: "none" | "pending" | "atomics" | "timer" = "none";
 
   constructor(options: AudioWorkletNodeOptions) {
@@ -94,6 +95,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.targetResponseDeadlineLeadBlocks = this.boundedInteger(processorOptions.targetResponseDeadlineLeadBlocks, 1, 0, 16);
     this.latencyPressureThresholdBlocks = this.boundedInteger(processorOptions.latencyPressureThresholdBlocks, 4, 1, 64);
     this.maxRecycledOutputBuffers = this.outputChannels * Math.max(2, this.maxQueuedOutputBlocks + this.maxOutputLatencyBlocks);
+    this.bypassed = processorOptions.bypassed === true;
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
 
@@ -103,8 +105,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     const frames = output[0]?.length ?? input[0]?.length ?? 128;
     if (this.destroyed) { this.writeBlock(output, [], frames); return false; }
     this.lastFrames = frames;
-    this.drainSharedOutput();
     const outgoing = this.copyInputBlock(input, frames);
+    if (this.bypassed) { this.blockId += 1; this.writeBlock(output, outgoing, frames); return true; }
+    this.drainSharedOutput();
     const currentBlockId = this.blockId++;
     const insertingSafetyBlock = this.latencySafetyBlocks > 0;
     const targetBlockId = insertingSafetyBlock ? -1 : currentBlockId - this.outputLatencyBlocks;
@@ -205,19 +208,15 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       renderBudgetMs?: number;
       renderBudgetExceeded?: boolean;
       renderEngine?: string;
+      bypassed?: boolean;
       error?: unknown;
     };
     if (typed.type === "destroy") {
       this.destroyed = true;
-      this.outputBlocks.clear();
-      this.inputBufferPool.clear();
-      this.outputBufferPool.clear();
+      this.outputBlocks.clear(); this.inputBufferPool.clear(); this.outputBufferPool.clear();
       this.resetResponseDeadlineState();
-      this.inFlightBlocks = 0;
-      this.pooledInputBuffers = 0;
-      this.pooledOutputBuffers = 0;
-      this.sharedAudio = undefined;
-      this.sharedAudioWakeMode = "none";
+      this.inFlightBlocks = 0; this.pooledInputBuffers = 0; this.pooledOutputBuffers = 0;
+      this.sharedAudio = undefined; this.sharedAudioWakeMode = "none"; this.bypassed = false;
       this.transportPort?.postMessage({ type: "destroy" });
       this.transportPort = undefined;
       return;
@@ -232,18 +231,18 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    if (typed.type === "shared-audio-status") {
-      if (typed.wakeMode === "atomics" || typed.wakeMode === "timer") {
-        this.sharedAudioWakeMode = typed.wakeMode;
-      }
+    if (typed.type === "set-bypassed") {
+      this.bypassed = typed.bypassed === true;
+      if (this.bypassed) { this.outputBlocks.clear(); this.latencySafetyBlocks = 0; this.resetResponseDeadlineState(); }
       return;
     }
 
-    if (typed.type === "dropped") {
-      this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
-      this.droppedInputBlocks += 1;
+    if (typed.type === "shared-audio-status") {
+      if (typed.wakeMode === "atomics" || typed.wakeMode === "timer") this.sharedAudioWakeMode = typed.wakeMode;
       return;
     }
+
+    if (typed.type === "dropped") { this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1); this.droppedInputBlocks += 1; return; }
 
     if (typed.type === "recycle-input" && Array.isArray(typed.channels)) {
       this.recycleInputBlock(typed.channels, typed.frames);
@@ -265,6 +264,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
     this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
+    if (this.bypassed) return;
 
     const blockId = Math.floor(Number(typed.blockId));
     if (!Number.isFinite(blockId) || blockId < 0) {

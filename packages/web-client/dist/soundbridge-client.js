@@ -666,7 +666,8 @@ export function createLivePerformanceAudioNodeOptions(options) {
     audioRequestTimeoutMs: boundedAudioNodeInteger(options.audioRequestTimeoutMs, LIVE_AUDIO_NODE_AUDIO_REQUEST_TIMEOUT_MS, 0, 60000),
     audioTransferMode: options.audioTransferMode ?? "auto",
     sharedBufferBlocks,
-    maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192)
+    maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192),
+    bypassed: options.bypassed === true
   };
 }
 
@@ -681,6 +682,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.inFlightBlocks = 0;
     this.destroyed = false;
+    this.bypassed = options.bypassed;
+    this.bypassEvents = 0;
     this.workletInFlightBlocks = undefined;
     this.queuedOutputBlocks = 0;
     this.outputLatencyBlocks = 0;
@@ -728,7 +731,8 @@ export class SoundBridgeAudioNode extends EventTarget {
         latencyMissThresholdBlocks: options.latencyMissThresholdBlocks,
         latencyRecoveryBlocks: options.latencyRecoveryBlocks,
         targetResponseDeadlineLeadBlocks: options.targetResponseDeadlineLeadBlocks,
-        latencyPressureThresholdBlocks: options.latencyPressureThresholdBlocks
+        latencyPressureThresholdBlocks: options.latencyPressureThresholdBlocks,
+        bypassed: options.bypassed
       }
     });
     this.node.port.onmessage = (event) => this.handleWorkletMessage(event.data);
@@ -771,6 +775,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       audioTransferMode: options.audioTransferMode ?? "auto",
       sharedBufferBlocks: boundedAudioNodeInteger(options.sharedBufferBlocks, 8, 2, 64),
       maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192),
+      bypassed: options.bypassed === true,
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
     normalized.outputLatencyBlocks = boundedAudioNodeInteger(
@@ -803,6 +808,16 @@ export class SoundBridgeAudioNode extends EventTarget {
     return this.node.connect(destination, output, input);
   }
 
+  setBypassed(bypassed) {
+    if (this.destroyed || this.bypassed === bypassed) {
+      return;
+    }
+    this.bypassed = bypassed;
+    this.bypassEvents = Math.min(1024, this.bypassEvents + 1);
+    this.node.port.postMessage({ type: "set-bypassed", bypassed });
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
   disconnect() {
     this.node.disconnect();
   }
@@ -811,6 +826,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     return {
       healthy: !this.destroyed && this.unhealthyReason === undefined,
       instanceId: this.instanceId,
+      bypassed: this.bypassed,
+      bypassEvents: this.bypassEvents,
       audioTransport: this.audioTransport,
       audioRequestTimeoutMs: this.audioRequestTimeoutMs,
       inFlightBlocks: this.workletInFlightBlocks ?? this.inFlightBlocks,

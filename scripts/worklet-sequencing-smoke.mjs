@@ -168,6 +168,28 @@ assert(
   "direct worklet transport reuses recycled input buffers for later process blocks"
 );
 assert(directProcessor.inputBufferReuses === 1, "direct worklet transport counts input buffer reuse");
+
+const bypassProcessor = new processorCtor({
+  processorOptions: {
+    outputChannels: 1,
+    maxQueuedOutputBlocks: 4,
+    outputLatencyBlocks: 1,
+    bypassed: true
+  }
+});
+const bypassMainPort = lastPort;
+const bypassTransportPort = new TestPort();
+bypassMainPort.onmessage({ data: { type: "connect-transport", port: bypassTransportPort } });
+const bypassOutput = [new Float32Array(2)];
+bypassProcessor.process([[Float32Array.from([30, 31])]], [bypassOutput]);
+assert(equal(Array.from(bypassOutput[0]), [30, 31]), "bypassed worklet outputs dry input");
+assert(bypassTransportPort.messages.length === 0, "bypassed worklet does not post render work");
+bypassTransportPort.onmessage({ data: { type: "processed", blockId: 0, channels: [Float32Array.from([300, 300])] } });
+assert(bypassProcessor.outputBlocks.size === 0, "bypassed worklet ignores late wet responses");
+bypassMainPort.onmessage({ data: { type: "set-bypassed", bypassed: false } });
+bypassProcessor.process([[Float32Array.from([32, 33])]], [[new Float32Array(2)]]);
+assert(bypassTransportPort.messages.at(-1)?.type === "process", "unbypassed worklet resumes render work");
+
 directMainPort.onmessage({ data: { type: "destroy" } });
 assert(directTransportPort.messages.at(-1)?.type === "destroy", "worklet destroy notifies the transport port");
 const directMessagesBeforeDestroyedProcess = directTransportPort.messages.length;

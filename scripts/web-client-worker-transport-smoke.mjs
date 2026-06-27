@@ -231,6 +231,7 @@ assert(processorOptions.maxQueuedOutputBlocks === 8, "createLivePerformance forw
 assert(processorOptions.outputLatencyBlocks === 2, "createLivePerformance forwards live output latency");
 assert(processorOptions.maxOutputLatencyBlocks === 4, "createLivePerformance forwards live adaptive latency bounds");
 assert(processorOptions.latencyRecoveryBlocks === 128, "createLivePerformance forwards live recovery timing");
+assert(processorOptions.bypassed === false, "createLivePerformance starts the worklet unbypassed by default");
 const liveAudioPortMessage = FakeWorker.last.messages.at(-1);
 assert(liveAudioPortMessage.type === "audio-port", "createLivePerformance registers a worker audio port");
 assert(liveAudioPortMessage.maxInFlightBlocks === 4, "createLivePerformance forwards live in-flight limits to the worker");
@@ -241,6 +242,28 @@ assert(
   FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "connect-transport"),
   "createLivePerformance connects the worklet to the worker transport"
 );
+let healthChangeEvents = 0;
+let healthChangeDetail;
+liveNode.addEventListener("healthchange", (event) => {
+  healthChangeEvents += 1;
+  healthChangeDetail = event.detail;
+});
+assert(liveNode.health.bypassed === false, "SoundBridgeAudioNode health starts unbypassed");
+liveNode.setBypassed(true);
+assert(liveNode.health.bypassed === true, "SoundBridgeAudioNode health tracks manual bypass");
+assert(liveNode.health.bypassEvents === 1, "SoundBridgeAudioNode health counts bypass changes");
+assert(
+  FakeAudioWorkletNode.last.port.messages.at(-1)?.type === "set-bypassed" &&
+    FakeAudioWorkletNode.last.port.messages.at(-1)?.bypassed === true,
+  "SoundBridgeAudioNode sends bypass commands to the worklet"
+);
+assert(healthChangeEvents === 1 && healthChangeDetail?.bypassed === true, "manual bypass emits a healthchange event");
+liveNode.setBypassed(true);
+assert(healthChangeEvents === 1, "unchanged bypass state does not emit duplicate healthchange events");
+liveNode.setBypassed(false);
+assert(liveNode.health.bypassed === false, "SoundBridgeAudioNode can return to wet processing");
+assert(liveNode.health.bypassEvents === 2, "SoundBridgeAudioNode counts wet/dry bypass transitions");
+assert(healthChangeEvents === 2 && healthChangeDetail?.bypassed === false, "clearing bypass emits a healthchange event");
 let statsEvents = 0;
 let statsDetail;
 liveNode.addEventListener("stats", (event) => {
