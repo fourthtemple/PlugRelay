@@ -6,6 +6,7 @@ import type {
   LiveEffectRackPolicyOptions
 } from "./live-effect-rack-policy";
 import type { LiveEffectRackChainHealth } from "./live-effect-rack-chain";
+import type { LiveEffectRackFrameBatchHealth } from "./live-effect-rack-frame-batch";
 
 const LIVE_EFFECT_CALIBRATION_WINDOW_SAMPLES = 256;
 
@@ -56,6 +57,17 @@ export interface LiveEffectRackChainCalibrationHealthSample
   > {
   dryOutputBlocks?: unknown;
   lastDryReason?: unknown;
+}
+
+export interface LiveEffectRackFrameBatchCalibrationHealthSample
+  extends Pick<
+    LiveEffectRackFrameBatchHealth,
+    "maxDurationMs" | "totalDurationMs" | "latencySamples" | "reportedLatencySamples"
+  > {
+  dryTargets?: unknown;
+  skippedTargets?: unknown;
+  failedTargets?: unknown;
+  processBudgetTripped?: unknown;
 }
 
 export class LiveEffectRackCalibrationWindow {
@@ -239,6 +251,63 @@ export class LiveEffectRackChainCalibrationWindow {
   }
 }
 
+export class LiveEffectRackFrameBatchCalibrationWindow {
+  private readonly window: LiveEffectRackCalibrationWindow;
+  private dryOutputBlocks = 0;
+
+  constructor(options: LiveEffectRackCalibrationWindowOptions) {
+    this.window = new LiveEffectRackCalibrationWindow(options);
+    this.seedPressureBaseline();
+  }
+
+  get maxSamples(): number {
+    return this.window.maxSamples;
+  }
+
+  record(health: LiveEffectRackFrameBatchCalibrationHealthSample): LiveEffectRackCalibrationWindowSnapshot {
+    if (this.hasDryPressure(health)) {
+      this.dryOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.dryOutputBlocks + 1);
+    }
+    return this.window.record({
+      lastProcessDurationMs: health.totalDurationMs,
+      lastRenderDurationMs: health.maxDurationMs,
+      latencySamples: health.latencySamples ?? health.reportedLatencySamples,
+      dryOutputBlocks: this.dryOutputBlocks
+    });
+  }
+
+  reset(): void {
+    this.dryOutputBlocks = 0;
+    this.window.reset();
+    this.seedPressureBaseline();
+  }
+
+  snapshot(): LiveEffectRackCalibrationWindowSnapshot {
+    return this.window.snapshot();
+  }
+
+  calibrate(): LiveEffectRackCalibration {
+    return this.window.calibrate();
+  }
+
+  recommendedPolicyOptions(overrides: Partial<LiveEffectRackPolicyOptions> = {}): LiveEffectRackPolicyOptions {
+    return this.window.recommendedPolicyOptions(overrides);
+  }
+
+  private hasDryPressure(health: LiveEffectRackFrameBatchCalibrationHealthSample): boolean {
+    return (
+      health.processBudgetTripped === true ||
+      boundedLiveEffectInteger(health.dryTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0 ||
+      boundedLiveEffectInteger(health.skippedTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0 ||
+      boundedLiveEffectInteger(health.failedTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0
+    );
+  }
+
+  private seedPressureBaseline(): void {
+    this.window.record({ dryOutputBlocks: 0 });
+  }
+}
+
 export function createLiveEffectRackCalibrationWindow(options: LiveEffectRackCalibrationWindowOptions): LiveEffectRackCalibrationWindow {
   return new LiveEffectRackCalibrationWindow(options);
 }
@@ -247,6 +316,12 @@ export function createLiveEffectRackChainCalibrationWindow(
   options: LiveEffectRackCalibrationWindowOptions
 ): LiveEffectRackChainCalibrationWindow {
   return new LiveEffectRackChainCalibrationWindow(options);
+}
+
+export function createLiveEffectRackFrameBatchCalibrationWindow(
+  options: LiveEffectRackCalibrationWindowOptions
+): LiveEffectRackFrameBatchCalibrationWindow {
+  return new LiveEffectRackFrameBatchCalibrationWindow(options);
 }
 
 export function liveEffectRackPolicyOptionsFromCalibration(

@@ -47,8 +47,8 @@ import { shouldSkipLiveEffectDeadlinePressure } from "./live-effect-rack-schedul
 import type { LiveEffectRackScheduledBlock } from "./live-effect-rack-scheduler";
 export { calibrateLiveEffectRackPolicy, createLiveEffectRackPolicy } from "./live-effect-rack-policy";
 export type { LiveEffectRackCalibration, LiveEffectRackCalibrationOptions, LiveEffectRackPolicy, LiveEffectRackPolicyOptions } from "./live-effect-rack-policy";
-export { LiveEffectRackCalibrationWindow, LiveEffectRackChainCalibrationWindow, createLiveEffectRackCalibrationWindow, createLiveEffectRackChainCalibrationWindow, liveEffectRackPolicyOptionsFromCalibration, refreshLiveEffectRackLatencyFromCalibration } from "./live-effect-rack-calibration";
-export type { LiveEffectRackCalibrationHealthSample, LiveEffectRackCalibrationWindowOptions, LiveEffectRackCalibrationWindowSnapshot, LiveEffectRackChainCalibrationHealthSample, LiveEffectRackLatencyRefresher } from "./live-effect-rack-calibration";
+export { LiveEffectRackCalibrationWindow, LiveEffectRackChainCalibrationWindow, LiveEffectRackFrameBatchCalibrationWindow, createLiveEffectRackCalibrationWindow, createLiveEffectRackChainCalibrationWindow, createLiveEffectRackFrameBatchCalibrationWindow, liveEffectRackPolicyOptionsFromCalibration, refreshLiveEffectRackLatencyFromCalibration } from "./live-effect-rack-calibration";
+export type { LiveEffectRackCalibrationHealthSample, LiveEffectRackCalibrationWindowOptions, LiveEffectRackCalibrationWindowSnapshot, LiveEffectRackChainCalibrationHealthSample, LiveEffectRackFrameBatchCalibrationHealthSample, LiveEffectRackLatencyRefresher } from "./live-effect-rack-calibration";
 export type { LiveEffectBlockRequest, LiveEffectBlockResponse, LiveEffectRackDryOutputEventDetail, LiveEffectRackHealth, LiveEffectRackOptions, LiveEffectRackProcessOptions, LivePerformanceRackOptions } from "./live-effect-rack-types";
 import { liveTransportForBlock } from "./live-transport";
 

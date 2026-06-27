@@ -2,6 +2,7 @@ import {
   createLiveEffectRackChain,
   createLiveEffectRackChainCalibrationWindow,
   createLiveEffectRackCalibrationWindow,
+  createLiveEffectRackFrameBatchCalibrationWindow,
   liveEffectRackPolicyOptionsFromCalibration,
   refreshLiveEffectRackLatencyFromCalibration
 } from "../packages/web-client/dist/soundbridge-client.js";
@@ -238,6 +239,45 @@ assert(
   nextDrySample.calibration.warnings.includes("dry-output-pressure"),
   "live chain calibration window uses cumulative chain dry output deltas"
 );
+
+const batchWindow = createLiveEffectRackFrameBatchCalibrationWindow({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processBudgetMs: 4,
+  processTimeoutMs: 12,
+  transportLatencySamples: 128,
+  safetyMarginBlocks: 1
+});
+const batchReady = batchWindow.record({
+  totalDurationMs: 1,
+  maxDurationMs: 0.7,
+  latencySamples: 256,
+  reportedLatencySamples: 384,
+  dryTargets: 0,
+  skippedTargets: 0,
+  failedTargets: 0
+});
+assert(batchReady.samples === 1, "live frame batch calibration window records aggregate batch health");
+assert(batchReady.calibration.policy.pluginLatencySamples === 256, "live frame batch calibration uses batch latency as plugin latency");
+assert(batchReady.calibration.realtimeReady === true, "live frame batch calibration accepts a ready aggregate batch");
+
+const batchPressure = batchWindow.record({
+  totalDurationMs: 6,
+  maxDurationMs: 3,
+  latencySamples: 384,
+  dryTargets: 1,
+  skippedTargets: 1,
+  failedTargets: 0,
+  processBudgetTripped: true
+});
+assert(batchPressure.calibration.warnings.includes("dry-output-pressure"), "live frame batch calibration reports dry batch pressure on the first pressured frame");
+assert(batchPressure.calibration.warnings.includes("process-over-budget"), "live frame batch calibration detects aggregate process pressure");
+assert(batchPressure.calibration.warnings.includes("render-over-block-budget"), "live frame batch calibration detects slow target pressure");
+assert(batchPressure.recommendedPolicyOptions.processBudgetMs === 8.667, "live frame batch calibration recommends aggregate batch budget headroom");
+assert(batchPressure.recommendedPolicyOptions.transportLatencySamples === 256, "live frame batch calibration recommends dry-pressure latency headroom");
+
+batchWindow.reset();
+assert(batchWindow.snapshot().samples === 0, "live frame batch calibration window reset clears samples");
 
 chainWindow.reset();
 const chainReset = chainWindow.snapshot();

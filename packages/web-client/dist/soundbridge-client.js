@@ -2247,12 +2247,71 @@ export class LiveEffectRackChainCalibrationWindow {
   }
 }
 
+export class LiveEffectRackFrameBatchCalibrationWindow {
+  constructor(options) {
+    this.dryOutputBlocks = 0;
+    this.window = new LiveEffectRackCalibrationWindow(options);
+    this.seedPressureBaseline();
+  }
+
+  get maxSamples() {
+    return this.window.maxSamples;
+  }
+
+  record(health) {
+    if (this.hasDryPressure(health)) {
+      this.dryOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.dryOutputBlocks + 1);
+    }
+    return this.window.record({
+      lastProcessDurationMs: health.totalDurationMs,
+      lastRenderDurationMs: health.maxDurationMs,
+      latencySamples: health.latencySamples ?? health.reportedLatencySamples,
+      dryOutputBlocks: this.dryOutputBlocks
+    });
+  }
+
+  reset() {
+    this.dryOutputBlocks = 0;
+    this.window.reset();
+    this.seedPressureBaseline();
+  }
+
+  snapshot() {
+    return this.window.snapshot();
+  }
+
+  calibrate() {
+    return this.window.calibrate();
+  }
+
+  recommendedPolicyOptions(overrides = {}) {
+    return this.window.recommendedPolicyOptions(overrides);
+  }
+
+  hasDryPressure(health) {
+    return (
+      health.processBudgetTripped === true ||
+      boundedLiveEffectInteger(health.dryTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0 ||
+      boundedLiveEffectInteger(health.skippedTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0 ||
+      boundedLiveEffectInteger(health.failedTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0
+    );
+  }
+
+  seedPressureBaseline() {
+    this.window.record({ dryOutputBlocks: 0 });
+  }
+}
+
 export function createLiveEffectRackCalibrationWindow(options) {
   return new LiveEffectRackCalibrationWindow(options);
 }
 
 export function createLiveEffectRackChainCalibrationWindow(options) {
   return new LiveEffectRackChainCalibrationWindow(options);
+}
+
+export function createLiveEffectRackFrameBatchCalibrationWindow(options) {
+  return new LiveEffectRackFrameBatchCalibrationWindow(options);
 }
 
 export function liveEffectRackPolicyOptionsFromCalibration(calibration, overrides = {}) {
