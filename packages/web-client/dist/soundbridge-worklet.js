@@ -211,8 +211,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    if (message.type === "process-diagnostics" && typeof message.renderEngine === "string") {
-      this.port.postMessage({ type: "process-diagnostics", blockId: message.blockId, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs, renderBudgetMs: message.renderBudgetMs, renderBudgetExceeded: message.renderBudgetExceeded });
+    if (message.type === "process-diagnostics" && (typeof message.renderEngine === "string" || typeof message.latencySamples === "number")) {
+      this.port.postMessage({ type: "process-diagnostics", blockId: message.blockId, latencySamples: message.latencySamples, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs, renderBudgetMs: message.renderBudgetMs, renderBudgetExceeded: message.renderBudgetExceeded });
       return;
     }
 
@@ -240,8 +240,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
 
     this.queueOutputBlock(blockId, message.channels.slice(0, this.outputChannels).map((channel) => this.outputChannelBlock(channel)));
-    if (typeof message.renderEngine === "string") {
-      this.port.postMessage({ type: "process-diagnostics", blockId, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs, renderBudgetMs: message.renderBudgetMs, renderBudgetExceeded: message.renderBudgetExceeded });
+    if (typeof message.renderEngine === "string" || typeof message.latencySamples === "number") {
+      this.port.postMessage({ type: "process-diagnostics", blockId, latencySamples: message.latencySamples, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs, renderBudgetMs: message.renderBudgetMs, renderBudgetExceeded: message.renderBudgetExceeded });
     }
   }
 

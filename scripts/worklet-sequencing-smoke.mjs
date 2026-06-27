@@ -139,6 +139,7 @@ directTransportPort.onmessage({
     type: "processed",
     blockId: 0,
     channels: [transferredOutput],
+    latencySamples: 64,
     renderDurationMs: 0.75,
     renderBudgetMs: 1.333,
     renderBudgetExceeded: false,
@@ -156,6 +157,7 @@ assert(
   directMainPort.messages.some((message) =>
     message.type === "process-diagnostics" &&
     message.renderEngine === "direct-worker" &&
+    message.latencySamples === 64 &&
     message.renderDurationMs === 0.75 &&
     message.renderBudgetMs === 1.333 &&
     message.renderBudgetExceeded === false

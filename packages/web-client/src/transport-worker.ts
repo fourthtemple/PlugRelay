@@ -296,10 +296,10 @@ function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unk
     pendingSharedAudio.delete(envelope.id ?? "");
     shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
     if (envelope.ok && envelope.payload && typeof envelope.payload === "object") {
-      const payload = envelope.payload as { blockId?: number; channels?: ArrayLike<number>[]; renderDurationMs?: number; renderBudgetMs?: number; renderBudgetExceeded?: boolean; renderEngine?: string };
+      const payload = envelope.payload as { blockId?: number; channels?: ArrayLike<number>[]; latencySamples?: number; renderDurationMs?: number; renderBudgetMs?: number; renderBudgetExceeded?: boolean; renderEngine?: string };
       writeSharedOutputBlock(shared, Math.floor(Number(payload.blockId ?? 0)), Array.isArray(payload.channels) ? payload.channels : []);
-      if (typeof payload.renderEngine === "string") {
-        shared.port.postMessage({ type: "process-diagnostics", blockId: payload.blockId, renderEngine: payload.renderEngine, renderDurationMs: payload.renderDurationMs, renderBudgetMs: payload.renderBudgetMs, renderBudgetExceeded: payload.renderBudgetExceeded });
+      if (typeof payload.renderEngine === "string" || typeof payload.latencySamples === "number") {
+        shared.port.postMessage({ type: "process-diagnostics", blockId: payload.blockId, latencySamples: payload.latencySamples, renderEngine: payload.renderEngine, renderDurationMs: payload.renderDurationMs, renderBudgetMs: payload.renderBudgetMs, renderBudgetExceeded: payload.renderBudgetExceeded });
       }
     } else {
       shared.port.postMessage({ type: "audio-error", error: envelope.error });

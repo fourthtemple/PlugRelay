@@ -1006,9 +1006,10 @@ export class SoundBridgeAudioNode extends EventTarget {
           return;
         }
         this.clearAudioError();
-        if (typeof response.renderEngine === "string") {
+        if (typeof response.renderEngine === "string" || typeof response.latencySamples === "number") {
           const diagnostics = {
             blockId: response.blockId,
+            latencySamples: response.latencySamples,
             renderEngine: response.renderEngine,
             renderDurationMs: response.renderDurationMs,
             renderBudgetMs: response.renderBudgetMs,
@@ -1150,6 +1151,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     const exceeded = diagnostics.renderBudgetExceeded === true;
     if (this.audioErrorAutoBypassed || (this.renderBudgetAutoBypassed && !exceeded)) return;
     this.clearAudioError();
+    this.recordRenderLatency(diagnostics.latencySamples, diagnostics);
     if (typeof diagnostics.renderEngine === "string") {
       this.lastRenderEngine = diagnostics.renderEngine;
     }
@@ -1186,6 +1188,18 @@ export class SoundBridgeAudioNode extends EventTarget {
       this.consecutiveAudioErrors = 0;
       this.unhealthyReason = undefined;
     }
+  }
+
+  recordRenderLatency(latencySamples, diagnostics) {
+    const pluginLatencySamples = boundedAudioNodeOptionalNumber(latencySamples, 0, 1048576);
+    if (pluginLatencySamples === undefined || pluginLatencySamples === this.pluginLatencySamples) return;
+    const previous = { pluginLatencySamples: this.pluginLatencySamples, transportLatencySamples: this.transportLatencySamples, reportedLatencySamples: this.reportedLatencySamples };
+    this.pluginLatencySamples = pluginLatencySamples;
+    this.reportedLatencySamples = combinedAudioNodeLatencySamples(this.pluginLatencySamples, this.transportLatencySamples);
+    this.latencyChangeEvents = Math.min(1024, this.latencyChangeEvents + 1);
+    this.lastLatencyChangeDirection = "changed";
+    this.dispatchEvent(new CustomEvent("latencychange", { detail: { direction: "changed", previous, diagnostics, health: this.health } }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 }
 

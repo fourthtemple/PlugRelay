@@ -171,7 +171,7 @@ socket.emit("message", {
     payload: {
       blockId: 7,
       channels: [[0.75, 1]],
-      latencySamples: 0,
+      latencySamples: 32,
       renderDurationMs: 1.25,
       renderBudgetMs: 2.667,
       renderBudgetExceeded: false,
@@ -220,7 +220,7 @@ socket.emit("message", {
     payload: {
       blockId: 13,
       channels: [Float32Array.from([0.9, 0.8])],
-      latencySamples: 0,
+      latencySamples: 32,
       renderDurationMs: 2.5,
       renderBudgetMs: 1.333,
       renderBudgetExceeded: true,
@@ -246,6 +246,7 @@ assert(
   sharedPort.messages.some((message) =>
     message.type === "process-diagnostics" &&
     message.renderEngine === "shared-worker" &&
+    message.latencySamples === 32 &&
     message.renderDurationMs === 2.5 &&
     message.renderBudgetMs === 1.333 &&
     message.renderBudgetExceeded === true

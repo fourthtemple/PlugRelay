@@ -383,6 +383,13 @@ assert(refreshedLatency.latencyRefreshes === 1, "refreshLatency counts latency r
 assert(latencyEvents === 3 && latencyDetail?.direction === "changed", "refreshLatency emits latencychange when reported latency changes");
 assert(healthChangeEvents === 3 && healthChangeDetail?.reportedLatencySamples === 224, "refreshLatency emits healthchange with reported latency");
 FakeAudioWorkletNode.last.port.onmessage({
+  data: { type: "process-diagnostics", blockId: 87, latencySamples: 144, renderEngine: "native-vst3", renderDurationMs: 1.25, renderBudgetMs: 2.667, renderBudgetExceeded: false }
+});
+assert(liveNode.health.pluginLatencySamples === 144, "SoundBridgeAudioNode updates plugin latency from render diagnostics");
+assert(liveNode.health.reportedLatencySamples === 272, "SoundBridgeAudioNode combines render latency with transport latency");
+assert(latencyEvents === 4 && latencyDetail?.health?.pluginLatencySamples === 144, "render latency changes emit latencychange");
+assert(healthChangeEvents === 4 && healthChangeDetail?.reportedLatencySamples === 272, "render latency changes emit healthchange");
+FakeAudioWorkletNode.last.port.onmessage({
   data: {
     ...pressureStats,
     outputLatencyBlocks: 1,
