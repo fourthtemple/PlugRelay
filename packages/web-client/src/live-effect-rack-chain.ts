@@ -9,6 +9,7 @@ const LIVE_EFFECT_CHAIN_MAX_STAGES = 16;
 
 export type LiveEffectRackChainDryReason =
   | "chain-bypass"
+  | "chain-deadline-pressure"
   | "chain-empty"
   | "chain-process-budget-exceeded"
   | "chain-stage-bypass"
@@ -43,6 +44,7 @@ export interface LivePerformanceRackChainOptions extends LiveEffectRackChainOpti
 export interface LiveEffectRackChainProcessOptions {
   wetMix?: number;
   stageWetMixes?: ArrayLike<number>;
+  skipOnDeadlinePressure?: boolean;
 }
 
 export interface LiveEffectRackChainStageResult {
@@ -294,6 +296,13 @@ export class LiveEffectRackChain extends EventTarget {
       return Promise.resolve(this.chainDryResponse(
         scheduled.request,
         "chain-stale-input",
+        this.chainOutputChannels(scheduled.request.channels)
+      ));
+    }
+    if (options.skipOnDeadlinePressure === true && scheduled.deadlinePressure.pressure) {
+      return Promise.resolve(this.chainDryResponse(
+        scheduled.request,
+        "chain-deadline-pressure",
         this.chainOutputChannels(scheduled.request.channels)
       ));
     }
@@ -609,6 +618,7 @@ function boundedFailedStageIndex(value: unknown, stageCount: number): number | u
 
 function chainDryReason(response: LiveEffectRackChainResponse): LiveEffectRackChainDryReason | undefined {
   if (response.renderEngine === "chain-bypass" ||
+    response.renderEngine === "chain-deadline-pressure" ||
     response.renderEngine === "chain-empty" ||
     response.renderEngine === "chain-process-budget-exceeded" ||
     response.renderEngine === "chain-stage-error" ||

@@ -2401,6 +2401,13 @@ export class LiveEffectRackChain extends EventTarget {
         this.chainOutputChannels(scheduled.request.channels)
       ));
     }
+    if (options.skipOnDeadlinePressure === true && scheduled.deadlinePressure.pressure) {
+      return Promise.resolve(this.chainDryResponse(
+        scheduled.request,
+        "chain-deadline-pressure",
+        this.chainOutputChannels(scheduled.request.channels)
+      ));
+    }
     return this.processBlock(scheduled.request, options);
   }
 
@@ -2673,7 +2680,7 @@ function liveEffectChainFailedStageIndex(value, stageCount) {
 }
 
 function liveEffectChainDryReason(response) {
-  if (response.renderEngine === "chain-bypass" || response.renderEngine === "chain-empty" || response.renderEngine === "chain-process-budget-exceeded" || response.renderEngine === "chain-stage-error" || response.renderEngine === "chain-stale-input") {
+  if (response.renderEngine === "chain-bypass" || response.renderEngine === "chain-deadline-pressure" || response.renderEngine === "chain-empty" || response.renderEngine === "chain-process-budget-exceeded" || response.renderEngine === "chain-stage-error" || response.renderEngine === "chain-stale-input") {
     return response.renderEngine;
   }
   if (response.stageResults.length > 0 && response.stageResults.every((stage) => stage.bypassed)) {

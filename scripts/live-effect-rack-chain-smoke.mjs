@@ -545,6 +545,49 @@ assert(staleResponse.processedStages === 0 && left.requests.length === 1, "live 
 assert(staleResponse.renderEngine === "chain-stale-input", "live rack chain labels stale scheduled bypasses");
 assert(chain.health.lastDryReason === "chain-stale-input", "live rack chain records stale scheduled dry reason");
 
+const deadlinePressureStage = new FakeStage("deadline-pressure-scheduled", 7);
+const deadlinePressureChain = createLiveEffectRackChain({
+  stages: [deadlinePressureStage],
+  outputChannels: 1,
+  maxBlockSize: 2
+});
+const deadlinePressureScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 2
+});
+deadlinePressureScheduler.updateDeadlinePressureFromHealth(
+  {
+    lastResponseDeadlineLeadBlocks: 0.25,
+    responseJitterBlocks: 3,
+    responseDeadlineMisses: 1
+  },
+  { warnings: ["deadline-miss", "increase-transport-latency"] }
+);
+const pressuredScheduledWet = deadlinePressureScheduler.schedule([[1, 1]]);
+const pressuredWetResponse = await deadlinePressureChain.processScheduledBlock(pressuredScheduledWet);
+const pressuredScheduledDry = deadlinePressureScheduler.schedule([[2, 2]]);
+const pressuredDryResponse = await deadlinePressureChain.processScheduledBlock(pressuredScheduledDry, {
+  skipOnDeadlinePressure: true
+});
+assert(
+  pressuredWetResponse.bypassed === false &&
+    pressuredWetResponse.channels[0][0] === 7 &&
+    deadlinePressureStage.requests.length === 1,
+  "live rack chain still processes deadline-pressure blocks unless the host opts into dry skip"
+);
+assert(
+  pressuredDryResponse.bypassed === true &&
+    pressuredDryResponse.renderEngine === "chain-deadline-pressure" &&
+    pressuredDryResponse.processedStages === 0 &&
+    pressuredDryResponse.channels[0][0] === 2 &&
+    deadlinePressureStage.requests.length === 1,
+  "live rack chain can fail dry before processing scheduler deadline-pressure blocks"
+);
+assert(
+  deadlinePressureChain.health.lastDryReason === "chain-deadline-pressure",
+  "live rack chain records scheduler deadline-pressure dry reason"
+);
+
 const throwingStage = {
   health: { instanceId: "inst-throw" },
   async processBlock() {
