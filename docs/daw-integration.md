@@ -58,7 +58,7 @@ The web client exports `SoundBridgeLiveEffectRack` as a small host-side pattern 
 - use `setWetMix()` or per-block `wetMix` for host-side dry/wet control without treating mix-zero as a plugin failure
 - drive parameters, block automation events/curves, stored timeline lanes, presets, and MIDI through rack helpers bound to the owned instance
 - read `rack.timing` for block duration, latency blocks, freshness windows, and deadline budgets in host scheduling units
-- use `liveTransportForBlock()` to build bounded per-block transport for tempo-synced AU/VST effects and stored automation lanes
+- use `liveTransportForBlock()` to build bounded per-block transport for tempo-synced AU/VST effects and stored automation lanes; if no explicit transport is supplied, the live rack generates a bounded block transport with host/output-latency compensation
 - return dry audio immediately when the rack is manually bypassed
 - optionally fade the first samples of wet/dry transitions to reduce bypass clicks
 - return dry audio for timestamped input that is already older than the host's configured live window

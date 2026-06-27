@@ -33,7 +33,7 @@ import {
   withLiveEffectTimeout
 } from "./live-effect-rack-metrics";
 import type { LiveEffectRackTiming } from "./live-effect-rack-metrics";
-
+import { liveTransportForBlock } from "./live-transport";
 export interface LiveEffectRackOptions {
   client: SoundBridgeClient;
   plugin: PluginMetadata;
@@ -442,7 +442,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
         sampleRate: request.sampleRate ?? this.sampleRate,
         channels: request.channels,
         inputBuses: request.inputBuses,
-        transport: request.transport,
+        transport: request.transport ?? liveTransportForBlock({ sampleRate: request.sampleRate ?? this.sampleRate, maxBlockSize: this.maxBlockSize, blockId: request.blockId, reportedLatencySamples: this.transportLatencySamples, compensateOutputLatency: true }),
         timestamp: request.timestamp,
         renderTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : undefined
       };
