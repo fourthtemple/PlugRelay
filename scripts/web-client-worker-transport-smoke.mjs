@@ -200,6 +200,21 @@ assert(
   FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "connect-transport"),
   "createLivePerformance connects the worklet to the worker transport"
 );
+let statsEvents = 0;
+let statsDetail;
+liveNode.addEventListener("stats", (event) => {
+  statsEvents += 1;
+  statsDetail = event.detail;
+});
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    type: "stats",
+    transportLatencySamples: 256,
+    responseDeadlineMissesSinceLastStats: 1
+  }
+});
+assert(statsEvents === 1, "SoundBridgeAudioNode emits one stats event per worklet stats message");
+assert(statsDetail.transportLatencySamples === 256, "SoundBridgeAudioNode preserves stats event details");
 
 const fallbackCalls = [];
 const fallbackClient = {
