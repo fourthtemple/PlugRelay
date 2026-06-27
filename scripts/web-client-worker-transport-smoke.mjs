@@ -178,6 +178,7 @@ assert(liveNodeOptions.latencyPressureThresholdBlocks === 2, "live AudioNode pre
 assert(liveNodeOptions.sharedBufferBlocks === 8, "live AudioNode preset derives shared ring depth from in-flight and latency bounds");
 assert(liveNodeOptions.maxBlockFrames === 128, "live AudioNode preset keeps 128-frame block metadata");
 assert(liveNodeOptions.maxConsecutiveRenderBudgetMisses === 2, "live AudioNode preset fails dry after repeated budget misses");
+assert(liveNodeOptions.maxConsecutiveAudioErrors === 1, "live AudioNode preset fails dry on audio errors");
 
 const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
   instanceId: "inst-override",
@@ -195,7 +196,8 @@ const overriddenLiveNodeOptions = createLivePerformanceAudioNodeOptions({
   latencyPressureThresholdBlocks: 5,
   sharedBufferBlocks: 7,
   maxBlockFrames: 256,
-  maxConsecutiveRenderBudgetMisses: 5
+  maxConsecutiveRenderBudgetMisses: 5,
+  maxConsecutiveAudioErrors: 4
 });
 assert(overriddenLiveNodeOptions.audioTransport === "json", "live AudioNode preset preserves explicit transport overrides");
 assert(overriddenLiveNodeOptions.audioRequestTimeoutMs === 333, "live AudioNode preset preserves explicit timeout overrides");
@@ -210,6 +212,7 @@ assert(overriddenLiveNodeOptions.latencyPressureThresholdBlocks === 5, "live Aud
 assert(overriddenLiveNodeOptions.sharedBufferBlocks === 7, "live AudioNode preset preserves explicit shared-ring overrides");
 assert(overriddenLiveNodeOptions.maxBlockFrames === 256, "live AudioNode preset preserves explicit block-frame overrides");
 assert(overriddenLiveNodeOptions.maxConsecutiveRenderBudgetMisses === 5, "live AudioNode preset preserves budget miss overrides");
+assert(overriddenLiveNodeOptions.maxConsecutiveAudioErrors === 4, "live AudioNode preset preserves audio-error overrides");
 
 const addedModules = [];
 const fakeContext = {
@@ -253,6 +256,7 @@ liveNode.addEventListener("healthchange", (event) => {
 });
 assert(liveNode.health.bypassed === false, "SoundBridgeAudioNode health starts unbypassed");
 assert(liveNode.health.maxConsecutiveRenderBudgetMisses === 2, "SoundBridgeAudioNode health reports the render-budget miss threshold");
+assert(liveNode.health.maxConsecutiveAudioErrors === 1, "SoundBridgeAudioNode health reports the audio-error threshold");
 liveNode.setBypassed(true);
 assert(liveNode.health.bypassed === true, "SoundBridgeAudioNode health tracks manual bypass");
 assert(liveNode.health.bypassEvents === 1, "SoundBridgeAudioNode health counts bypass changes");
@@ -440,9 +444,15 @@ assert(liveNode.health.renderBudgetMisses === 0, "manual retry clears render-bud
 assert(liveNode.health.renderBudgetExceeded === false, "manual retry clears render-budget pressure state");
 let audioErrorEvents = 0;
 let audioErrorDetail;
+let audioErrorAutoBypassEvents = 0;
+let audioErrorAutoBypassDetail;
 liveNode.addEventListener("audio-error", (event) => {
   audioErrorEvents += 1;
   audioErrorDetail = event.detail;
+});
+liveNode.addEventListener("audio-error-auto-bypassed", (event) => {
+  audioErrorAutoBypassEvents += 1;
+  audioErrorAutoBypassDetail = event.detail;
 });
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
@@ -454,8 +464,18 @@ FakeAudioWorkletNode.last.port.onmessage({
 assert(audioErrorEvents === 1 && audioErrorDetail === "native render timeout", "SoundBridgeAudioNode emits audio errors");
 assert(liveNode.health.healthy === false, "SoundBridgeAudioNode health marks audio errors unhealthy");
 assert(liveNode.health.audioErrors === 1, "SoundBridgeAudioNode health counts audio errors");
+assert(liveNode.health.consecutiveAudioErrors === 1, "SoundBridgeAudioNode health counts consecutive audio errors");
 assert(liveNode.health.lastAudioError === "native render timeout", "SoundBridgeAudioNode health tracks the latest audio error");
 assert(liveNode.health.unhealthyReason === "audio-error", "SoundBridgeAudioNode health records the audio error reason");
+assert(liveNode.health.bypassed === true, "live AudioNode fails dry after an audio error");
+assert(liveNode.health.audioErrorAutoBypassed === true, "SoundBridgeAudioNode health reports audio-error auto-bypass");
+assert(audioErrorAutoBypassEvents === 1, "SoundBridgeAudioNode emits audio-error auto-bypass");
+assert(audioErrorAutoBypassDetail?.health?.audioErrorAutoBypassed === true, "audio-error auto-bypass includes health");
+assert(
+  FakeAudioWorkletNode.last.port.messages.at(-1)?.type === "set-bypassed" &&
+    FakeAudioWorkletNode.last.port.messages.at(-1)?.bypassed === true,
+  "audio-error auto-bypass sends a dry command to the worklet"
+);
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
     type: "process-diagnostics",
@@ -466,8 +486,14 @@ FakeAudioWorkletNode.last.port.onmessage({
     renderBudgetExceeded: false
   }
 });
-assert(liveNode.health.healthy === true, "SoundBridgeAudioNode health recovers after successful render diagnostics");
-assert(liveNode.health.lastAudioError === undefined, "SoundBridgeAudioNode clears the latest audio error after recovery");
+assert(liveNode.health.audioErrorAutoBypassed === true, "stale successful diagnostics do not clear audio-error auto-bypass");
+assert(liveNode.health.unhealthyReason === "audio-error", "stale successful diagnostics keep audio-error health");
+liveNode.setBypassed(false);
+assert(liveNode.health.bypassed === false, "manual unbypass retries after audio-error auto-bypass");
+assert(liveNode.health.healthy === true, "manual retry clears audio-error auto-bypass health");
+assert(liveNode.health.audioErrorAutoBypassed === false, "manual retry clears audio-error auto-bypass state");
+assert(liveNode.health.consecutiveAudioErrors === 0, "manual retry clears consecutive audio errors");
+assert(liveNode.health.lastAudioError === undefined, "manual retry clears the latest audio error");
 assert(liveNode.health.audioErrors === 1, "SoundBridgeAudioNode keeps cumulative audio error count after recovery");
 
 const fallbackCalls = [];

@@ -153,7 +153,7 @@ SoundBridge is ready to call production-grade for the core compatibility profile
 
 - a normal developer can install the bridge, pair a site, scan plugins, create VST3/AU/LV2 instances, and process audio without reading internal docs
 - common commercial and open-source VST3/AU/LV2 plugins work through the compatibility probe, including render-duration and render-budget evidence
-- live Web Audio and host-owned rack paths fail dry after bounded render-budget misses and expose health/events for host retry policy
+- live Web Audio and host-owned rack paths fail dry after bounded render-budget misses or audio/render failures and expose health/events for host retry policy
 - native editor and file workflows are brokered, opt-in, and path-free from the browser perspective
 - all host adapters have smoke coverage for malformed input, oversized payloads, ownership violations, and worker failure
 - the build ships with platform packaging, update, signing, and first-run approval UX

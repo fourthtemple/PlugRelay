@@ -668,6 +668,7 @@ export function createLivePerformanceAudioNodeOptions(options) {
     sharedBufferBlocks,
     maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192),
     maxConsecutiveRenderBudgetMisses: boundedAudioNodeInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024),
+    maxConsecutiveAudioErrors: boundedAudioNodeInteger(options.maxConsecutiveAudioErrors, 1, 0, 1024),
     bypassed: options.bypassed === true
   };
 }
@@ -716,6 +717,9 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.maxConsecutiveRenderBudgetMisses = options.maxConsecutiveRenderBudgetMisses;
     this.renderBudgetAutoBypassed = false;
     this.audioErrors = 0;
+    this.consecutiveAudioErrors = 0;
+    this.maxConsecutiveAudioErrors = options.maxConsecutiveAudioErrors;
+    this.audioErrorAutoBypassed = false;
     this.lastAudioError = undefined;
     this.unhealthyReason = undefined;
     this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
@@ -782,6 +786,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       sharedBufferBlocks: boundedAudioNodeInteger(options.sharedBufferBlocks, 8, 2, 64),
       maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192),
       maxConsecutiveRenderBudgetMisses: boundedAudioNodeInteger(options.maxConsecutiveRenderBudgetMisses, 0, 0, 1024),
+      maxConsecutiveAudioErrors: boundedAudioNodeInteger(options.maxConsecutiveAudioErrors, 0, 0, 1024),
       bypassed: options.bypassed === true,
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
@@ -819,11 +824,13 @@ export class SoundBridgeAudioNode extends EventTarget {
     if (this.destroyed) {
       return;
     }
-    if (!bypassed && this.renderBudgetAutoBypassed) {
-      this.renderBudgetAutoBypassed = false;
+    if (!bypassed && (this.renderBudgetAutoBypassed || this.audioErrorAutoBypassed)) {
+      this.renderBudgetAutoBypassed = this.audioErrorAutoBypassed = false;
       this.renderBudgetExceeded = false;
       this.renderBudgetMisses = 0;
-      if (this.unhealthyReason === "render-budget-exceeded") this.unhealthyReason = undefined;
+      this.consecutiveAudioErrors = 0;
+      this.lastAudioError = undefined;
+      if (this.unhealthyReason === "render-budget-exceeded" || this.unhealthyReason === "audio-error") this.unhealthyReason = undefined;
     }
     if (this.bypassed === bypassed) return;
     this.bypassed = bypassed;
@@ -909,6 +916,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       maxConsecutiveRenderBudgetMisses: this.maxConsecutiveRenderBudgetMisses,
       renderBudgetAutoBypassed: this.renderBudgetAutoBypassed,
       audioErrors: this.audioErrors,
+      consecutiveAudioErrors: this.consecutiveAudioErrors,
+      maxConsecutiveAudioErrors: this.maxConsecutiveAudioErrors,
+      audioErrorAutoBypassed: this.audioErrorAutoBypassed,
       lastAudioError: this.lastAudioError,
       unhealthyReason: this.unhealthyReason
     };
@@ -1121,7 +1131,7 @@ export class SoundBridgeAudioNode extends EventTarget {
 
   recordProcessDiagnostics(diagnostics) {
     const exceeded = diagnostics.renderBudgetExceeded === true;
-    if (this.renderBudgetAutoBypassed && !exceeded) return;
+    if (this.audioErrorAutoBypassed || (this.renderBudgetAutoBypassed && !exceeded)) return;
     this.clearAudioError();
     if (typeof diagnostics.renderEngine === "string") {
       this.lastRenderEngine = diagnostics.renderEngine;
@@ -1143,13 +1153,20 @@ export class SoundBridgeAudioNode extends EventTarget {
 
   recordAudioError(error) {
     this.audioErrors = Math.min(1024, this.audioErrors + 1);
+    this.consecutiveAudioErrors = Math.min(1024, this.consecutiveAudioErrors + 1);
     this.lastAudioError = error;
     this.unhealthyReason = "audio-error";
+    if (this.maxConsecutiveAudioErrors > 0 && this.consecutiveAudioErrors >= this.maxConsecutiveAudioErrors && !this.bypassed && !this.audioErrorAutoBypassed) {
+      this.audioErrorAutoBypassed = true;
+      this.setBypassed(true);
+      this.dispatchEvent(new CustomEvent("audio-error-auto-bypassed", { detail: { error, health: this.health } }));
+    }
   }
 
   clearAudioError() {
     if (this.unhealthyReason === "audio-error") {
       this.lastAudioError = undefined;
+      this.consecutiveAudioErrors = 0;
       this.unhealthyReason = undefined;
     }
   }

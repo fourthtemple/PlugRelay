@@ -1,136 +1,15 @@
 import type { AudioBlockResponse } from "../../protocol/src/messages";
+import {
+  boundedInteger,
+  boundedOptionalNumber,
+  combinedAudioNodeLatencySamples,
+  createLivePerformanceAudioNodeOptions
+} from "./bridge-node-options";
+import type { LivePerformanceAudioNodeOptions, SoundBridgeAudioNodeHealth, SoundBridgeAudioNodeOptions } from "./bridge-node-options";
 import { SoundBridgeClient } from "./client";
 
-export interface SoundBridgeAudioNodeOptions {
-  instanceId: string;
-  inputChannels?: number;
-  outputChannels?: number;
-  maxInFlightBlocks?: number;
-  maxQueuedOutputBlocks?: number;
-  outputLatencyBlocks?: number;
-  minOutputLatencyBlocks?: number;
-  maxOutputLatencyBlocks?: number;
-  adaptiveOutputLatency?: boolean;
-  latencyMissThresholdBlocks?: number;
-  latencyRecoveryBlocks?: number;
-  targetResponseDeadlineLeadBlocks?: number;
-  latencyPressureThresholdBlocks?: number;
-  audioTransport?: "binary" | "json";
-  audioRequestTimeoutMs?: number;
-  audioTransferMode?: "auto" | "message" | "shared";
-  sharedBufferBlocks?: number;
-  maxBlockFrames?: number;
-  maxConsecutiveRenderBudgetMisses?: number;
-  bypassed?: boolean;
-  workletUrl?: string;
-}
-
-export interface LivePerformanceAudioNodeOptions extends SoundBridgeAudioNodeOptions {}
-
-export interface SoundBridgeAudioNodeHealth {
-  healthy: boolean;
-  instanceId: string;
-  bypassed: boolean;
-  bypassEvents: number;
-  audioTransport: "binary" | "json";
-  audioRequestTimeoutMs: number;
-  inFlightBlocks: number;
-  maxInFlightBlocks: number;
-  queuedOutputBlocks: number;
-  outputLatencyBlocks: number;
-  transportLatencySamples: number;
-  pluginLatencySamples: number;
-  reportedLatencySamples: number;
-  latencyIncreases: number;
-  latencyDecreases: number;
-  latencyChangeEvents: number;
-  latencyRefreshes: number;
-  lastLatencyChangeDirection?: "increased" | "decreased" | "changed";
-  responseDeadlineLeadSamples: number;
-  responseJitterSamples: number;
-  responseDeadlineMisses: number;
-  responseDeadlineMissesSinceLastStats: number;
-  staleOutputBlocks: number;
-  droppedInputBlocks: number;
-  underruns: number;
-  sharedAudioEnabled: boolean;
-  sharedInputDroppedBlocks: number;
-  sharedOutputDroppedBlocks: number;
-  transportPressureEvents: number;
-  lastTransportPressureReasons: string[];
-  lastRenderEngine?: string;
-  lastRenderDurationMs?: number;
-  lastRenderBudgetMs?: number;
-  renderBudgetExceeded: boolean;
-  renderBudgetMisses: number;
-  maxConsecutiveRenderBudgetMisses: number;
-  renderBudgetAutoBypassed: boolean;
-  audioErrors: number;
-  lastAudioError?: unknown;
-  unhealthyReason?: "audio-error" | "render-budget-exceeded" | "destroyed";
-}
-
-const LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS = 4;
-const LIVE_AUDIO_NODE_MAX_QUEUED_OUTPUT_BLOCKS = 8;
-const LIVE_AUDIO_NODE_OUTPUT_LATENCY_BLOCKS = 2;
-const LIVE_AUDIO_NODE_MAX_OUTPUT_LATENCY_BLOCKS = 4;
-const LIVE_AUDIO_NODE_LATENCY_RECOVERY_BLOCKS = 128;
-const LIVE_AUDIO_NODE_LATENCY_PRESSURE_THRESHOLD_BLOCKS = 2;
-const LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS = 4;
-const LIVE_AUDIO_NODE_AUDIO_REQUEST_TIMEOUT_MS = 250;
-
-export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAudioNodeOptions): SoundBridgeAudioNodeOptions {
-  const maxQueuedOutputBlocks = boundedInteger(
-    options.maxQueuedOutputBlocks,
-    LIVE_AUDIO_NODE_MAX_QUEUED_OUTPUT_BLOCKS,
-    1,
-    64
-  );
-  const outputLatencyBlocks = boundedInteger(
-    options.outputLatencyBlocks,
-    Math.min(LIVE_AUDIO_NODE_OUTPUT_LATENCY_BLOCKS, maxQueuedOutputBlocks),
-    1,
-    maxQueuedOutputBlocks
-  );
-  const maxOutputLatencyBlocks = boundedInteger(
-    options.maxOutputLatencyBlocks,
-    Math.min(maxQueuedOutputBlocks, Math.max(outputLatencyBlocks + 2, LIVE_AUDIO_NODE_MAX_OUTPUT_LATENCY_BLOCKS)),
-    outputLatencyBlocks,
-    maxQueuedOutputBlocks
-  );
-  const maxInFlightBlocks = boundedInteger(options.maxInFlightBlocks, LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS, 1, 64);
-  const sharedBufferBlocks = boundedInteger(
-    options.sharedBufferBlocks,
-    Math.max(LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS, maxInFlightBlocks + maxOutputLatencyBlocks),
-    2,
-    64
-  );
-
-  return {
-    ...options,
-    maxInFlightBlocks,
-    maxQueuedOutputBlocks,
-    outputLatencyBlocks,
-    minOutputLatencyBlocks: boundedInteger(options.minOutputLatencyBlocks, 1, 1, outputLatencyBlocks),
-    maxOutputLatencyBlocks,
-    adaptiveOutputLatency: options.adaptiveOutputLatency !== false,
-    latencyMissThresholdBlocks: boundedInteger(options.latencyMissThresholdBlocks, 2, 1, 32),
-    latencyRecoveryBlocks: boundedInteger(options.latencyRecoveryBlocks, LIVE_AUDIO_NODE_LATENCY_RECOVERY_BLOCKS, 32, 8192),
-    targetResponseDeadlineLeadBlocks: boundedInteger(options.targetResponseDeadlineLeadBlocks, 1, 0, 16),
-    latencyPressureThresholdBlocks: boundedInteger(
-      options.latencyPressureThresholdBlocks,
-      LIVE_AUDIO_NODE_LATENCY_PRESSURE_THRESHOLD_BLOCKS,
-      1,
-      64
-    ),
-    audioTransport: options.audioTransport === "json" ? "json" : "binary",
-    audioRequestTimeoutMs: boundedInteger(options.audioRequestTimeoutMs, LIVE_AUDIO_NODE_AUDIO_REQUEST_TIMEOUT_MS, 0, 60000),
-    audioTransferMode: options.audioTransferMode ?? "auto",
-    sharedBufferBlocks,
-    maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192),
-    maxConsecutiveRenderBudgetMisses: boundedInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024)
-  };
-}
+export { createLivePerformanceAudioNodeOptions } from "./bridge-node-options";
+export type { LivePerformanceAudioNodeOptions, SoundBridgeAudioNodeHealth, SoundBridgeAudioNodeOptions } from "./bridge-node-options";
 
 export class SoundBridgeAudioNode extends EventTarget {
   readonly node: AudioWorkletNode;
@@ -176,6 +55,9 @@ export class SoundBridgeAudioNode extends EventTarget {
   private maxConsecutiveRenderBudgetMisses: number;
   private renderBudgetAutoBypassed = false;
   private audioErrors = 0;
+  private consecutiveAudioErrors = 0;
+  private maxConsecutiveAudioErrors: number;
+  private audioErrorAutoBypassed = false;
   private lastAudioError?: unknown;
   private unhealthyReason?: SoundBridgeAudioNodeHealth["unhealthyReason"];
 
@@ -188,6 +70,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.audioTransport = options.audioTransport;
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.maxConsecutiveRenderBudgetMisses = options.maxConsecutiveRenderBudgetMisses;
+    this.maxConsecutiveAudioErrors = options.maxConsecutiveAudioErrors;
     this.bypassed = options.bypassed;
     this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
       numberOfInputs: 1,
@@ -257,6 +140,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       sharedBufferBlocks: boundedInteger(options.sharedBufferBlocks, 8, 2, 64),
       maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192),
       maxConsecutiveRenderBudgetMisses: boundedInteger(options.maxConsecutiveRenderBudgetMisses, 0, 0, 1024),
+      maxConsecutiveAudioErrors: boundedInteger(options.maxConsecutiveAudioErrors, 0, 0, 1024),
       bypassed: options.bypassed === true,
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
@@ -298,11 +182,13 @@ export class SoundBridgeAudioNode extends EventTarget {
     if (this.destroyed) {
       return;
     }
-    if (!bypassed && this.renderBudgetAutoBypassed) {
-      this.renderBudgetAutoBypassed = false;
+    if (!bypassed && (this.renderBudgetAutoBypassed || this.audioErrorAutoBypassed)) {
+      this.renderBudgetAutoBypassed = this.audioErrorAutoBypassed = false;
       this.renderBudgetExceeded = false;
       this.renderBudgetMisses = 0;
-      if (this.unhealthyReason === "render-budget-exceeded") this.unhealthyReason = undefined;
+      this.consecutiveAudioErrors = 0;
+      this.lastAudioError = undefined;
+      if (this.unhealthyReason === "render-budget-exceeded" || this.unhealthyReason === "audio-error") this.unhealthyReason = undefined;
     }
     if (this.bypassed === bypassed) return;
     this.bypassed = bypassed;
@@ -388,6 +274,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       maxConsecutiveRenderBudgetMisses: this.maxConsecutiveRenderBudgetMisses,
       renderBudgetAutoBypassed: this.renderBudgetAutoBypassed,
       audioErrors: this.audioErrors,
+      consecutiveAudioErrors: this.consecutiveAudioErrors,
+      maxConsecutiveAudioErrors: this.maxConsecutiveAudioErrors,
+      audioErrorAutoBypassed: this.audioErrorAutoBypassed,
       lastAudioError: this.lastAudioError,
       unhealthyReason: this.unhealthyReason
     };
@@ -688,7 +577,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     renderBudgetExceeded?: unknown;
   }): void {
     const exceeded = diagnostics.renderBudgetExceeded === true;
-    if (this.renderBudgetAutoBypassed && !exceeded) return;
+    if (this.audioErrorAutoBypassed || (this.renderBudgetAutoBypassed && !exceeded)) return;
     this.clearAudioError();
     if (typeof diagnostics.renderEngine === "string") {
       this.lastRenderEngine = diagnostics.renderEngine;
@@ -710,28 +599,21 @@ export class SoundBridgeAudioNode extends EventTarget {
 
   private recordAudioError(error: unknown): void {
     this.audioErrors = Math.min(1024, this.audioErrors + 1);
+    this.consecutiveAudioErrors = Math.min(1024, this.consecutiveAudioErrors + 1);
     this.lastAudioError = error;
     this.unhealthyReason = "audio-error";
+    if (this.maxConsecutiveAudioErrors > 0 && this.consecutiveAudioErrors >= this.maxConsecutiveAudioErrors && !this.bypassed && !this.audioErrorAutoBypassed) {
+      this.audioErrorAutoBypassed = true;
+      this.setBypassed(true);
+      this.dispatchEvent(new CustomEvent("audio-error-auto-bypassed", { detail: { error, health: this.health } }));
+    }
   }
 
   private clearAudioError(): void {
     if (this.unhealthyReason === "audio-error") {
       this.lastAudioError = undefined;
+      this.consecutiveAudioErrors = 0;
       this.unhealthyReason = undefined;
     }
   }
-}
-
-function boundedInteger(value: number | undefined, fallback: number, min: number, max: number): number {
-  const integer = Math.floor(Number(value ?? fallback));
-  return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
-}
-
-function boundedOptionalNumber(value: unknown, min: number, max: number): number | undefined {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : undefined;
-}
-
-function combinedAudioNodeLatencySamples(pluginLatencySamples: number, transportLatencySamples: number): number {
-  return Math.min(1_048_576, pluginLatencySamples + transportLatencySamples);
 }
