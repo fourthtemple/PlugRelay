@@ -1234,6 +1234,50 @@ const LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS = 0.5;
 const LIVE_PERFORMANCE_RECOVERY_BLOCKS = 16;
 const LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES = 1;
 const LIVE_EFFECT_MAX_LATENCY_SAMPLES = 1048576;
+const LIVE_TRANSPORT_MAX_SAMPLE_POSITION = 9007199254740991;
+const LIVE_TRANSPORT_MAX_MUSIC = 1000000000;
+const LIVE_TRANSPORT_DENOMINATORS = [1, 2, 4, 8, 16, 32, 64];
+
+export function liveTransportForBlock(options) {
+  const sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
+  const maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
+  const maxBlockId = Math.floor(LIVE_TRANSPORT_MAX_SAMPLE_POSITION / maxBlockSize);
+  const blockId = boundedLiveEffectInteger(options.blockId, 0, 0, maxBlockId);
+  const baseSamplePosition = options.samplePosition === void 0 ? blockId * maxBlockSize : boundedLiveEffectInteger(options.samplePosition, 0, 0, LIVE_TRANSPORT_MAX_SAMPLE_POSITION);
+  const latencySamples = options.compensateOutputLatency === true ? boundedLiveEffectInteger(options.reportedLatencySamples, 0, 0, LIVE_TRANSPORT_MAX_SAMPLE_POSITION) : 0;
+  const samplePosition = Math.min(LIVE_TRANSPORT_MAX_SAMPLE_POSITION, baseSamplePosition + latencySamples);
+  const transport = { playing: options.playing !== false, samplePosition };
+  if (typeof options.recording === "boolean") transport.recording = options.recording;
+
+  const tempo = optionalLiveTransportNumber(options.tempo, 1, 960);
+  if (tempo !== void 0) transport.tempo = tempo;
+
+  const hasMeter = tempo !== void 0 || options.timeSignatureNumerator !== void 0 || options.timeSignatureDenominator !== void 0;
+  const numerator = boundedLiveEffectInteger(options.timeSignatureNumerator, 4, 1, 64);
+  const denominator = boundedLiveTransportDenominator(options.timeSignatureDenominator, 4);
+  if (hasMeter) {
+    transport.timeSignatureNumerator = numerator;
+    transport.timeSignatureDenominator = denominator;
+  }
+
+  const projectTimeMusic = liveTransportPositionMusic(options.projectTimeMusic, samplePosition, sampleRate, tempo, options.projectTimeMusicAtSampleZero);
+  if (projectTimeMusic !== void 0) {
+    transport.projectTimeMusic = projectTimeMusic;
+    transport.barPositionMusic = optionalLiveTransportNumber(options.barPositionMusic, 0, LIVE_TRANSPORT_MAX_MUSIC) ?? liveTransportBarPositionMusic(projectTimeMusic, numerator, denominator);
+  } else if (options.barPositionMusic !== void 0) {
+    transport.barPositionMusic = optionalLiveTransportNumber(options.barPositionMusic, 0, LIVE_TRANSPORT_MAX_MUSIC);
+  }
+
+  const hasCycle = options.cycleStartMusic !== void 0 || options.cycleEndMusic !== void 0;
+  if (hasCycle) {
+    const start = optionalLiveTransportNumber(options.cycleStartMusic ?? options.cycleEndMusic, 0, LIVE_TRANSPORT_MAX_MUSIC) ?? 0;
+    const end = optionalLiveTransportNumber(options.cycleEndMusic ?? options.cycleStartMusic, 0, LIVE_TRANSPORT_MAX_MUSIC) ?? start;
+    transport.cycleStartMusic = start;
+    transport.cycleEndMusic = Math.max(start, end);
+  }
+  if (typeof options.loopActive === "boolean" || hasCycle) transport.loopActive = options.loopActive ?? hasCycle;
+  return transport;
+}
 
 export function createLivePerformanceRackOptions(options) {
   const {
@@ -1962,6 +2006,33 @@ function liveEffectNowMs() {
 
 function liveEffectBlockUnits(value, blockValue) {
   return blockValue > 0 ? Number((value / blockValue).toFixed(3)) : 0;
+}
+
+function optionalLiveTransportNumber(value, min, max) {
+  if (value === void 0 || value === null) return void 0;
+  return roundedLiveTransportMusic(boundedLiveEffectNumber(value, min, min, max));
+}
+
+function boundedLiveTransportDenominator(value, fallback) {
+  const requested = boundedLiveEffectInteger(value, fallback, 1, 64);
+  return LIVE_TRANSPORT_DENOMINATORS.find((denominator) => denominator >= requested) ?? 64;
+}
+
+function liveTransportPositionMusic(projectTimeMusic, samplePosition, sampleRate, tempo, offset) {
+  const explicit = optionalLiveTransportNumber(projectTimeMusic, 0, LIVE_TRANSPORT_MAX_MUSIC);
+  if (explicit !== void 0) return explicit;
+  if (tempo === void 0) return void 0;
+  const base = optionalLiveTransportNumber(offset, 0, LIVE_TRANSPORT_MAX_MUSIC) ?? 0;
+  return optionalLiveTransportNumber(base + (samplePosition / sampleRate) * (tempo / 60), 0, LIVE_TRANSPORT_MAX_MUSIC);
+}
+
+function liveTransportBarPositionMusic(projectTimeMusic, numerator, denominator) {
+  const barLength = numerator * (4 / denominator);
+  return barLength > 0 ? roundedLiveTransportMusic(Math.floor(projectTimeMusic / barLength) * barLength) : 0;
+}
+
+function roundedLiveTransportMusic(value) {
+  return Number(value.toFixed(6));
 }
 
 function transitionLiveEffectOutputChannels(channels, previousTail, previousPath, outputPath, fadeSamples) {
