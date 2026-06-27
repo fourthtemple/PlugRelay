@@ -2,7 +2,8 @@ import {
   createLiveEffectRackBlockScheduler,
   createLiveEffectRackCalibrationWindow,
   createLiveEffectRackChain,
-  createLiveEffectRackChainCalibrationWindow
+  createLiveEffectRackChainCalibrationWindow,
+  createLiveEffectRackFrameBatchProcessor
 } from "../packages/web-client/dist/soundbridge-client.js";
 
 function assert(condition, message) {
@@ -258,5 +259,77 @@ assert(deckB.request.inputBuses?.[0]?.index === 1, "live rack scheduler keeps pe
 assert(frameScheduler.snapshot().nextBlockId === 101, "live rack scheduler advances only once for a reusable frame");
 const nextFrameBlock = frameScheduler.schedule([[0.3]]);
 assert(nextFrameBlock.blockId === 101, "live rack scheduler resumes after the captured multi-target frame");
+
+now = 3000;
+const batchScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  startBlockId: 200,
+  startSamplePosition: 25600,
+  transportLatencySamples: 384,
+  transport: { playing: true, tempo: 124 },
+  nowMs: () => now
+});
+const processedTargets = [];
+const deckTarget = {
+  health: { healthy: true, reportedLatencySamples: 640 },
+  async processScheduledBlock(scheduled, options) {
+    processedTargets.push({ id: "deck", scheduled, options });
+    return {
+      blockId: scheduled.blockId,
+      channels: scheduled.request.channels,
+      latencySamples: 64,
+      renderEngine: "deck-effect",
+      bypassed: false,
+      healthy: true
+    };
+  }
+};
+const sendTarget = {
+  health: { healthy: true, reportedLatencySamples: 128 },
+  async processScheduledBlock(scheduled, options) {
+    processedTargets.push({ id: "send", scheduled, options });
+    return {
+      blockId: scheduled.blockId,
+      channels: scheduled.request.channels,
+      latencySamples: 0,
+      renderEngine: "dry-bypass",
+      bypassed: true,
+      healthy: true
+    };
+  }
+};
+const batchProcessor = createLiveEffectRackFrameBatchProcessor({
+  scheduler: batchScheduler,
+  maxTargets: 4,
+  nowMs: () => now
+});
+const batch = await batchProcessor.process([
+  { id: "deck-a", target: deckTarget, channels: [[1, 0]], processOptions: { role: "deck" } },
+  { id: "send-a", target: sendTarget, channels: [[0, 1]], scheduleOptions: { wetMix: 0.25 } }
+]);
+assert(batch.frame.blockId === 200 && batchScheduler.snapshot().nextBlockId === 201, "live frame batch captures one shared scheduler frame");
+assert(batch.targetCount === 2 && batch.processedTargets === 2 && batch.failedTargets === 0, "live frame batch processes every target");
+assert(batch.dryTargets === 1 && batch.bypassedTargets === 1 && batch.healthy === true, "live frame batch aggregates dry and health status");
+assert(batch.reportedLatencySamples === 640 && batch.latencySamples === 64, "live frame batch exposes max target latency");
+assert(
+  processedTargets[0].scheduled.blockId === processedTargets[1].scheduled.blockId &&
+    processedTargets[0].scheduled.samplePosition === processedTargets[1].scheduled.samplePosition &&
+    processedTargets[0].scheduled.transport === processedTargets[1].scheduled.transport,
+  "live frame batch reuses one transport frame across targets"
+);
+assert(processedTargets[0].options.role === "deck", "live frame batch passes per-target process options");
+assert(batch.results[1].scheduled.request.wetMix === 0.25, "live frame batch passes per-target schedule options");
+
+const badBatch = await batchProcessor.process([
+  { id: "bad-slot", target: {}, channels: [[0]] }
+]);
+assert(
+  badBatch.targetCount === 1 &&
+    badBatch.processedTargets === 0 &&
+    badBatch.failedTargets === 1 &&
+    badBatch.healthy === false,
+  "live frame batch reports invalid targets without rejecting the whole frame"
+);
 
 console.log("Live effect rack scheduler smoke checks passed.");

@@ -5,6 +5,7 @@ export * from "./live-audio-node-recovery";
 export * from "./live-effect-rack";
 export * from "./live-effect-rack-adaptive-latency";
 export * from "./live-effect-rack-chain";
+export * from "./live-effect-rack-frame-batch";
 export * from "./live-effect-rack-scheduler";
 export type { LiveEffectRackTiming } from "./live-effect-rack-metrics";
 export * from "./live-transport";

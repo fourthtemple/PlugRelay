@@ -3402,6 +3402,95 @@ export function createLiveEffectRackBlockScheduler(options) {
   return new LiveEffectRackBlockScheduler(options);
 }
 
+const LIVE_EFFECT_FRAME_BATCH_TARGETS = 16;
+
+export class LiveEffectRackFrameBatchProcessor {
+  constructor(options) {
+    this.scheduler = options.scheduler;
+    this.maxTargets = boundedLiveEffectInteger(options.maxTargets, LIVE_EFFECT_FRAME_BATCH_TARGETS, 1, 32);
+    this.nowMs = typeof options.nowMs === "function" ? options.nowMs : liveEffectNowMs;
+  }
+
+  async process(targets, options = {}) {
+    const frame = options.frame ?? this.scheduler.captureFrame(options.frameOptions);
+    const targetCount = boundedLiveEffectInteger(targets?.length, 0, 0, this.maxTargets);
+    const startedAt = this.nowMs();
+    const results = await Promise.all(
+      Array.from({ length: targetCount }, (_unused, index) => this.processTarget(frame, targets[index], index))
+    );
+    return this.result(frame, results, this.nowMs() - startedAt);
+  }
+
+  async processTarget(frame, targetRequest, index) {
+    const startedAt = this.nowMs();
+    const scheduled = this.scheduler.scheduleFromFrame(
+      frame,
+      targetRequest?.channels ?? [],
+      targetRequest?.scheduleOptions
+    );
+    if (typeof targetRequest?.target?.processScheduledBlock !== "function") {
+      return this.targetResult(targetRequest, index, scheduled, void 0, new Error("invalid_frame_batch_target"), this.nowMs() - startedAt);
+    }
+    try {
+      const response = await targetRequest.target.processScheduledBlock(scheduled, targetRequest.processOptions);
+      return this.targetResult(targetRequest, index, scheduled, response, void 0, this.nowMs() - startedAt);
+    } catch (error) {
+      return this.targetResult(targetRequest, index, scheduled, void 0, error, this.nowMs() - startedAt);
+    }
+  }
+
+  targetResult(targetRequest, index, scheduled, response, error, durationMs) {
+    const responseLatencySamples = boundedLiveEffectLatencySamples(response?.latencySamples, 0);
+    const health = targetRequest?.target.health;
+    const reportedLatencySamples = boundedLiveEffectLatencySamples(
+      health?.reportedLatencySamples,
+      boundedLiveEffectLatencySamples(health?.latencySamples, responseLatencySamples)
+    );
+    const bypassed = response?.bypassed === true;
+    return {
+      id: targetRequest?.id,
+      index,
+      scheduled,
+      response,
+      error,
+      bypassed,
+      dry: bypassed,
+      healthy: error === void 0 && response?.healthy !== false && health?.healthy !== false,
+      latencySamples: responseLatencySamples,
+      reportedLatencySamples,
+      durationMs: boundedLiveEffectOptionalNumber(durationMs, 0, 60000) ?? 0
+    };
+  }
+
+  result(frame, results, totalDurationMs) {
+    const failedTargets = results.filter((result) => result.error !== void 0 || result.healthy === false).length;
+    const dryTargets = results.filter((result) => result.dry).length;
+    const bypassedTargets = results.filter((result) => result.bypassed).length;
+    return {
+      frame,
+      results,
+      targetCount: results.length,
+      processedTargets: results.filter((result) => result.response !== void 0).length,
+      failedTargets,
+      dryTargets,
+      bypassedTargets,
+      healthy: failedTargets === 0,
+      latencySamples: maxLiveEffectFrameBatchLatency(results, "latencySamples"),
+      reportedLatencySamples: maxLiveEffectFrameBatchLatency(results, "reportedLatencySamples"),
+      maxDurationMs: results.reduce((max, result) => Math.max(max, result.durationMs), 0),
+      totalDurationMs: boundedLiveEffectOptionalNumber(totalDurationMs, 0, 60000) ?? 0
+    };
+  }
+}
+
+export function createLiveEffectRackFrameBatchProcessor(options) {
+  return new LiveEffectRackFrameBatchProcessor(options);
+}
+
+function maxLiveEffectFrameBatchLatency(results, key) {
+  return results.reduce((max, result) => Math.max(max, result[key]), 0);
+}
+
 export function shouldSkipLiveEffectDeadlinePressure(pressure, options = {}) {
   if (options.skipOnDeadlinePressure !== true || pressure === void 0 || pressure.pressure !== true) return false;
   const reasons = options.skipOnDeadlinePressureReasons;
