@@ -3,6 +3,29 @@ import { SoundBridgeProtocolError } from "./client";
 const LIVE_EFFECT_MAX_LATENCY_SAMPLES = 1048576;
 export type LiveEffectFailureReason = "processing-error" | "process-timeout";
 
+export interface LiveEffectRackTiming {
+  sampleRate: number;
+  maxBlockSize: number;
+  blockDurationMs: number;
+  pluginLatencySamples: number;
+  transportLatencySamples: number;
+  reportedLatencySamples: number;
+  pluginLatencyBlocks: number;
+  transportLatencyBlocks: number;
+  reportedLatencyBlocks: number;
+  pluginLatencyMs: number;
+  transportLatencyMs: number;
+  reportedLatencyMs: number;
+  processBudgetMs: number;
+  processBudgetBlocks: number;
+  processTimeoutMs: number;
+  processTimeoutBlocks: number;
+  maxInputAgeMs: number;
+  maxInputAgeBlocks: number;
+  transitionFadeSamples: number;
+  transitionFadeBlocks: number;
+}
+
 export function boundedChannelCount(value: number): number {
   const channels = Math.floor(Number(value));
   return Number.isFinite(channels) ? Math.max(1, Math.min(32, channels)) : 2;
@@ -52,6 +75,41 @@ export function liveEffectLatencyMilliseconds(samples: number, sampleRate: numbe
   return Number(((boundedSamples / boundedSampleRate) * 1000).toFixed(3));
 }
 
+export function liveEffectRackTiming(sampleRate: number, maxBlockSize: number, pluginLatencySamples: number, transportLatencySamples: number, reportedLatencySamples: number, processBudgetMs: number, processTimeoutMs: number, maxInputAgeMs: number, transitionFadeSamples: number): LiveEffectRackTiming {
+  const rate = boundedLiveEffectInteger(sampleRate, 48000, 1, 384000);
+  const frames = liveEffectBlockFrames(maxBlockSize);
+  const blockDurationMs = Number(liveEffectBlockDurationMs(rate, frames).toFixed(3));
+  const pluginSamples = boundedLatencySamples(pluginLatencySamples, 0);
+  const transportSamples = boundedLatencySamples(transportLatencySamples, 0);
+  const reportedSamples = boundedLatencySamples(reportedLatencySamples, combinedLatencySamples(pluginSamples, transportSamples));
+  const budgetMs = boundedLiveEffectNumber(processBudgetMs, 0, 0, 60000);
+  const timeoutMs = boundedLiveEffectNumber(processTimeoutMs, 0, 0, 60000);
+  const inputAgeMs = boundedLiveEffectNumber(maxInputAgeMs, 0, 0, 60000);
+  const fadeSamples = boundedLiveEffectInteger(transitionFadeSamples, 0, 0, 4096);
+  return {
+    sampleRate: rate,
+    maxBlockSize: frames,
+    blockDurationMs,
+    pluginLatencySamples: pluginSamples,
+    transportLatencySamples: transportSamples,
+    reportedLatencySamples: reportedSamples,
+    pluginLatencyBlocks: liveEffectBlockUnits(pluginSamples, frames),
+    transportLatencyBlocks: liveEffectBlockUnits(transportSamples, frames),
+    reportedLatencyBlocks: liveEffectBlockUnits(reportedSamples, frames),
+    pluginLatencyMs: liveEffectLatencyMilliseconds(pluginSamples, rate),
+    transportLatencyMs: liveEffectLatencyMilliseconds(transportSamples, rate),
+    reportedLatencyMs: liveEffectLatencyMilliseconds(reportedSamples, rate),
+    processBudgetMs: budgetMs,
+    processBudgetBlocks: liveEffectBlockUnits(budgetMs, blockDurationMs),
+    processTimeoutMs: timeoutMs,
+    processTimeoutBlocks: liveEffectBlockUnits(timeoutMs, blockDurationMs),
+    maxInputAgeMs: inputAgeMs,
+    maxInputAgeBlocks: liveEffectBlockUnits(inputAgeMs, blockDurationMs),
+    transitionFadeSamples: fadeSamples,
+    transitionFadeBlocks: liveEffectBlockUnits(fadeSamples, frames)
+  };
+}
+
 export async function withLiveEffectTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   if (timeoutMs <= 0) {
     return promise;
@@ -89,6 +147,10 @@ export function isRecoverablePressureReason(reason: unknown): boolean {
 
 export function liveEffectNowMs(): number {
   return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+}
+
+function liveEffectBlockUnits(value: number, blockValue: number): number {
+  return blockValue > 0 ? Number((value / blockValue).toFixed(3)) : 0;
 }
 
 function liveEffectTimeoutError(): Error {

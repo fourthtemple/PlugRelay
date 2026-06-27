@@ -1344,6 +1344,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     return this.created?.instanceId;
   }
 
+  get timing() { return liveEffectRackTiming(this.sampleRate, this.maxBlockSize, this.created?.latencySamples ?? 0, this.transportLatencySamples, this.reportedLatencySamples, this.processBudgetMs, this.processTimeoutMs, this.maxInputAgeMs, this.transitionFadeSamples); }
+
   get health() {
     return {
       bypassed: this.bypassed,
@@ -1882,6 +1884,41 @@ function liveEffectLatencyMilliseconds(samples, sampleRate) {
   return Number(((boundedSamples / boundedSampleRate) * 1000).toFixed(3));
 }
 
+function liveEffectRackTiming(sampleRate, maxBlockSize, pluginLatencySamples, transportLatencySamples, reportedLatencySamples, processBudgetMs, processTimeoutMs, maxInputAgeMs, transitionFadeSamples) {
+  const rate = boundedLiveEffectInteger(sampleRate, 48000, 1, 384000);
+  const frames = liveEffectBlockFrames(maxBlockSize);
+  const blockDurationMs = Number(liveEffectBlockDurationMs(rate, frames).toFixed(3));
+  const pluginSamples = boundedLiveEffectLatencySamples(pluginLatencySamples, 0);
+  const transportSamples = boundedLiveEffectLatencySamples(transportLatencySamples, 0);
+  const reportedSamples = boundedLiveEffectLatencySamples(reportedLatencySamples, combinedLiveEffectLatencySamples(pluginSamples, transportSamples));
+  const budgetMs = boundedLiveEffectNumber(processBudgetMs, 0, 0, 60000);
+  const timeoutMs = boundedLiveEffectNumber(processTimeoutMs, 0, 0, 60000);
+  const inputAgeMs = boundedLiveEffectNumber(maxInputAgeMs, 0, 0, 60000);
+  const fadeSamples = boundedLiveEffectInteger(transitionFadeSamples, 0, 0, 4096);
+  return {
+    sampleRate: rate,
+    maxBlockSize: frames,
+    blockDurationMs,
+    pluginLatencySamples: pluginSamples,
+    transportLatencySamples: transportSamples,
+    reportedLatencySamples: reportedSamples,
+    pluginLatencyBlocks: liveEffectBlockUnits(pluginSamples, frames),
+    transportLatencyBlocks: liveEffectBlockUnits(transportSamples, frames),
+    reportedLatencyBlocks: liveEffectBlockUnits(reportedSamples, frames),
+    pluginLatencyMs: liveEffectLatencyMilliseconds(pluginSamples, rate),
+    transportLatencyMs: liveEffectLatencyMilliseconds(transportSamples, rate),
+    reportedLatencyMs: liveEffectLatencyMilliseconds(reportedSamples, rate),
+    processBudgetMs: budgetMs,
+    processBudgetBlocks: liveEffectBlockUnits(budgetMs, blockDurationMs),
+    processTimeoutMs: timeoutMs,
+    processTimeoutBlocks: liveEffectBlockUnits(timeoutMs, blockDurationMs),
+    maxInputAgeMs: inputAgeMs,
+    maxInputAgeBlocks: liveEffectBlockUnits(inputAgeMs, blockDurationMs),
+    transitionFadeSamples: fadeSamples,
+    transitionFadeBlocks: liveEffectBlockUnits(fadeSamples, frames)
+  };
+}
+
 async function withLiveEffectTimeout(promise, timeoutMs) {
   if (timeoutMs <= 0) {
     return promise;
@@ -1921,6 +1958,10 @@ function renderDeadlineDetails(error) {
 
 function liveEffectNowMs() {
   return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+}
+
+function liveEffectBlockUnits(value, blockValue) {
+  return blockValue > 0 ? Number((value / blockValue).toFixed(3)) : 0;
 }
 
 function transitionLiveEffectOutputChannels(channels, previousTail, previousPath, outputPath, fadeSamples) {

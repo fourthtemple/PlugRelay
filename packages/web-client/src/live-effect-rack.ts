@@ -28,9 +28,11 @@ import {
   liveEffectFailureReason,
   liveEffectLatencyMilliseconds,
   liveEffectNowMs,
+  liveEffectRackTiming,
   renderDeadlineDetails,
   withLiveEffectTimeout
 } from "./live-effect-rack-metrics";
+import type { LiveEffectRackTiming } from "./live-effect-rack-metrics";
 
 export interface LiveEffectRackOptions {
   client: SoundBridgeClient;
@@ -261,6 +263,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   get instanceId(): string | undefined {
     return this.created?.instanceId;
   }
+
+  get timing(): LiveEffectRackTiming { return liveEffectRackTiming(this.sampleRate, this.maxBlockSize, this.created?.latencySamples ?? 0, this.transportLatencySamples, this.reportedLatencySamples, this.processBudgetMs, this.processTimeoutMs, this.maxInputAgeMs, this.transitionFadeSamples); }
 
   get health(): LiveEffectRackHealth {
     return {

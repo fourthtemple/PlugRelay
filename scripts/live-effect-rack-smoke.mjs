@@ -250,6 +250,8 @@ assert(
     refreshedTransportLatency.reportedLatencyMs === 5.583,
   "live rack refresh normalizes plugin plus transport latency for host compensation"
 );
+const rackTiming = rack.timing;
+assert(rackTiming.blockDurationMs === 2.667 && rackTiming.transportLatencyBlocks === 2 && rackTiming.reportedLatencyBlocks === 2.094, "live rack exposes bounded timing snapshots for host schedulers");
 assert(latencyEvents === 1, "live rack emits latencychange when refreshed latency changes");
 
 const inputChannels = [
