@@ -3,11 +3,19 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     super();
     const processorOptions = options.processorOptions ?? {};
     this.outputChannels = processorOptions.outputChannels ?? 2;
-    this.maxQueuedOutputBlocks = processorOptions.maxQueuedOutputBlocks ?? 16;
+    this.maxQueuedOutputBlocks = this.boundedInteger(processorOptions.maxQueuedOutputBlocks, 16, 1, 64);
+    this.outputLatencyBlocks = this.boundedInteger(
+      processorOptions.outputLatencyBlocks,
+      Math.min(2, this.maxQueuedOutputBlocks),
+      1,
+      this.maxQueuedOutputBlocks
+    );
     this.blockId = 0;
     this.underruns = 0;
     this.processedBlocks = 0;
-    this.outputQueue = [];
+    this.staleOutputBlocks = 0;
+    this.droppedInputBlocks = 0;
+    this.outputBlocks = new Map();
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
 
@@ -16,20 +24,24 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     const output = outputs[0] ?? [];
     const frames = output[0]?.length ?? input[0]?.length ?? 128;
     const outgoing = this.copyInputBlock(input, frames);
-    const queued = this.outputQueue.shift();
+    const currentBlockId = this.blockId++;
+    const targetBlockId = currentBlockId - this.outputLatencyBlocks;
+    const queued = targetBlockId >= 0 ? this.outputBlocks.get(targetBlockId) : undefined;
 
     if (queued) {
+      this.outputBlocks.delete(targetBlockId);
       this.writeBlock(output, queued, frames);
       this.processedBlocks += 1;
     } else {
       this.writeBlock(output, outgoing, frames);
       this.underruns += 1;
     }
+    this.dropStaleOutputBlocks(targetBlockId);
 
     this.port.postMessage(
       {
         type: "process",
-        blockId: this.blockId++,
+        blockId: currentBlockId,
         frames,
         channels: outgoing
       },
@@ -41,7 +53,10 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         type: "stats",
         processedBlocks: this.processedBlocks,
         underruns: this.underruns,
-        queuedOutputBlocks: this.outputQueue.length
+        queuedOutputBlocks: this.outputBlocks.size,
+        outputLatencyBlocks: this.outputLatencyBlocks,
+        staleOutputBlocks: this.staleOutputBlocks,
+        droppedInputBlocks: this.droppedInputBlocks
       });
     }
 
@@ -54,7 +69,12 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
 
     if (message.type === "destroy") {
-      this.outputQueue.length = 0;
+      this.outputBlocks.clear();
+      return;
+    }
+
+    if (message.type === "dropped") {
+      this.droppedInputBlocks += 1;
       return;
     }
 
@@ -62,13 +82,21 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    if (this.outputQueue.length >= this.maxQueuedOutputBlocks) {
-      this.outputQueue.shift();
+    const blockId = Math.floor(Number(message.blockId));
+    if (!Number.isFinite(blockId) || blockId < 0) {
+      return;
     }
 
-    this.outputQueue.push(
-      message.channels.slice(0, this.outputChannels).map((channel) => Float32Array.from(channel))
-    );
+    if (blockId < this.blockId - this.outputLatencyBlocks) {
+      this.staleOutputBlocks += 1;
+      return;
+    }
+
+    if (this.outputBlocks.size >= this.maxQueuedOutputBlocks && !this.outputBlocks.has(blockId)) {
+      this.dropOldestOutputBlock();
+    }
+
+    this.outputBlocks.set(blockId, message.channels.slice(0, this.outputChannels).map((channel) => Float32Array.from(channel)));
   }
 
   copyInputBlock(input, frames) {
@@ -97,6 +125,34 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         destination.fill(0);
       }
     }
+  }
+
+  dropOldestOutputBlock() {
+    let oldestBlockId = Number.POSITIVE_INFINITY;
+    for (const blockId of this.outputBlocks.keys()) {
+      oldestBlockId = Math.min(oldestBlockId, blockId);
+    }
+    if (Number.isFinite(oldestBlockId)) {
+      this.outputBlocks.delete(oldestBlockId);
+      this.staleOutputBlocks += 1;
+    }
+  }
+
+  dropStaleOutputBlocks(targetBlockId) {
+    if (targetBlockId < 0) {
+      return;
+    }
+    for (const blockId of Array.from(this.outputBlocks.keys())) {
+      if (blockId < targetBlockId) {
+        this.outputBlocks.delete(blockId);
+        this.staleOutputBlocks += 1;
+      }
+    }
+  }
+
+  boundedInteger(value, fallback, min, max) {
+    const integer = Math.floor(Number(value ?? fallback));
+    return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
   }
 }
 

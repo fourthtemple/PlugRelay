@@ -6,6 +6,8 @@ export interface SoundBridgeAudioNodeOptions {
   inputChannels?: number;
   outputChannels?: number;
   maxInFlightBlocks?: number;
+  maxQueuedOutputBlocks?: number;
+  outputLatencyBlocks?: number;
   workletUrl?: string;
 }
 
@@ -35,7 +37,9 @@ export class SoundBridgeAudioNode extends EventTarget {
         instanceId: options.instanceId,
         inputChannels: options.inputChannels,
         outputChannels: options.outputChannels,
-        maxInFlightBlocks: options.maxInFlightBlocks
+        maxInFlightBlocks: options.maxInFlightBlocks,
+        maxQueuedOutputBlocks: options.maxQueuedOutputBlocks,
+        outputLatencyBlocks: options.outputLatencyBlocks
       }
     });
     this.node.port.onmessage = (event) => this.handleWorkletMessage(event.data);
@@ -50,9 +54,17 @@ export class SoundBridgeAudioNode extends EventTarget {
       instanceId: options.instanceId,
       inputChannels: Math.max(1, Math.min(32, Math.floor(options.inputChannels ?? 2))),
       outputChannels: Math.max(1, Math.min(32, Math.floor(options.outputChannels ?? 2))),
-      maxInFlightBlocks: options.maxInFlightBlocks ?? 8,
+      maxInFlightBlocks: boundedInteger(options.maxInFlightBlocks, 8, 1, 64),
+      maxQueuedOutputBlocks: boundedInteger(options.maxQueuedOutputBlocks, 16, 1, 64),
+      outputLatencyBlocks: 1,
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
+    normalized.outputLatencyBlocks = boundedInteger(
+      options.outputLatencyBlocks,
+      Math.min(2, normalized.maxQueuedOutputBlocks),
+      1,
+      normalized.maxQueuedOutputBlocks
+    );
     await context.audioWorklet.addModule(normalized.workletUrl);
     return new SoundBridgeAudioNode(context, client, normalized);
   }
@@ -83,6 +95,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       frames?: number;
       underruns?: number;
       queuedOutputBlocks?: number;
+      outputLatencyBlocks?: number;
+      staleOutputBlocks?: number;
+      droppedInputBlocks?: number;
     };
 
     if (typed.type === "stats") {
@@ -150,4 +165,9 @@ export class SoundBridgeAudioNode extends EventTarget {
         this.inFlightBlocks -= 1;
       });
   }
+}
+
+function boundedInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+  const integer = Math.floor(Number(value ?? fallback));
+  return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
 }

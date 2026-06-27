@@ -14,7 +14,7 @@ The SDK is a small TypeScript package that gives Web DAWs:
 - protocol message types shared with daemon implementations
 - format-aware plugin metadata for VST3, AU, LV2, and mock/test plugins
 
-The `AudioWorkletProcessor` never blocks. It copies input blocks into a queue, posts them to the main thread, and consumes returned processed blocks when available. If the queue underruns, it falls back to dry audio for the block and reports underrun stats. A production build should move the socket work into a dedicated worker and use `SharedArrayBuffer` ring buffers when cross-origin isolation is available.
+The `AudioWorkletProcessor` never blocks. It copies input blocks, posts them to the main thread, and consumes returned processed blocks by `blockId` at a configured block latency so out-of-order WebSocket responses cannot reshuffle audio during live effects processing. If the target block is missing or stale, it falls back to dry audio for that block and reports underrun, stale-output, dropped-input, queue-depth, and latency-block stats. A production build should move the socket work into a dedicated worker and use `SharedArrayBuffer` ring buffers when cross-origin isolation is available.
 
 ### Local Bridge Daemon
 

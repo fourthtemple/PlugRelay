@@ -1,16 +1,25 @@
 class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   private readonly outputChannels: number;
   private readonly maxQueuedOutputBlocks: number;
+  private readonly outputLatencyBlocks: number;
   private blockId = 0;
   private underruns = 0;
   private processedBlocks = 0;
-  private readonly outputQueue: Float32Array[][] = [];
+  private staleOutputBlocks = 0;
+  private droppedInputBlocks = 0;
+  private readonly outputBlocks = new Map<number, Float32Array[]>();
 
   constructor(options: AudioWorkletNodeOptions) {
     super();
     const processorOptions = options.processorOptions ?? {};
     this.outputChannels = processorOptions.outputChannels ?? 2;
-    this.maxQueuedOutputBlocks = processorOptions.maxQueuedOutputBlocks ?? 16;
+    this.maxQueuedOutputBlocks = this.boundedInteger(processorOptions.maxQueuedOutputBlocks, 16, 1, 64);
+    this.outputLatencyBlocks = this.boundedInteger(
+      processorOptions.outputLatencyBlocks,
+      Math.min(2, this.maxQueuedOutputBlocks),
+      1,
+      this.maxQueuedOutputBlocks
+    );
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
 
@@ -19,20 +28,24 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     const output = outputs[0] ?? [];
     const frames = output[0]?.length ?? input[0]?.length ?? 128;
     const outgoing = this.copyInputBlock(input, frames);
-    const queued = this.outputQueue.shift();
+    const currentBlockId = this.blockId++;
+    const targetBlockId = currentBlockId - this.outputLatencyBlocks;
+    const queued = targetBlockId >= 0 ? this.outputBlocks.get(targetBlockId) : undefined;
 
     if (queued) {
+      this.outputBlocks.delete(targetBlockId);
       this.writeBlock(output, queued, frames);
       this.processedBlocks += 1;
     } else {
       this.writeBlock(output, outgoing, frames);
       this.underruns += 1;
     }
+    this.dropStaleOutputBlocks(targetBlockId);
 
     this.port.postMessage(
       {
         type: "process",
-        blockId: this.blockId++,
+        blockId: currentBlockId,
         frames,
         channels: outgoing
       },
@@ -44,7 +57,10 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         type: "stats",
         processedBlocks: this.processedBlocks,
         underruns: this.underruns,
-        queuedOutputBlocks: this.outputQueue.length
+        queuedOutputBlocks: this.outputBlocks.size,
+        outputLatencyBlocks: this.outputLatencyBlocks,
+        staleOutputBlocks: this.staleOutputBlocks,
+        droppedInputBlocks: this.droppedInputBlocks
       });
     }
 
@@ -56,9 +72,14 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    const typed = message as { type?: string; channels?: number[][] };
+    const typed = message as { type?: string; blockId?: number; channels?: number[][] };
     if (typed.type === "destroy") {
-      this.outputQueue.length = 0;
+      this.outputBlocks.clear();
+      return;
+    }
+
+    if (typed.type === "dropped") {
+      this.droppedInputBlocks += 1;
       return;
     }
 
@@ -66,13 +87,21 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    if (this.outputQueue.length >= this.maxQueuedOutputBlocks) {
-      this.outputQueue.shift();
+    const blockId = Math.floor(Number(typed.blockId));
+    if (!Number.isFinite(blockId) || blockId < 0) {
+      return;
     }
 
-    this.outputQueue.push(
-      typed.channels.slice(0, this.outputChannels).map((channel) => Float32Array.from(channel))
-    );
+    if (blockId < this.blockId - this.outputLatencyBlocks) {
+      this.staleOutputBlocks += 1;
+      return;
+    }
+
+    if (this.outputBlocks.size >= this.maxQueuedOutputBlocks && !this.outputBlocks.has(blockId)) {
+      this.dropOldestOutputBlock();
+    }
+
+    this.outputBlocks.set(blockId, typed.channels.slice(0, this.outputChannels).map((channel) => Float32Array.from(channel)));
   }
 
   private copyInputBlock(input: Float32Array[], frames: number): Float32Array[] {
@@ -101,6 +130,34 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         destination.fill(0);
       }
     }
+  }
+
+  private dropOldestOutputBlock(): void {
+    let oldestBlockId = Number.POSITIVE_INFINITY;
+    for (const blockId of this.outputBlocks.keys()) {
+      oldestBlockId = Math.min(oldestBlockId, blockId);
+    }
+    if (Number.isFinite(oldestBlockId)) {
+      this.outputBlocks.delete(oldestBlockId);
+      this.staleOutputBlocks += 1;
+    }
+  }
+
+  private dropStaleOutputBlocks(targetBlockId: number): void {
+    if (targetBlockId < 0) {
+      return;
+    }
+    for (const blockId of Array.from(this.outputBlocks.keys())) {
+      if (blockId < targetBlockId) {
+        this.outputBlocks.delete(blockId);
+        this.staleOutputBlocks += 1;
+      }
+    }
+  }
+
+  private boundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+    const integer = Math.floor(Number(value ?? fallback));
+    return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
   }
 }
 
