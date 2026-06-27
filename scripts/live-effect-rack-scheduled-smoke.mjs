@@ -83,6 +83,7 @@ const rack = await SoundBridgeLiveEffectRack.create({
   sampleRate: 48000,
   maxBlockSize: 128
 });
+assert(rack.health.dryOutputBlocks === 0, "live rack scheduled smoke starts without dry output pressure");
 
 const staleScheduler = createLiveEffectRackBlockScheduler({
   sampleRate: 48000,
@@ -100,6 +101,7 @@ assert(
   scheduledStale.bypassed === true &&
     scheduledStale.renderEngine === "dry-stale-input" &&
     rack.health.staleInputBlocks === 1 &&
+    rack.health.dryOutputBlocks === 1 &&
     rack.health.lastDryReason === "stale-input",
   "live rack scheduled stale blocks fail dry without plugin processing"
 );
@@ -110,6 +112,7 @@ const scheduledWet = await rack.processScheduledBlock(freshScheduled);
 assert(
   scheduledWet.bypassed === false &&
     scheduledWet.channels[0][0] === 0.5 &&
+    rack.health.dryOutputBlocks === 1 &&
     rack.health.lastDryReason === undefined,
   "live rack scheduled fresh blocks process normally"
 );
@@ -140,6 +143,7 @@ assert(pressureWet.bypassed === false, "live rack scheduled pressure blocks proc
 assert(
   pressureDry.bypassed === true &&
     pressureDry.renderEngine === "dry-deadline-pressure" &&
+    rack.health.dryOutputBlocks === 2 &&
     rack.health.lastDryReason === "deadline-pressure",
   "live rack can fail dry before processing scheduler deadline-pressure blocks"
 );

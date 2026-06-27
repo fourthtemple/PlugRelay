@@ -97,6 +97,7 @@ export interface LiveEffectRackHealth {
   droppedInputBlocks: number;
   staleInputBlocks: number;
   staleOutputBlocks: number;
+  dryOutputBlocks: number;
   transitionFadeSamples: number;
   wetMix: number;
 }

@@ -3128,6 +3128,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.droppedInputBlocks = 0;
     this.staleInputBlocks = 0;
     this.staleOutputBlocks = 0;
+    this.dryOutputBlocks = 0;
     this.processBudgetMisses = 0;
     this.lastProcessDurationMs = void 0;
     this.lastProcessBudgetMs = void 0;
@@ -3240,6 +3241,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       droppedInputBlocks: this.droppedInputBlocks,
       staleInputBlocks: this.staleInputBlocks,
       staleOutputBlocks: this.staleOutputBlocks,
+      dryOutputBlocks: this.dryOutputBlocks,
       transitionFadeSamples: this.transitionFadeSamples,
       wetMix: this.wetMix
     };
@@ -3462,6 +3464,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.droppedInputBlocks = 0;
     this.staleInputBlocks = 0;
     this.staleOutputBlocks = 0;
+    this.dryOutputBlocks = 0;
     this.processBudgetMisses = 0;
     this.lastProcessDurationMs = void 0;
     this.lastProcessBudgetMs = void 0;
@@ -3497,6 +3500,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   }
 
   dryResponse(request, error, renderEngine = "dry-bypass") {
+    this.dryOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.dryOutputBlocks + 1);
     return this.finishResponse({
       blockId: request.blockId,
       channels: dryLiveEffectChannels(request.channels, this.outputChannels, this.maxBlockSize),
