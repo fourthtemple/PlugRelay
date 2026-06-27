@@ -87,10 +87,12 @@ const liveChainOptions = createLivePerformanceRackChainOptions({
   sampleRate: 48000,
   maxBlockSize: 128,
   processBudgetBlocks: 2,
+  processTimeoutBlocks: 3,
   transitionFadeBlocks: 1
 });
 assert(
   near(liveChainOptions.processBudgetMs, (128 / 48000) * 1000 * 2) &&
+    near(liveChainOptions.processTimeoutMs, (128 / 48000) * 1000 * 3) &&
     liveChainOptions.maxConsecutiveProcessBudgetMisses === 3 &&
     liveChainOptions.processBudgetRecoveryBlocks === 16 &&
     liveChainOptions.transitionFadeSamples === 128,
@@ -502,6 +504,66 @@ assert(
   "live rack chain emits retry and post-retry pressure events"
 );
 assert(pressureChain.health.lastDryReason === undefined, "retried live rack chains clear dry reason after wet output");
+
+fakeNowMs = 0;
+const elapsedTimeoutStage = new FakeStage("elapsed-timeout", 5, 0, 0, 3);
+const elapsedTimeoutChain = createLiveEffectRackChain({
+  stages: [elapsedTimeoutStage],
+  outputChannels: 1,
+  maxBlockSize: 2,
+  processTimeoutMs: 2,
+  nowMs: () => fakeNowMs
+});
+const elapsedTimeout = await elapsedTimeoutChain.processBlock({ blockId: 81, channels: [[1, 1]], sampleRate: 48000 });
+assert(
+  elapsedTimeout.bypassed === true &&
+    elapsedTimeout.renderEngine === "chain-process-timeout" &&
+    elapsedTimeout.channels[0][0] === 1 &&
+    elapsedTimeout.chainProcessTimedOut === true &&
+    elapsedTimeout.chainUnhealthyReason === "process-timeout" &&
+    elapsedTimeoutChain.health.processTimeoutTripped === true,
+  "live rack chain fails dry when aggregate stage time exceeds timeout"
+);
+
+let hangingRequests = 0;
+const hangingStage = {
+  health: { instanceId: "inst-hang" },
+  async processBlock() {
+    hangingRequests += 1;
+    return new Promise(() => undefined);
+  }
+};
+const hangingTimeoutChain = createLiveEffectRackChain({
+  stages: [hangingStage],
+  outputChannels: 1,
+  maxBlockSize: 2,
+  processTimeoutMs: 1,
+  nowMs: () => 0
+});
+let timeoutEvents = 0;
+hangingTimeoutChain.addEventListener("chain-process-timeout", (event) => {
+  timeoutEvents += 1;
+  assert(event.detail.health.processTimeoutTripped === true, "live rack chain timeout events include tripped health");
+});
+const hangingTimeout = await hangingTimeoutChain.processBlock({ blockId: 82, channels: [[2, 2]], sampleRate: 48000 });
+const hangingTimeoutDry = await hangingTimeoutChain.processBlock({ blockId: 83, channels: [[3, 3]], sampleRate: 48000 });
+assert(
+  hangingTimeout.bypassed === true &&
+    hangingTimeout.renderEngine === "chain-process-timeout" &&
+    hangingTimeout.chainProcessDurationMs === 1 &&
+    hangingTimeout.chainProcessTimeoutMs === 1 &&
+    hangingTimeoutChain.health.processTimedOut === true &&
+    hangingTimeoutChain.health.processTimeoutTripped === true &&
+    timeoutEvents === 1,
+  "live rack chain fails dry when a stage promise times out"
+);
+assert(
+  hangingTimeoutDry.bypassed === true &&
+    hangingTimeoutDry.renderEngine === "chain-process-timeout" &&
+    hangingRequests === 1,
+  "timed-out live rack chains stay dry until retry"
+);
+assert(hangingTimeoutChain.retry() === true && hangingTimeoutChain.health.processTimeoutTripped === false, "live rack chain retry clears timeout trips");
 
 fakeNowMs = 0;
 const recoveryStage = new FakeStage("recovery", 3, 0, 0, 3);

@@ -2917,6 +2917,7 @@ export class LiveEffectRackChain extends EventTarget {
     this.stages = stages.slice(0, maxStages);
     this.maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
     this.processBudgetMs = boundedLiveEffectNumber(options.processBudgetMs, 0, 0, 60000);
+    this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, 0, 0, 60000);
     this.maxConsecutiveProcessBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveProcessBudgetMisses, 0, 0, 1024);
     this.processBudgetRecoveryBlocks = boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, 0, 0, 4096);
     this.transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, 0, 0, 4096);
@@ -2944,6 +2945,7 @@ export class LiveEffectRackChain extends EventTarget {
     this.lastProcessDurationMs = void 0;
     this.lastProcessBudgetMs = void 0;
     this.lastProcessBudgetExceeded = false;
+    this.lastProcessTimedOut = false;
     this.lastResponseDeadlineLeadMs = void 0;
     this.lastResponseDeadlineLeadBlocks = void 0;
     this.responseDeadlineLeadMinBlocks = void 0;
@@ -2974,6 +2976,7 @@ export class LiveEffectRackChain extends EventTarget {
       lastDryReason: this.lastDryReason,
       dryOutputBlocks: this.dryOutputBlocks,
       processBudgetMs: this.processBudgetMs,
+      processTimeoutMs: this.processTimeoutMs,
       maxConsecutiveProcessBudgetMisses: this.maxConsecutiveProcessBudgetMisses,
       processBudgetRecoveryBlocks: this.processBudgetRecoveryBlocks,
       transitionFadeSamples: this.transitionFadeSamples,
@@ -2981,11 +2984,13 @@ export class LiveEffectRackChain extends EventTarget {
       lastProcessDurationMs: this.lastProcessDurationMs,
       lastProcessBudgetMs: this.lastProcessBudgetMs,
       processBudgetExceeded: this.lastProcessBudgetExceeded,
+      processTimedOut: this.lastProcessTimedOut,
       lastResponseDeadlineLeadMs: this.lastResponseDeadlineLeadMs,
       lastResponseDeadlineLeadBlocks: this.lastResponseDeadlineLeadBlocks,
       responseJitterBlocks: this.responseJitterBlocks,
       responseDeadlineMisses: this.responseDeadlineMisses,
       processBudgetTripped: this.unhealthyReason === "process-budget-exceeded",
+      processTimeoutTripped: this.unhealthyReason === "process-timeout",
       recoveryDryBlocks: this.recoveryDryBlocks,
       unhealthyReason: this.unhealthyReason,
       lastError: this.lastError
@@ -2993,7 +2998,7 @@ export class LiveEffectRackChain extends EventTarget {
   }
 
   get timing() {
-    return liveEffectRackTiming(this.sampleRate, this.maxBlockSize, this.latencySamples, 0, this.latencySamples, this.processBudgetMs, 0, 0, this.transitionFadeSamples);
+    return liveEffectRackTiming(this.sampleRate, this.maxBlockSize, this.latencySamples, 0, this.latencySamples, this.processBudgetMs, this.processTimeoutMs, 0, this.transitionFadeSamples);
   }
 
   async processBlock(request, options = {}) {
@@ -3004,8 +3009,9 @@ export class LiveEffectRackChain extends EventTarget {
       this.maybeRecoverFromProcessBudget();
       return response;
     }
-    if (this.unhealthyReason === "process-budget-exceeded") {
-      const response = this.chainDryResponse(request, "chain-process-budget-exceeded", outputChannels, this.lastError, false);
+    if (this.unhealthyReason !== void 0) {
+      const reason = this.unhealthyReason === "process-timeout" ? "chain-process-timeout" : "chain-process-budget-exceeded";
+      const response = this.chainDryResponse(request, reason, outputChannels, this.lastError, false);
       this.maybeRecoverFromProcessBudget();
       return response;
     }
@@ -3022,12 +3028,15 @@ export class LiveEffectRackChain extends EventTarget {
       const stage = this.stages[index];
       const stageStartedAt = this.nowMs();
       try {
-        const response = await stage.processBlock({
+        const timeoutMs = this.remainingProcessTimeoutMs(processStartedAt);
+        if (timeoutMs === 0) return this.chainProcessTimeoutResponse(request, outputChannels, processStartedAt, new Error("chain_process_timeout"));
+        const response = await withLiveEffectTimeout(stage.processBlock({
           ...request,
           channels,
           wetMix: liveEffectChainStageWetMix(options.stageWetMixes, index, request.wetMix)
-        });
+        }), timeoutMs ?? 0);
         const stageDurationMs = this.nowMs() - stageStartedAt;
+        if (this.processTimedOut(processStartedAt)) return this.chainProcessTimeoutResponse(request, outputChannels, processStartedAt, new Error("chain_process_timeout"));
         channels = boundedLiveEffectChannels(response.channels, outputChannels, this.maxBlockSize);
         latencySamples = boundedLiveEffectLatencySamples(
           latencySamples + boundedLiveEffectLatencySamples(response.latencySamples, 0),
@@ -3040,6 +3049,7 @@ export class LiveEffectRackChain extends EventTarget {
         infiniteTail = infiniteTail || response.infiniteTail === true;
         stageResults.push(liveEffectChainStageResult(index, stage, response, stageDurationMs));
       } catch (error) {
+        if (liveEffectChainTimeoutError(error)) return this.chainProcessTimeoutResponse(request, outputChannels, processStartedAt, error);
         stageResults.push(liveEffectChainStageErrorResult(index, stage, error, this.nowMs() - stageStartedAt));
         return this.finishChainResponse({
           blockId: request.blockId,
@@ -3110,7 +3120,7 @@ export class LiveEffectRackChain extends EventTarget {
   }
 
   retry() {
-    if (this.unhealthyReason !== "process-budget-exceeded") {
+    if (this.unhealthyReason === void 0) {
       return false;
     }
     this.lastError = void 0;
@@ -3118,6 +3128,7 @@ export class LiveEffectRackChain extends EventTarget {
     this.processBudgetMisses = 0;
     this.recoveryDryBlocks = 0;
     this.lastProcessBudgetExceeded = false;
+    this.lastProcessTimedOut = false;
     this.dispatchEvent(new CustomEvent("retry", { detail: { health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
     return true;
@@ -3138,9 +3149,11 @@ export class LiveEffectRackChain extends EventTarget {
       stageCount: this.stages.length,
       processedStages: 0,
       stageResults: [],
-      chainProcessDurationMs: 0,
+      chainProcessDurationMs: this.unhealthyReason === "process-timeout" ? this.lastProcessDurationMs : 0,
       chainProcessBudgetMs: this.processBudgetMs > 0 ? this.processBudgetMs : void 0,
+      chainProcessTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : void 0,
       chainProcessBudgetExceeded: chainProcessBudgetTripped,
+      chainProcessTimedOut: this.unhealthyReason === "process-timeout",
       chainProcessBudgetMisses: this.processBudgetMisses,
       chainProcessBudgetTripped,
       chainUnhealthyReason: this.unhealthyReason
@@ -3161,6 +3174,7 @@ export class LiveEffectRackChain extends EventTarget {
     this.lastProcessBudgetMs = this.processBudgetMs > 0 ? this.processBudgetMs : void 0;
     this.recordResponseDeadlineLead(request.sampleRate);
     this.lastProcessBudgetExceeded = chainProcessBudgetExceeded;
+    this.lastProcessTimedOut = false;
     this.processBudgetMisses = chainProcessBudgetExceeded ? Math.min(1024, this.processBudgetMisses + 1) : 0;
     const chainProcessBudgetTripped = response.healthy !== false && this.maxConsecutiveProcessBudgetMisses > 0 && this.processBudgetMisses >= this.maxConsecutiveProcessBudgetMisses;
     const error = chainProcessBudgetTripped ? response.error ?? new Error("chain_process_budget_exceeded") : response.error;
@@ -3180,7 +3194,9 @@ export class LiveEffectRackChain extends EventTarget {
         error,
         chainProcessDurationMs: durationMs,
         chainProcessBudgetMs: this.processBudgetMs > 0 ? this.processBudgetMs : void 0,
+        chainProcessTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : void 0,
         chainProcessBudgetExceeded,
+        chainProcessTimedOut: false,
         chainProcessBudgetMisses: this.processBudgetMisses,
         chainProcessBudgetTripped,
         chainUnhealthyReason: this.unhealthyReason
@@ -3196,7 +3212,9 @@ export class LiveEffectRackChain extends EventTarget {
       error,
       chainProcessDurationMs: durationMs,
       chainProcessBudgetMs: this.processBudgetMs > 0 ? this.processBudgetMs : void 0,
+      chainProcessTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : void 0,
       chainProcessBudgetExceeded,
+      chainProcessTimedOut: false,
       chainProcessBudgetMisses: this.processBudgetMisses,
       chainProcessBudgetTripped,
       chainUnhealthyReason: this.unhealthyReason
@@ -3204,6 +3222,21 @@ export class LiveEffectRackChain extends EventTarget {
     this.recordStageHealth(finalResponse);
     this.dispatchChainPressureEvents(finalResponse, previousMisses, previousUnhealthyReason);
     return finalResponse;
+  }
+
+  chainProcessTimeoutResponse(request, outputChannels, processStartedAt, error) {
+    this.lastProcessDurationMs = Math.max(this.processTimeoutMs, boundedLiveEffectOptionalNumber(this.nowMs() - processStartedAt, 0, 60000) ?? 0);
+    this.lastProcessBudgetMs = this.processBudgetMs > 0 ? this.processBudgetMs : void 0;
+    this.lastProcessBudgetExceeded = false;
+    this.lastProcessTimedOut = true;
+    this.lastError = error;
+    this.unhealthyReason = "process-timeout";
+    this.recordResponseDeadlineLead(request.sampleRate);
+    const response = this.chainDryResponse(request, "chain-process-timeout", outputChannels, error, false);
+    this.recordStageHealth(response);
+    this.dispatchEvent(new CustomEvent("chain-process-timeout", { detail: { response, health: this.health } }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+    return response;
   }
 
   finishOutputResponse(response, outputChannels) {
@@ -3296,6 +3329,16 @@ export class LiveEffectRackChain extends EventTarget {
     }
   }
 
+  remainingProcessTimeoutMs(processStartedAt) {
+    if (this.processTimeoutMs <= 0) return void 0;
+    const remaining = this.processTimeoutMs - (this.nowMs() - processStartedAt);
+    return remaining <= 0 ? 0 : remaining;
+  }
+
+  processTimedOut(processStartedAt) {
+    return this.processTimeoutMs > 0 && this.nowMs() - processStartedAt > this.processTimeoutMs;
+  }
+
   dispatchChainPressureEvents(response, previousMisses, previousUnhealthyReason) {
     const health = this.health;
     if (response.chainProcessBudgetExceeded) {
@@ -3332,7 +3375,7 @@ export function createLiveEffectRackChain(options) {
 }
 
 export function createLivePerformanceRackChainOptions(options) {
-  const { processBudgetBlocks, transitionFadeBlocks, ...chainOptions } = options;
+  const { processBudgetBlocks, processTimeoutBlocks, transitionFadeBlocks, ...chainOptions } = options;
   const sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
   const maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
   const policy = createLiveEffectRackPolicy({
@@ -3340,6 +3383,7 @@ export function createLivePerformanceRackChainOptions(options) {
     sampleRate,
     maxBlockSize,
     processBudgetBlocks,
+    processTimeoutBlocks,
     transitionFadeBlocks
   });
   return {
@@ -3347,6 +3391,7 @@ export function createLivePerformanceRackChainOptions(options) {
     sampleRate: policy.sampleRate,
     maxBlockSize: policy.maxBlockSize,
     processBudgetMs: policy.processBudgetMs,
+    processTimeoutMs: policy.processTimeoutMs,
     maxConsecutiveProcessBudgetMisses: policy.maxConsecutiveProcessBudgetMisses,
     processBudgetRecoveryBlocks: policy.processBudgetRecoveryBlocks,
     transitionFadeSamples: policy.transitionFadeSamples
@@ -3367,7 +3412,7 @@ function liveEffectChainFailedStageIndex(value, stageCount) {
 }
 
 function liveEffectChainDryReason(response) {
-  if (response.renderEngine === "chain-bypass" || response.renderEngine === "chain-deadline-pressure" || response.renderEngine === "chain-empty" || response.renderEngine === "chain-process-budget-exceeded" || response.renderEngine === "chain-stage-error" || response.renderEngine === "chain-stale-input") {
+  if (response.renderEngine === "chain-bypass" || response.renderEngine === "chain-deadline-pressure" || response.renderEngine === "chain-empty" || response.renderEngine === "chain-process-budget-exceeded" || response.renderEngine === "chain-process-timeout" || response.renderEngine === "chain-stage-error" || response.renderEngine === "chain-stale-input") {
     return response.renderEngine;
   }
   if (response.stageResults.length > 0 && response.stageResults.every((stage) => stage.bypassed)) {
@@ -3399,6 +3444,10 @@ function liveEffectChainStageErrorResult(index, stage, error, durationMs) {
     durationMs: boundedLiveEffectOptionalNumber(durationMs, 0, 60000),
     error
   };
+}
+
+function liveEffectChainTimeoutError(error) {
+  return error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout";
 }
 
 const LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID = 9_007_199_254_740_991;
