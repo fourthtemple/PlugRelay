@@ -228,6 +228,7 @@ export async function exerciseInstalledProbeSupport({ check }) {
       tailSamples: 128,
       infiniteTail: false,
       renderedChannels: 2,
+      renderDurationMs: 7,
       renderSignal: "signal",
       outputBusSignalProfile: {
         category: "main-aux-signal",
@@ -330,6 +331,7 @@ export async function exerciseInstalledProbeSupport({ check }) {
       coverageSummary.matrix[0].pluginId === "vst3:neutral-effect" &&
       coverageSummary.matrix[0].renderSignal === "signal" &&
       coverageSummary.matrix[0].renderedChannels === 2 &&
+      coverageSummary.matrix[0].renderDurationMs === 7 &&
       coverageSummary.matrix[0].listedPreset === "applied" &&
       coverageSummary.matrix[0].listedPresetParameterCount === 4 &&
       coverageSummary.matrix[0].vst3ProgramData === "restored" &&

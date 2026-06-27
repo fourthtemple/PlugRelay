@@ -130,6 +130,7 @@ function summarizeCompatibilityMatrix(results, options) {
         : safeMatrixText(failureError?.code ?? failureError?.message ?? "unknown_error", 96),
       renderSignal: safeMatrixText(renderSignalStatus(result), 32),
       renderedChannels: safeMatrixInteger(result.renderedChannels, 0, 32),
+      renderDurationMs: safeMatrixInteger(result.renderDurationMs, 0, 60000),
       outputBusSignal: safeMatrixText(outputBusSignalStatus(result), 64),
       outputBusSignalFlags: safeMatrixArray(result.outputBusSignalProfile?.flags, 64),
       outputBusSignalCount: safeMatrixInteger(result.outputBusSignalProfile?.signalOutputBusCount, 0, 32),

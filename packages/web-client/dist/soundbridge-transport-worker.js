@@ -175,7 +175,7 @@ function routeAudioResponse(envelope) {
       const payload = envelope.payload;
       writeSharedOutputBlock(shared, Math.floor(Number(payload.blockId ?? 0)), Array.isArray(payload.channels) ? payload.channels : []);
       if (typeof payload.renderEngine === "string") {
-        shared.port.postMessage({ type: "process-diagnostics", blockId: payload.blockId, renderEngine: payload.renderEngine });
+        shared.port.postMessage({ type: "process-diagnostics", blockId: payload.blockId, renderEngine: payload.renderEngine, renderDurationMs: payload.renderDurationMs });
       }
     } else {
       shared.port.postMessage({ type: "audio-error", error: envelope.error });
@@ -197,6 +197,7 @@ function routeAudioResponse(envelope) {
         blockId: payload.blockId,
         channels,
         latencySamples: payload.latencySamples,
+        renderDurationMs: payload.renderDurationMs,
         renderEngine: payload.renderEngine
       },
       transferableChannelBuffers(channels)

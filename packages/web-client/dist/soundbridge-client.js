@@ -775,7 +775,8 @@ export class SoundBridgeAudioNode extends EventTarget {
             new CustomEvent("process-diagnostics", {
               detail: {
                 blockId: response.blockId,
-                renderEngine: response.renderEngine
+                renderEngine: response.renderEngine,
+                renderDurationMs: response.renderDurationMs
               }
             })
           );
@@ -784,7 +785,8 @@ export class SoundBridgeAudioNode extends EventTarget {
           type: "processed",
           blockId: response.blockId,
           channels: response.channels,
-          latencySamples: response.latencySamples
+          latencySamples: response.latencySamples,
+          renderDurationMs: response.renderDurationMs
         });
       })
       .catch((error) => {

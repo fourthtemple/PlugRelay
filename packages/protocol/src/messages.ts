@@ -510,6 +510,7 @@ export interface AudioBlockResponse {
   latencySamples: number;
   tailSamples?: number;
   infiniteTail?: boolean;
+  renderDurationMs?: number;
   renderEngine?: "bundle-worker" | "bundle-executable" | "native-example" | "js-fallback" | string;
 }
 

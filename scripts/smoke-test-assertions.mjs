@@ -170,6 +170,13 @@ export function assertSameLayout(actual, expected, message) {
   );
 }
 
+export function assertRenderDuration(block, message) {
+  assert(
+    typeof block.renderDurationMs === "number" && block.renderDurationMs >= 0 && block.renderDurationMs <= 60000,
+    `${message}: render duration is bounded`
+  );
+}
+
 export function blockHasSignal(channels) {
   return channels.some((channel) => channel.some((sample) => Math.abs(sample) > 0.0001));
 }

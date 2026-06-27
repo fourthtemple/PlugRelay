@@ -9,6 +9,7 @@ import {
   assertLatencyReport,
   assertLayoutReport,
   assertOutputBuses,
+  assertRenderDuration,
   assertSameLayout,
   assertTailReport,
   blockHasSignal
@@ -184,6 +185,7 @@ const nativeAuBlock = await request(
   pair.sessionToken
 );
 assert(nativeAuBlock.renderEngine === "native-au", "installed AU effect rendered through the native AU host worker");
+assertRenderDuration(nativeAuBlock, "installed AU block reports native render duration");
 assert(blockHasSignal(nativeAuBlock.channels), "installed AU effect produced processed audio");
 assert(nativeAuBlock.channels.length === nativeAuLayout.outputChannels, "installed AU render uses negotiated output channels");
 assertOutputBuses(nativeAuBlock, nativeAuLayout, "installed AU render reports bounded output buses");
@@ -380,6 +382,7 @@ const nativeVst3Block = await request(
   pair.sessionToken
 );
 assert(nativeVst3Block.renderEngine === "native-vst3", "installed VST3 effect rendered through the native VST3 host worker");
+assertRenderDuration(nativeVst3Block, "installed VST3 block reports native render duration");
 assert(blockHasSignal(nativeVst3Block.channels), "installed VST3 effect produced processed audio");
 assert(nativeVst3Block.channels.length === nativeVst3Layout.outputChannels, "installed VST3 render uses negotiated output channels");
 assertOutputBuses(nativeVst3Block, nativeVst3Layout, "installed VST3 render reports bounded output buses");
@@ -680,6 +683,7 @@ assert(restored.restored === true, "setState restored state");
 
 const latency = await request(socket, "getLatency", { instanceId: created.instanceId, transportLatencySamples: 64 }, true, pair.sessionToken);
 assertLatencyReport(latency, 64, "getLatency returns bounded mock plugin and transport latency");
+assertRenderDuration(processed, "mock block reports render duration");
 assert(processed.latencySamples === latency.pluginLatencySamples, "mock block latency matches getLatency plugin latency");
 const tail = await request(socket, "getTailTime", { instanceId: created.instanceId }, true, pair.sessionToken);
 assertTailReport(tail, "getTailTime returns bounded mock tail time");

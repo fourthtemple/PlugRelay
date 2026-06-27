@@ -59,6 +59,7 @@ const responseEnvelope = {
     latencySamples: 3,
     tailSamples: 0,
     infiniteTail: false,
+    renderDurationMs: 1.5,
     renderEngine: "mock"
   }
 };
@@ -66,6 +67,7 @@ const responseEnvelope = {
 const decodedResponse = decodeBinaryAudioEnvelope(encodeBinaryAudioEnvelope(responseEnvelope));
 assert(decodedResponse.ok === true, "binary response preserves ok status");
 assert(decodedResponse.payload.latencySamples === 3, "binary response preserves non-audio payload metadata");
+assert(decodedResponse.payload.renderDurationMs === 1.5, "binary response preserves render timing metadata");
 assert(decodedResponse.payload.outputBuses[0].channels[0][0] === 999, "binary response restores output bus samples");
 assert(!("outputBuses" in readBinaryHeader(encodeBinaryAudioEnvelope(responseEnvelope)).payload), "binary response keeps output bus samples out of JSON header");
 assert(decodedResponse.payload.channels[0][2] < 0, "binary response restores output samples");

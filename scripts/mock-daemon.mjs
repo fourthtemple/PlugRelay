@@ -581,7 +581,9 @@ async function processAudioBlock(payload, session) {
   await applyAutomationLanesForBlock(instance, transport, frames);
 
   if (instance.kind === "instrument") {
+    const renderStartedAt = renderTimestampMs();
     const processed = await processInstrumentBlock(instance, frames, blockSampleRate, { inputBuses, transport });
+    const renderDurationMs = boundedRenderDurationMs(renderStartedAt);
     const processedChannels = normalizeAudioChannels(processed.channels, instance.outputChannels, frames);
     return {
       blockId: payload.blockId,
@@ -591,11 +593,13 @@ async function processAudioBlock(payload, session) {
       ...(transport ? { transport } : {}),
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
-      infiniteTail: Boolean(instance.pluginInfiniteTail)
+      infiniteTail: Boolean(instance.pluginInfiniteTail),
+      renderDurationMs
     };
   }
 
   if (instance.worker) {
+    const renderStartedAt = renderTimestampMs();
     const rendered = await instance.worker.render({
       frames,
       sampleRate: blockSampleRate,
@@ -603,6 +607,7 @@ async function processAudioBlock(payload, session) {
       inputBuses,
       transport
     });
+    const renderDurationMs = boundedRenderDurationMs(renderStartedAt);
     const renderedChannels = Array.isArray(rendered) ? rendered : rendered.channels;
     return {
       blockId: payload.blockId,
@@ -612,10 +617,12 @@ async function processAudioBlock(payload, session) {
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
       infiniteTail: Boolean(instance.pluginInfiniteTail),
+      renderDurationMs,
       renderEngine: instance.renderEngine ?? instance.worker.renderEngine ?? "native-host"
     };
   }
 
+  const renderStartedAt = renderTimestampMs();
   const gainLinear = Math.pow(10, normalizedGainToDb(parameterValue(instance, "gain", 0.5)) / 20);
   const output = channels.slice(0, instance.outputChannels).map((channel) => {
     if (!Array.isArray(channel)) {
@@ -641,8 +648,18 @@ async function processAudioBlock(payload, session) {
     ...(transport ? { transport } : {}),
     latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
     tailSamples: normalizeTailSamples(instance.pluginTailSamples),
-    infiniteTail: Boolean(instance.pluginInfiniteTail)
+    infiniteTail: Boolean(instance.pluginInfiniteTail),
+    renderDurationMs: boundedRenderDurationMs(renderStartedAt)
   };
+}
+
+function renderTimestampMs() {
+  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+}
+
+function boundedRenderDurationMs(startedAt) {
+  const elapsed = renderTimestampMs() - startedAt;
+  return Number.isFinite(elapsed) ? Math.max(0, Math.min(60000, Math.round(elapsed * 1000) / 1000)) : 0;
 }
 
 function getInstance(instanceId, session) {

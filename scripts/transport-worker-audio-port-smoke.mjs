@@ -161,6 +161,7 @@ socket.emit("message", {
       blockId: 7,
       channels: [[0.75, 1]],
       latencySamples: 0,
+      renderDurationMs: 1.25,
       renderEngine: "json-compat"
     }
   })
@@ -171,6 +172,7 @@ assert(
   audioPort.transfers.at(-1).length === 0,
   "transport worker does not try to transfer plain JSON channel arrays"
 );
+assert(processed.renderDurationMs === 1.25, "transport worker routes render timing diagnostics on the port path");
 
 const sharedAudio = createSharedAudio(2, 1, 2);
 writeSharedInput(sharedAudio, 13, [Float32Array.from([0.1, 0.2])]);
@@ -204,6 +206,7 @@ socket.emit("message", {
       blockId: 13,
       channels: [Float32Array.from([0.9, 0.8])],
       latencySamples: 0,
+      renderDurationMs: 2.5,
       renderEngine: "shared-worker"
     }
   })
@@ -223,8 +226,8 @@ assert(
   "transport worker writes shared output samples"
 );
 assert(
-  sharedPort.messages.some((message) => message.type === "process-diagnostics" && message.renderEngine === "shared-worker"),
-  "transport worker forwards shared path render diagnostics"
+  sharedPort.messages.some((message) => message.type === "process-diagnostics" && message.renderEngine === "shared-worker" && message.renderDurationMs === 2.5),
+  "transport worker forwards shared path render timing diagnostics"
 );
 
 console.log("Transport worker audio port smoke checks passed.");
