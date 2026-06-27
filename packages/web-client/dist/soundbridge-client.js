@@ -1441,6 +1441,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     return this.client.setParameterCurve(this.requireControllableInstance(), parameterId, points, interpolation);
   }
 
+  setAutomationLane(parameterId, points) { return this.client.setAutomationLane(this.requireControllableInstance(), parameterId, points); }
+
+  clearAutomationLane(parameterId) { return this.client.clearAutomationLane(this.requireControllableInstance(), parameterId); }
+
   sendMidiEvents(events) { return this.client.sendMidiEvents(this.requireControllableInstance(), events); }
 
   async recreate() {

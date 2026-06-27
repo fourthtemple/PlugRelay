@@ -29,6 +29,8 @@ class FakeLiveClient {
     this.parameterSets = [];
     this.parameterEvents = [];
     this.parameterCurves = [];
+    this.automationLanes = [];
+    this.clearedAutomationLanes = [];
     this.presets = [];
     this.midiEvents = [];
     this.failProcessing = false;
@@ -119,6 +121,10 @@ class FakeLiveClient {
     this.parameterCurves.push({ instanceId, parameterId, points, interpolation });
     return { accepted: true, eventCount: points.length, parameter: this.parameter(parameterId, points.at(-1)?.normalizedValue ?? 0) };
   }
+
+  async setAutomationLane(instanceId, parameterId, points) { this.automationLanes.push({ instanceId, parameterId, points }); return { accepted: true, parameterId, pointCount: points.length, laneCount: 1, parameter: this.parameter(parameterId, points.at(-1)?.normalizedValue ?? 0) }; }
+
+  async clearAutomationLane(instanceId, parameterId) { this.clearedAutomationLanes.push({ instanceId, parameterId }); return { cleared: true, parameterId, laneCount: 0 }; }
 
   async sendMidiEvents(instanceId, events) { this.midiEvents.push({ instanceId, events }); return { accepted: true, eventCount: events.length }; }
 
@@ -220,17 +226,12 @@ await rack.setPreset("dub-delay");
 await rack.setParameter("filter", 0.75);
 await rack.setParameterEvents([{ parameterId: "filter", normalizedValue: 0.25, time: 16 }]);
 await rack.setParameterCurve("filter", [{ time: 0, normalizedValue: 0.1 }, { time: 64, normalizedValue: 0.9 }], "linear");
+await rack.setAutomationLane("filter", [{ samplePosition: 0, normalizedValue: 0.2 }, { samplePosition: 128, normalizedValue: 0.8 }]);
+await rack.clearAutomationLane("filter");
 await rack.sendMidiEvents([{ type: "controlChange", controller: 1, value: 0.5, channel: 0 }]);
 assert(rackParameters.parameters[0]?.id === "filter", "live rack exposes rack-owned parameter metadata");
-assert(
-  client.parameterRequests.at(-1) === rack.instanceId &&
-    client.presets.at(-1)?.instanceId === rack.instanceId &&
-    client.parameterSets.at(-1)?.instanceId === rack.instanceId &&
-    client.parameterEvents.at(-1)?.instanceId === rack.instanceId &&
-    client.parameterCurves.at(-1)?.instanceId === rack.instanceId &&
-    client.midiEvents.at(-1)?.instanceId === rack.instanceId,
-  "live rack binds control helpers to its owned instance"
-);
+const rackControlTargets = [client.parameterRequests.at(-1), client.presets.at(-1)?.instanceId, client.parameterSets.at(-1)?.instanceId, client.parameterEvents.at(-1)?.instanceId, client.parameterCurves.at(-1)?.instanceId, client.automationLanes.at(-1)?.instanceId, client.clearedAutomationLanes.at(-1)?.instanceId, client.midiEvents.at(-1)?.instanceId];
+assert(rackControlTargets.every((instanceId) => instanceId === rack.instanceId), "live rack binds control helpers to its owned instance");
 
 let latencyEvents = 0;
 rack.addEventListener("latencychange", () => {
