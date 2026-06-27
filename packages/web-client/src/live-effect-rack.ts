@@ -101,6 +101,7 @@ export interface LiveEffectRackHealth {
   lastProcessDurationMs?: number;
   lastProcessBudgetMs?: number;
   processBudgetExceeded: boolean;
+  lastResponseDeadlineLeadMs?: number; lastResponseDeadlineLeadBlocks?: number; responseJitterBlocks: number; responseDeadlineMisses: number;
   renderBudgetMisses: number;
   lastRenderDurationMs?: number;
   lastRenderBudgetMs?: number;
@@ -204,6 +205,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   private lastProcessDurationMs?: number;
   private lastProcessBudgetMs?: number;
   private lastProcessBudgetExceeded = false;
+  private lastResponseDeadlineLeadMs?: number; private lastResponseDeadlineLeadBlocks?: number; private responseDeadlineLeadMinBlocks?: number; private responseDeadlineLeadMaxBlocks?: number; private responseJitterBlocks = 0; private responseDeadlineMisses = 0;
   private renderBudgetMisses = 0;
   private lastRenderDurationMs?: number;
   private lastRenderBudgetMs?: number;
@@ -243,11 +245,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.wetMix = boundedWetMix(options.wetMix, 1);
   }
 
-  static async create(options: LiveEffectRackOptions): Promise<SoundBridgeLiveEffectRack> {
-    const rack = new SoundBridgeLiveEffectRack(options);
-    await rack.createInstance();
-    return rack;
-  }
+  static async create(options: LiveEffectRackOptions): Promise<SoundBridgeLiveEffectRack> { const rack = new SoundBridgeLiveEffectRack(options); await rack.createInstance(); return rack; }
   static createLivePerformance(options: LivePerformanceRackOptions): Promise<SoundBridgeLiveEffectRack> {
     return SoundBridgeLiveEffectRack.create(createLivePerformanceRackOptions(options));
   }
@@ -273,6 +271,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       lastProcessDurationMs: this.lastProcessDurationMs,
       lastProcessBudgetMs: this.lastProcessBudgetMs,
       processBudgetExceeded: this.lastProcessBudgetExceeded,
+      lastResponseDeadlineLeadMs: this.lastResponseDeadlineLeadMs, lastResponseDeadlineLeadBlocks: this.lastResponseDeadlineLeadBlocks, responseJitterBlocks: this.responseJitterBlocks, responseDeadlineMisses: this.responseDeadlineMisses,
       renderBudgetMisses: this.renderBudgetMisses,
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
@@ -504,6 +503,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastProcessDurationMs = undefined;
     this.lastProcessBudgetMs = undefined;
     this.lastProcessBudgetExceeded = false;
+    this.lastResponseDeadlineLeadMs = this.lastResponseDeadlineLeadBlocks = this.responseDeadlineLeadMinBlocks = this.responseDeadlineLeadMaxBlocks = undefined; this.responseJitterBlocks = this.responseDeadlineMisses = 0;
     this.transportLatencySamples = 0;
     this.reportedLatencySamples = this.created.latencySamples;
     this.renderBudgetMisses = 0;
@@ -559,12 +559,23 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   private recordProcessBudget(durationMs: number): boolean {
     this.lastProcessDurationMs = boundedOptionalNumber(durationMs, 0, 60000);
     this.lastProcessBudgetMs = this.processBudgetMs > 0 ? this.processBudgetMs : undefined;
+    this.recordResponseDeadlineLead();
     this.lastProcessBudgetExceeded = this.processBudgetMs > 0 && (this.lastProcessDurationMs ?? 0) > this.processBudgetMs;
     this.processBudgetMisses = this.lastProcessBudgetExceeded ? Math.min(1024, this.processBudgetMisses + 1) : 0;
     if (this.lastProcessBudgetExceeded) {
       this.dispatchEvent(new CustomEvent("process-budget-exceeded", { detail: { durationMs: this.lastProcessDurationMs, health: this.health } }));
     }
     return this.maxConsecutiveProcessBudgetMisses > 0 && this.processBudgetMisses >= this.maxConsecutiveProcessBudgetMisses;
+  }
+
+  private recordResponseDeadlineLead(): void {
+    if (!this.lastProcessBudgetMs || this.lastProcessDurationMs === undefined) return;
+    this.lastResponseDeadlineLeadMs = boundedOptionalNumber(this.lastProcessBudgetMs - this.lastProcessDurationMs, -60000, 60000);
+    this.lastResponseDeadlineLeadBlocks = this.lastResponseDeadlineLeadMs === undefined ? undefined : Number((this.lastResponseDeadlineLeadMs / (this.maxBlockSize / this.sampleRate * 1000)).toFixed(3));
+    this.responseDeadlineLeadMinBlocks = Math.min(this.responseDeadlineLeadMinBlocks ?? this.lastResponseDeadlineLeadBlocks ?? 0, this.lastResponseDeadlineLeadBlocks ?? 0);
+    this.responseDeadlineLeadMaxBlocks = Math.max(this.responseDeadlineLeadMaxBlocks ?? this.lastResponseDeadlineLeadBlocks ?? 0, this.lastResponseDeadlineLeadBlocks ?? 0);
+    this.responseJitterBlocks = Number(((this.responseDeadlineLeadMaxBlocks ?? 0) - (this.responseDeadlineLeadMinBlocks ?? 0)).toFixed(3));
+    if ((this.lastResponseDeadlineLeadMs ?? 0) < 0) this.responseDeadlineMisses = Math.min(1024, this.responseDeadlineMisses + 1);
   }
 
   private recordResponseLatency(response: AudioBlockResponse): void {
