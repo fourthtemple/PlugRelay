@@ -168,6 +168,14 @@ assert(
   "direct worklet transport reuses recycled input buffers for later process blocks"
 );
 assert(directProcessor.inputBufferReuses === 1, "direct worklet transport counts input buffer reuse");
+directMainPort.onmessage({ data: { type: "destroy" } });
+assert(directTransportPort.messages.at(-1)?.type === "destroy", "worklet destroy notifies the transport port");
+const directMessagesBeforeDestroyedProcess = directTransportPort.messages.length;
+directTransportPort.onmessage({ data: { type: "processed", blockId: 99, channels: [Float32Array.from([99, 99])] } });
+const destroyedOutput = [new Float32Array(2)];
+assert(directProcessor.process([[Float32Array.from([99, 99])]], [destroyedOutput]) === false, "destroyed worklet asks the browser to stop processing");
+assert(equal(Array.from(destroyedOutput[0]), [0, 0]), "destroyed worklet outputs silence");
+assert(directTransportPort.messages.length === directMessagesBeforeDestroyedProcess, "destroyed worklet does not post new render work");
 
 const sharedProcessor = new processorCtor({
   processorOptions: {
