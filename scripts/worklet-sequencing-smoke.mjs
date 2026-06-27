@@ -28,11 +28,14 @@ class TestAudioWorkletProcessor {
 vm.runInNewContext(workletSource, {
   ArrayBuffer,
   AudioWorkletProcessor: TestAudioWorkletProcessor,
+  Atomics,
   Float32Array,
+  Int32Array,
   Map,
   Math,
   Number,
   Array,
+  SharedArrayBuffer,
   registerProcessor(name, constructor) {
     assert(name === "soundbridge-audio-processor", "worklet registers the expected processor name");
     processorCtor = constructor;
@@ -130,6 +133,26 @@ assert(
 );
 assert(directProcessor.inputBufferReuses === 1, "direct worklet transport counts input buffer reuse");
 
+const sharedProcessor = new processorCtor({
+  processorOptions: {
+    outputChannels: 1,
+    maxQueuedOutputBlocks: 4,
+    outputLatencyBlocks: 1
+  }
+});
+const sharedMainPort = lastPort;
+const sharedTransportPort = new TestPort();
+const sharedAudio = createSharedAudio(4, 1, 2);
+sharedMainPort.onmessage({ data: { type: "connect-transport", port: sharedTransportPort, sharedAudio } });
+const sharedWarmup = [new Float32Array(2)];
+sharedProcessor.process([[Float32Array.from([7, 7])]], [sharedWarmup]);
+assert(sharedTransportPort.messages.length === 0, "shared worklet transport avoids per-block port messages");
+assert(Atomics.load(new Int32Array(sharedAudio.inputControl), 2) === 1, "shared worklet transport writes input blocks to shared memory");
+writeSharedOutput(sharedAudio, 0, [Float32Array.from([70, 70])]);
+const sharedOutput = [new Float32Array(2)];
+sharedProcessor.process([[Float32Array.from([8, 8])]], [sharedOutput]);
+assert(equal(Array.from(sharedOutput[0]), [70, 70]), "shared worklet transport drains shared output blocks");
+
 const adaptiveProcessor = new processorCtor({
   processorOptions: {
     outputChannels: 1,
@@ -165,6 +188,9 @@ assert(typeof statsMessage?.inFlightBlocks === "number", "worklet stats report i
 assert(typeof statsMessage?.transportLatencySamples === "number", "worklet stats report transport latency samples");
 assert(typeof statsMessage?.latencyIncreases === "number", "worklet stats report adaptive latency increases");
 assert(typeof statsMessage?.latencyDecreases === "number", "worklet stats report adaptive latency decreases");
+assert(typeof statsMessage?.sharedAudioEnabled === "boolean", "worklet stats report shared audio enablement");
+assert(typeof statsMessage?.sharedInputDroppedBlocks === "number", "worklet stats report shared input drops");
+assert(typeof statsMessage?.sharedOutputDroppedBlocks === "number", "worklet stats report shared output drops");
 assert(typeof statsMessage?.inputBufferAllocations === "number", "worklet stats report input buffer allocations");
 assert(typeof statsMessage?.inputBufferReuses === "number", "worklet stats report input buffer reuse");
 assert(typeof statsMessage?.pooledInputBuffers === "number", "worklet stats report pooled input buffers");
@@ -173,6 +199,36 @@ console.log("Worklet sequencing smoke checks passed.");
 
 function equal(left, right) {
   return left.length === right.length && left.every((value, index) => Object.is(value, right[index]));
+}
+
+function createSharedAudio(slots, channels, frames) {
+  const controlInts = 8 + slots * 4;
+  const audioSamples = slots * channels * frames;
+  return {
+    version: 1,
+    slots,
+    channels,
+    frames,
+    inputControl: new SharedArrayBuffer(controlInts * Int32Array.BYTES_PER_ELEMENT),
+    inputAudio: new SharedArrayBuffer(audioSamples * Float32Array.BYTES_PER_ELEMENT),
+    outputControl: new SharedArrayBuffer(controlInts * Int32Array.BYTES_PER_ELEMENT),
+    outputAudio: new SharedArrayBuffer(audioSamples * Float32Array.BYTES_PER_ELEMENT)
+  };
+}
+
+function writeSharedOutput(sharedAudio, blockId, channels) {
+  const control = new Int32Array(sharedAudio.outputControl);
+  const audio = new Float32Array(sharedAudio.outputAudio);
+  const writeIndex = Atomics.load(control, 0);
+  const metadataOffset = 8 + writeIndex * 4;
+  Atomics.store(control, metadataOffset, blockId);
+  Atomics.store(control, metadataOffset + 1, channels[0].length);
+  Atomics.store(control, metadataOffset + 2, channels.length);
+  for (let channelIndex = 0; channelIndex < channels.length; channelIndex += 1) {
+    audio.set(channels[channelIndex], writeIndex * sharedAudio.channels * sharedAudio.frames + channelIndex * sharedAudio.frames);
+  }
+  Atomics.store(control, 0, (writeIndex + 1) % sharedAudio.slots);
+  Atomics.add(control, 2, 1);
 }
 
 function assert(condition, message) {

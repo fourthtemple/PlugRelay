@@ -177,11 +177,12 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("processAudioBlock", payload, true, 2000, channels);
   }
 
-  createAudioWorkletTransportPort(options) {
+  createAudioWorkletTransportConnection(options) {
     if (this.transport !== "worker" || !this.worker || !this.workerConnected || !this.sessionToken) {
       return void 0;
     }
     const channel = new MessageChannel();
+    const sharedAudio = createSharedAudioTransport(options);
     this.worker.postMessage(
       {
         type: "audio-port",
@@ -189,11 +190,16 @@ export class SoundBridgeClient extends EventTarget {
         instanceId: options.instanceId,
         sampleRate: options.sampleRate,
         sessionToken: this.sessionToken,
-        audioTransport: options.audioTransport === "json" ? "json" : "binary"
+        audioTransport: options.audioTransport === "json" ? "json" : "binary",
+        sharedAudio
       },
       [channel.port2]
     );
-    return channel.port1;
+    return { port: channel.port1, sharedAudio };
+  }
+
+  createAudioWorkletTransportPort(options) {
+    return this.createAudioWorkletTransportConnection(options)?.port;
   }
 
   sendMidiEvents(instanceId, events) {
@@ -364,6 +370,9 @@ const FLOAT_BYTES = 4;
 const MAX_BINARY_CHANNELS = 32;
 const MAX_BINARY_FRAMES = 8192;
 const MAX_BINARY_BUSES = 32;
+const SHARED_AUDIO_VERSION = 1;
+const SHARED_AUDIO_HEADER_INTS = 8;
+const SHARED_AUDIO_SLOT_INTS = 4;
 
 function encodeBinaryAudioEnvelope(envelope, channels) {
   const mainBlock = normalizeBinaryBlock(channels);
@@ -556,6 +565,43 @@ function boundedBinaryInteger(value, min, max) {
   return integer;
 }
 
+function createSharedAudioTransport(options) {
+  const mode = options.audioTransferMode ?? "auto";
+  if (mode === "message" || typeof SharedArrayBuffer === "undefined" || globalThis.crossOriginIsolated !== true) {
+    return void 0;
+  }
+  const slots = boundedSharedInteger(options.sharedBufferBlocks, 8, 2, 64);
+  const channels = boundedSharedInteger(options.channels, 2, 1, MAX_BINARY_CHANNELS);
+  const frames = boundedSharedInteger(options.maxBlockFrames, 128, 1, MAX_BINARY_FRAMES);
+  const controlBytes = Int32Array.BYTES_PER_ELEMENT * (SHARED_AUDIO_HEADER_INTS + slots * SHARED_AUDIO_SLOT_INTS);
+  const audioBytes = Float32Array.BYTES_PER_ELEMENT * slots * channels * frames;
+  return {
+    version: SHARED_AUDIO_VERSION,
+    slots,
+    channels,
+    frames,
+    inputControl: initializedSharedControl(slots, channels, frames, controlBytes),
+    inputAudio: new SharedArrayBuffer(audioBytes),
+    outputControl: initializedSharedControl(slots, channels, frames, controlBytes),
+    outputAudio: new SharedArrayBuffer(audioBytes)
+  };
+}
+
+function initializedSharedControl(slots, channels, frames, bytes) {
+  const buffer = new SharedArrayBuffer(bytes);
+  const control = new Int32Array(buffer);
+  control[4] = slots;
+  control[5] = channels;
+  control[6] = frames;
+  control[7] = SHARED_AUDIO_VERSION;
+  return buffer;
+}
+
+function boundedSharedInteger(value, fallback, min, max) {
+  const integer = Math.floor(Number(value ?? fallback));
+  return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
+}
+
 export {
   decodeBinaryAudioEnvelope as __soundBridgeDecodeBinaryAudioEnvelope,
   encodeBinaryAudioEnvelope as __soundBridgeEncodeBinaryAudioEnvelope
@@ -590,13 +636,20 @@ export class SoundBridgeAudioNode extends EventTarget {
       }
     });
     this.node.port.onmessage = (event) => this.handleWorkletMessage(event.data);
-    const transportPort = client.createAudioWorkletTransportPort({
+    const transportConnection = client.createAudioWorkletTransportConnection({
       instanceId: options.instanceId,
       sampleRate: context.sampleRate,
-      audioTransport: options.audioTransport
+      audioTransport: options.audioTransport,
+      audioTransferMode: options.audioTransferMode,
+      channels: Math.max(options.inputChannels, options.outputChannels),
+      maxBlockFrames: options.maxBlockFrames,
+      sharedBufferBlocks: options.sharedBufferBlocks
     });
-    if (transportPort) {
-      this.node.port.postMessage({ type: "connect-transport", port: transportPort }, [transportPort]);
+    if (transportConnection) {
+      this.node.port.postMessage(
+        { type: "connect-transport", port: transportConnection.port, sharedAudio: transportConnection.sharedAudio },
+        [transportConnection.port]
+      );
     }
   }
 
@@ -612,6 +665,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       maxOutputLatencyBlocks: 4,
       adaptiveOutputLatency: options.adaptiveOutputLatency !== false,
       audioTransport: options.audioTransport === "json" ? "json" : "binary",
+      audioTransferMode: options.audioTransferMode ?? "auto",
+      sharedBufferBlocks: boundedAudioNodeInteger(options.sharedBufferBlocks, 8, 2, 64),
+      maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192),
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
     normalized.outputLatencyBlocks = boundedAudioNodeInteger(

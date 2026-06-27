@@ -33,6 +33,10 @@ class FakeWorker extends EventTarget {
   }
 }
 
+Object.defineProperty(globalThis, "crossOriginIsolated", {
+  value: true,
+  configurable: true
+});
 globalThis.Worker = FakeWorker;
 
 const { SoundBridgeClient } = await import("../packages/web-client/dist/soundbridge-client.js");
@@ -58,6 +62,8 @@ const audioPortMessage = FakeWorker.last.messages.at(-1);
 assert(audioPort, "worker transport creates an audio worklet port after pairing");
 assert(audioPortMessage.type === "audio-port", "worker transport registers audio worklet ports with the worker");
 assert(audioPortMessage.instanceId === "inst-1", "worker audio port registration includes instance id");
+assert(audioPortMessage.sharedAudio?.inputControl instanceof SharedArrayBuffer, "worker audio port registration includes shared input control when isolated");
+assert(audioPortMessage.sharedAudio?.outputAudio instanceof SharedArrayBuffer, "worker audio port registration includes shared output audio when isolated");
 audioPort.close();
 
 const processed = await client.processAudioBlockBinary({

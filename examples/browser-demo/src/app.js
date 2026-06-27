@@ -47,6 +47,8 @@ const elements = {
   outputLatencyBlocks: document.querySelector("#outputLatencyBlocks"),
   transportLatencySamples: document.querySelector("#transportLatencySamples"),
   latencyIncreases: document.querySelector("#latencyIncreases"),
+  sharedAudioEnabled: document.querySelector("#sharedAudioEnabled"),
+  sharedQueuedBlocks: document.querySelector("#sharedQueuedBlocks"),
   inputBufferAllocations: document.querySelector("#inputBufferAllocations"),
   inputBufferReuses: document.querySelector("#inputBufferReuses"),
   renderEngine: document.querySelector("#renderEngine"),
@@ -358,7 +360,10 @@ async function doEnsureBridgeInstance(recreate = false) {
     minOutputLatencyBlocks: 1,
     maxOutputLatencyBlocks: 4,
     adaptiveOutputLatency: true,
-    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627b"
+    audioTransferMode: "auto",
+    sharedBufferBlocks: 8,
+    maxBlockFrames: 128,
+    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627c"
   });
 
   analyser = audioContext.createAnalyser();
@@ -378,6 +383,8 @@ async function doEnsureBridgeInstance(recreate = false) {
     elements.transportLatencySamples.textContent = String(stats.transportLatencySamples ?? 0);
     latestTransportLatencySamples = Number(stats.transportLatencySamples ?? latestTransportLatencySamples) || 0;
     elements.latencyIncreases.textContent = String(stats.latencyIncreases ?? 0);
+    elements.sharedAudioEnabled.textContent = stats.sharedAudioEnabled ? "On" : "Off";
+    elements.sharedQueuedBlocks.textContent = `${stats.sharedInputQueuedBlocks ?? 0}/${stats.sharedOutputQueuedBlocks ?? 0}`;
     elements.inputBufferAllocations.textContent = String(stats.inputBufferAllocations ?? 0);
     elements.inputBufferReuses.textContent = String(stats.inputBufferReuses ?? 0);
   });

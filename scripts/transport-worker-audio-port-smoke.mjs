@@ -71,12 +71,15 @@ const self = {
 const context = {
   Array,
   ArrayBuffer,
+  Atomics,
   Float32Array,
+  Int32Array,
   JSON,
   Map,
   Math,
   Number,
   Set,
+  SharedArrayBuffer,
   String,
   WebSocket: FakeSocket,
   console,
@@ -90,6 +93,9 @@ const context = {
     now() {
       return 123;
     }
+  },
+  setTimeout() {
+    return 0;
   },
   self
 };
@@ -150,7 +156,78 @@ assert(
   "transport worker does not try to transfer plain JSON channel arrays"
 );
 
+const sharedAudio = createSharedAudio(2, 1, 2);
+writeSharedInput(sharedAudio, 13, [Float32Array.from([0.1, 0.2])]);
+const sharedPort = new TestPort();
+self.onmessage({
+  data: {
+    type: "audio-port",
+    port: sharedPort,
+    instanceId: "inst-shared",
+    sampleRate: 48000,
+    sessionToken: "session-1",
+    audioTransport: "binary",
+    sharedAudio
+  }
+});
+assert(socket.sent.length === 2, "transport worker drains shared input blocks after registration");
+assert(Atomics.load(new Int32Array(sharedAudio.inputControl), 2) === 0, "transport worker consumes shared input slots");
+socket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: "audio-2",
+    ok: true,
+    payload: {
+      blockId: 13,
+      channels: [Float32Array.from([0.9, 0.8])],
+      latencySamples: 0,
+      renderEngine: "shared-worker"
+    }
+  })
+});
+const sharedOutputControl = new Int32Array(sharedAudio.outputControl);
+const sharedOutputAudio = new Float32Array(sharedAudio.outputAudio);
+assert(Atomics.load(sharedOutputControl, 2) === 1, "transport worker writes shared output slots");
+assert(
+  Math.abs(sharedOutputAudio[0] - 0.9) < 0.000001 && Math.abs(sharedOutputAudio[1] - 0.8) < 0.000001,
+  "transport worker writes shared output samples"
+);
+assert(
+  sharedPort.messages.some((message) => message.type === "process-diagnostics" && message.renderEngine === "shared-worker"),
+  "transport worker forwards shared path render diagnostics"
+);
+
 console.log("Transport worker audio port smoke checks passed.");
+
+function createSharedAudio(slots, channels, frames) {
+  const controlInts = 8 + slots * 4;
+  const audioSamples = slots * channels * frames;
+  return {
+    version: 1,
+    slots,
+    channels,
+    frames,
+    inputControl: new SharedArrayBuffer(controlInts * Int32Array.BYTES_PER_ELEMENT),
+    inputAudio: new SharedArrayBuffer(audioSamples * Float32Array.BYTES_PER_ELEMENT),
+    outputControl: new SharedArrayBuffer(controlInts * Int32Array.BYTES_PER_ELEMENT),
+    outputAudio: new SharedArrayBuffer(audioSamples * Float32Array.BYTES_PER_ELEMENT)
+  };
+}
+
+function writeSharedInput(sharedAudio, blockId, channels) {
+  const control = new Int32Array(sharedAudio.inputControl);
+  const audio = new Float32Array(sharedAudio.inputAudio);
+  const writeIndex = Atomics.load(control, 0);
+  const metadataOffset = 8 + writeIndex * 4;
+  Atomics.store(control, metadataOffset, blockId);
+  Atomics.store(control, metadataOffset + 1, channels[0].length);
+  Atomics.store(control, metadataOffset + 2, channels.length);
+  for (let channelIndex = 0; channelIndex < channels.length; channelIndex += 1) {
+    audio.set(channels[channelIndex], writeIndex * sharedAudio.channels * sharedAudio.frames + channelIndex * sharedAudio.frames);
+  }
+  Atomics.store(control, 0, (writeIndex + 1) % sharedAudio.slots);
+  Atomics.add(control, 2, 1);
+}
 
 function assert(condition, message) {
   if (!condition) {

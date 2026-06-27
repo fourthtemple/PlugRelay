@@ -12,6 +12,9 @@ export interface SoundBridgeAudioNodeOptions {
   maxOutputLatencyBlocks?: number;
   adaptiveOutputLatency?: boolean;
   audioTransport?: "binary" | "json";
+  audioTransferMode?: "auto" | "message" | "shared";
+  sharedBufferBlocks?: number;
+  maxBlockFrames?: number;
   workletUrl?: string;
 }
 
@@ -52,13 +55,20 @@ export class SoundBridgeAudioNode extends EventTarget {
       }
     });
     this.node.port.onmessage = (event) => this.handleWorkletMessage(event.data);
-    const transportPort = client.createAudioWorkletTransportPort({
+    const transportConnection = client.createAudioWorkletTransportConnection({
       instanceId: options.instanceId,
       sampleRate: context.sampleRate,
-      audioTransport: options.audioTransport
+      audioTransport: options.audioTransport,
+      audioTransferMode: options.audioTransferMode,
+      channels: Math.max(options.inputChannels, options.outputChannels),
+      maxBlockFrames: options.maxBlockFrames,
+      sharedBufferBlocks: options.sharedBufferBlocks
     });
-    if (transportPort) {
-      this.node.port.postMessage({ type: "connect-transport", port: transportPort }, [transportPort]);
+    if (transportConnection) {
+      this.node.port.postMessage(
+        { type: "connect-transport", port: transportConnection.port, sharedAudio: transportConnection.sharedAudio },
+        [transportConnection.port]
+      );
     }
   }
 
@@ -78,6 +88,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       maxOutputLatencyBlocks: 4,
       adaptiveOutputLatency: options.adaptiveOutputLatency !== false,
       audioTransport: options.audioTransport === "json" ? "json" : "binary",
+      audioTransferMode: options.audioTransferMode ?? "auto",
+      sharedBufferBlocks: boundedInteger(options.sharedBufferBlocks, 8, 2, 64),
+      maxBlockFrames: boundedInteger(options.maxBlockFrames, 128, 1, 8192),
       workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
     };
     normalized.outputLatencyBlocks = boundedInteger(
@@ -135,6 +148,11 @@ export class SoundBridgeAudioNode extends EventTarget {
       transportLatencySamples?: number;
       latencyIncreases?: number;
       latencyDecreases?: number;
+      sharedAudioEnabled?: boolean;
+      sharedInputQueuedBlocks?: number;
+      sharedOutputQueuedBlocks?: number;
+      sharedInputDroppedBlocks?: number;
+      sharedOutputDroppedBlocks?: number;
       staleOutputBlocks?: number;
       droppedInputBlocks?: number;
       inputBufferAllocations?: number;

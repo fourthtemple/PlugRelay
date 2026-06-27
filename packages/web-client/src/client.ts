@@ -25,6 +25,9 @@ import type {
   SetAutomationLaneResponse,
   SetVst3ProgramDataResponse
 } from "../../protocol/src/messages";
+import { createSharedAudioTransport, type SharedAudioTransportDescriptor, type SharedAudioTransportOptions } from "./shared-audio";
+
+export type { SharedAudioTransportDescriptor } from "./shared-audio";
 
 export interface SoundBridgeClientOptions {
   url?: string;
@@ -44,10 +47,15 @@ export interface BinaryAudioBlockRequest extends Omit<AudioBlockRequest, "channe
   inputBuses?: BinaryAudioBusBlock[];
 }
 
-export interface AudioWorkletTransportOptions {
+export interface AudioWorkletTransportOptions extends SharedAudioTransportOptions {
   instanceId: string;
   sampleRate: number;
   audioTransport?: "binary" | "json";
+}
+
+export interface AudioWorkletTransportConnection {
+  port: MessagePort;
+  sharedAudio?: SharedAudioTransportDescriptor;
 }
 
 export class SoundBridgeProtocolError extends Error {
@@ -280,11 +288,12 @@ export class SoundBridgeClient extends EventTarget {
     return this.request("processAudioBlock", payload, true, 2000, channels);
   }
 
-  createAudioWorkletTransportPort(options: AudioWorkletTransportOptions): MessagePort | undefined {
+  createAudioWorkletTransportConnection(options: AudioWorkletTransportOptions): AudioWorkletTransportConnection | undefined {
     if (this.transport !== "worker" || !this.worker || !this.workerConnected || !this.sessionToken) {
       return undefined;
     }
     const channel = new MessageChannel();
+    const sharedAudio = createSharedAudioTransport(options);
     this.worker.postMessage(
       {
         type: "audio-port",
@@ -292,11 +301,16 @@ export class SoundBridgeClient extends EventTarget {
         instanceId: options.instanceId,
         sampleRate: options.sampleRate,
         sessionToken: this.sessionToken,
-        audioTransport: options.audioTransport === "json" ? "json" : "binary"
+        audioTransport: options.audioTransport === "json" ? "json" : "binary",
+        sharedAudio
       },
       [channel.port2]
     );
-    return channel.port1;
+    return { port: channel.port1, sharedAudio };
+  }
+
+  createAudioWorkletTransportPort(options: AudioWorkletTransportOptions): MessagePort | undefined {
+    return this.createAudioWorkletTransportConnection(options)?.port;
   }
 
   sendMidiEvents(instanceId: string, events: MidiEvent[]): Promise<{ accepted: boolean; eventCount: number }> {
@@ -732,7 +746,4 @@ function boundedBinaryInteger(value: unknown, min: number, max: number): number 
   return integer;
 }
 
-export {
-  decodeBinaryAudioEnvelope as __soundBridgeDecodeBinaryAudioEnvelope,
-  encodeBinaryAudioEnvelope as __soundBridgeEncodeBinaryAudioEnvelope
-};
+export { decodeBinaryAudioEnvelope as __soundBridgeDecodeBinaryAudioEnvelope, encodeBinaryAudioEnvelope as __soundBridgeEncodeBinaryAudioEnvelope };

@@ -6,12 +6,34 @@ import {
 let socket: WebSocket | undefined;
 let audioRequestSeq = 0;
 const pendingAudioPorts = new Map<string, MessagePort>();
+const pendingSharedAudio = new Map<string, SharedAudioPort>();
+const SHARED_AUDIO_HEADER_INTS = 8;
+const SHARED_AUDIO_SLOT_INTS = 4;
+const SHARED_WRITE_INDEX = 0;
+const SHARED_READ_INDEX = 1;
+const SHARED_AVAILABLE = 2;
+const SHARED_DROPPED = 3;
+const SHARED_BLOCK_ID_OFFSET = 0;
+const SHARED_BLOCK_FRAMES_OFFSET = 1;
+const SHARED_BLOCK_CHANNELS_OFFSET = 2;
 
 interface AudioPortConfig {
   instanceId: string;
   sampleRate: number;
   sessionToken: string;
   audioTransport: "binary" | "json";
+}
+
+interface SharedAudioPort {
+  port: MessagePort;
+  closed: boolean;
+  slots: number;
+  channels: number;
+  frames: number;
+  inputControl: Int32Array;
+  inputAudio: Float32Array;
+  outputControl: Int32Array;
+  outputAudio: Float32Array;
 }
 
 self.onmessage = (event: MessageEvent) => {
@@ -33,7 +55,7 @@ self.onmessage = (event: MessageEvent) => {
       sampleRate: Number(message.sampleRate ?? 48000),
       sessionToken: String(message.sessionToken ?? ""),
       audioTransport: message.audioTransport === "json" ? "json" : "binary"
-    });
+    }, message.sharedAudio);
     return;
   }
   if (message.type === "close") {
@@ -67,10 +89,14 @@ function connect(url: string): void {
   });
 }
 
-function connectAudioPort(port: MessagePort, config: AudioPortConfig): void {
+function connectAudioPort(port: MessagePort, config: AudioPortConfig, sharedAudioDescriptor?: unknown): void {
+  const sharedAudio = normalizeSharedAudioPort(port, sharedAudioDescriptor);
   port.onmessage = (event) => {
     const message = event.data;
     if (message?.type === "destroy") {
+      if (sharedAudio) {
+        sharedAudio.closed = true;
+      }
       port.close();
       return;
     }
@@ -78,6 +104,9 @@ function connectAudioPort(port: MessagePort, config: AudioPortConfig): void {
       sendAudioProcess(port, config, message);
     }
   };
+  if (sharedAudio) {
+    pumpSharedAudio(config, sharedAudio);
+  }
 }
 
 function sendAudioProcess(port: MessagePort, config: AudioPortConfig, message: { blockId?: number; frames?: number; channels?: ArrayLike<number>[] }): void {
@@ -153,6 +182,20 @@ function recycleAudioInput(port: MessagePort, channels: Float32Array[], frames: 
 }
 
 function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unknown; error?: unknown }): boolean {
+  const shared = envelope.id ? pendingSharedAudio.get(envelope.id) : undefined;
+  if (shared) {
+    pendingSharedAudio.delete(envelope.id ?? "");
+    if (envelope.ok && envelope.payload && typeof envelope.payload === "object") {
+      const payload = envelope.payload as { blockId?: number; channels?: ArrayLike<number>[]; renderEngine?: string };
+      writeSharedOutputBlock(shared, Math.floor(Number(payload.blockId ?? 0)), Array.isArray(payload.channels) ? payload.channels : []);
+      if (typeof payload.renderEngine === "string") {
+        shared.port.postMessage({ type: "process-diagnostics", blockId: payload.blockId, renderEngine: payload.renderEngine });
+      }
+    } else {
+      shared.port.postMessage({ type: "audio-error", error: envelope.error });
+    }
+    return true;
+  }
   const port = envelope.id ? pendingAudioPorts.get(envelope.id) : undefined;
   if (!port) {
     return false;
@@ -193,6 +236,159 @@ function transferableChannelBuffers(channels: ArrayLike<number>[]): ArrayBuffer[
     }
   }
   return transfer;
+}
+
+function pumpSharedAudio(config: AudioPortConfig, shared: SharedAudioPort): void {
+  if (shared.closed) {
+    return;
+  }
+  drainSharedAudio(config, shared);
+  setTimeout(() => pumpSharedAudio(config, shared), 1);
+}
+
+function drainSharedAudio(config: AudioPortConfig, shared: SharedAudioPort): void {
+  while (!shared.closed && Atomics.load(shared.inputControl, SHARED_AVAILABLE) > 0) {
+    const readIndex = Atomics.load(shared.inputControl, SHARED_READ_INDEX) % shared.slots;
+    const block = readSharedInputBlock(shared, readIndex);
+    Atomics.store(shared.inputControl, SHARED_READ_INDEX, (readIndex + 1) % shared.slots);
+    Atomics.sub(shared.inputControl, SHARED_AVAILABLE, 1);
+    sendSharedAudioProcess(config, shared, block);
+  }
+}
+
+function sendSharedAudioProcess(
+  config: AudioPortConfig,
+  shared: SharedAudioPort,
+  block: { blockId: number; frames: number; channels: Float32Array[] }
+): void {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: "SoundBridge worker transport is not connected." });
+    return;
+  }
+  const samplePosition = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, block.blockId * block.frames));
+  const binary = config.audioTransport === "binary";
+  const payload = {
+    instanceId: config.instanceId,
+    blockId: block.blockId,
+    sampleRate: config.sampleRate,
+    ...(binary ? {} : { channels: block.channels.map((channel) => Array.from(channel)) }),
+    transport: { playing: true, samplePosition },
+    timestamp: performance.now()
+  };
+  const envelope = {
+    type: "request",
+    id: `audio-${++audioRequestSeq}`,
+    command: "processAudioBlock",
+    sessionToken: config.sessionToken,
+    payload
+  };
+  try {
+    pendingSharedAudio.set(envelope.id, shared);
+    socket.send(binary ? encodeBinaryAudioEnvelope(envelope, block.channels) : JSON.stringify(envelope));
+  } catch (error) {
+    pendingSharedAudio.delete(envelope.id);
+    shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: String(error instanceof Error ? error.message : error) });
+  }
+}
+
+function readSharedInputBlock(shared: SharedAudioPort, slotIndex: number): { blockId: number; frames: number; channels: Float32Array[] } {
+  const metadataOffset = sharedSlotMetadataOffset(slotIndex);
+  const blockId = Atomics.load(shared.inputControl, metadataOffset + SHARED_BLOCK_ID_OFFSET);
+  const frames = Math.min(shared.frames, boundedFrames(Atomics.load(shared.inputControl, metadataOffset + SHARED_BLOCK_FRAMES_OFFSET)));
+  const channelCount = Math.max(1, Math.min(shared.channels, Atomics.load(shared.inputControl, metadataOffset + SHARED_BLOCK_CHANNELS_OFFSET)));
+  const channels: Float32Array[] = [];
+  const base = sharedAudioOffset(shared, slotIndex);
+  for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+    const offset = base + channelIndex * shared.frames;
+    channels.push(Float32Array.from(shared.inputAudio.subarray(offset, offset + frames)));
+  }
+  return { blockId, frames, channels };
+}
+
+function writeSharedOutputBlock(shared: SharedAudioPort, blockId: number, channels: ArrayLike<number>[]): void {
+  const frames = Math.min(shared.frames, boundedFrames(channels[0]?.length ?? shared.frames));
+  const channelCount = Math.min(shared.channels, channels.length);
+  const available = Atomics.load(shared.outputControl, SHARED_AVAILABLE);
+  if (available >= shared.slots) {
+    Atomics.add(shared.outputControl, SHARED_DROPPED, 1);
+    return;
+  }
+  const writeIndex = Atomics.load(shared.outputControl, SHARED_WRITE_INDEX) % shared.slots;
+  const metadataOffset = sharedSlotMetadataOffset(writeIndex);
+  Atomics.store(shared.outputControl, metadataOffset + SHARED_BLOCK_ID_OFFSET, blockId);
+  Atomics.store(shared.outputControl, metadataOffset + SHARED_BLOCK_FRAMES_OFFSET, frames);
+  Atomics.store(shared.outputControl, metadataOffset + SHARED_BLOCK_CHANNELS_OFFSET, channelCount);
+  const base = sharedAudioOffset(shared, writeIndex);
+  for (let channelIndex = 0; channelIndex < shared.channels; channelIndex += 1) {
+    const offset = base + channelIndex * shared.frames;
+    const source = channels[channelIndex] ?? channels[0];
+    if (source) {
+      for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) {
+        const sample = Number(source[frameIndex] ?? 0);
+        shared.outputAudio[offset + frameIndex] = Number.isFinite(sample) ? sample : 0;
+      }
+      if (frames < shared.frames) {
+        shared.outputAudio.fill(0, offset + frames, offset + shared.frames);
+      }
+    } else {
+      shared.outputAudio.fill(0, offset, offset + shared.frames);
+    }
+  }
+  Atomics.store(shared.outputControl, SHARED_WRITE_INDEX, (writeIndex + 1) % shared.slots);
+  Atomics.add(shared.outputControl, SHARED_AVAILABLE, 1);
+  Atomics.notify(shared.outputControl, SHARED_AVAILABLE, 1);
+}
+
+function normalizeSharedAudioPort(port: MessagePort, value: unknown): SharedAudioPort | undefined {
+  if (!value || typeof value !== "object" || typeof SharedArrayBuffer === "undefined") {
+    return undefined;
+  }
+  const descriptor = value as {
+    version?: unknown;
+    slots?: unknown;
+    channels?: unknown;
+    frames?: unknown;
+    inputControl?: unknown;
+    inputAudio?: unknown;
+    outputControl?: unknown;
+    outputAudio?: unknown;
+  };
+  const slots = boundedSharedInteger(descriptor.slots, 0, 2, 64);
+  const channels = boundedSharedInteger(descriptor.channels, 0, 1, 32);
+  const frames = boundedSharedInteger(descriptor.frames, 0, 1, 8192);
+  if (
+    descriptor.version !== 1 ||
+    !(descriptor.inputControl instanceof SharedArrayBuffer) ||
+    !(descriptor.inputAudio instanceof SharedArrayBuffer) ||
+    !(descriptor.outputControl instanceof SharedArrayBuffer) ||
+    !(descriptor.outputAudio instanceof SharedArrayBuffer)
+  ) {
+    return undefined;
+  }
+  return {
+    port,
+    closed: false,
+    slots,
+    channels,
+    frames,
+    inputControl: new Int32Array(descriptor.inputControl),
+    inputAudio: new Float32Array(descriptor.inputAudio),
+    outputControl: new Int32Array(descriptor.outputControl),
+    outputAudio: new Float32Array(descriptor.outputAudio)
+  };
+}
+
+function sharedSlotMetadataOffset(slotIndex: number): number {
+  return SHARED_AUDIO_HEADER_INTS + slotIndex * SHARED_AUDIO_SLOT_INTS;
+}
+
+function sharedAudioOffset(shared: SharedAudioPort, slotIndex: number): number {
+  return slotIndex * shared.channels * shared.frames;
+}
+
+function boundedSharedInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const integer = Math.floor(Number(value ?? fallback));
+  return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
 }
 
 function boundedFrames(value: unknown): number {
