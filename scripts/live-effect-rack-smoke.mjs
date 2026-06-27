@@ -25,6 +25,12 @@ class FakeLiveClient {
     this.processTimeouts = [];
     this.binaryProcessTimeouts = [];
     this.latencyRequests = [];
+    this.parameterRequests = [];
+    this.parameterSets = [];
+    this.parameterEvents = [];
+    this.parameterCurves = [];
+    this.presets = [];
+    this.midiEvents = [];
     this.failProcessing = false;
     this.processingDelayMs = 0;
     this.renderDurationMs = 0.5;
@@ -98,10 +104,30 @@ class FakeLiveClient {
     };
   }
 
+  async getParameters(instanceId) { this.parameterRequests.push(instanceId); return { parameters: [this.parameter("filter", 0.5)] }; }
+
+  async setPreset(instanceId, presetId) { this.presets.push({ instanceId, presetId }); return { applied: true, presetId, parameterCount: 1, parameters: [this.parameter("filter", 0.5)] }; }
+
+  async setParameter(instanceId, parameterId, normalizedValue) { this.parameterSets.push({ instanceId, parameterId, normalizedValue }); return { parameter: this.parameter(parameterId, normalizedValue) }; }
+
+  async setParameterEvents(instanceId, events) {
+    this.parameterEvents.push({ instanceId, events });
+    return { accepted: true, eventCount: events.length, parameters: events.map((event) => this.parameter(event.parameterId, event.normalizedValue)) };
+  }
+
+  async setParameterCurve(instanceId, parameterId, points, interpolation = "linear") {
+    this.parameterCurves.push({ instanceId, parameterId, points, interpolation });
+    return { accepted: true, eventCount: points.length, parameter: this.parameter(parameterId, points.at(-1)?.normalizedValue ?? 0) };
+  }
+
+  async sendMidiEvents(instanceId, events) { this.midiEvents.push({ instanceId, events }); return { accepted: true, eventCount: events.length }; }
+
   async destroyInstance(instanceId) {
     this.destroyed.push(instanceId);
     return { destroyed: true };
   }
+
+  parameter(id, normalizedValue) { return { id, name: id, normalizedValue, automatable: true, readOnly: false }; }
 }
 
 const client = new FakeLiveClient();
@@ -189,6 +215,23 @@ assert(
   "live effect rack reports plugin plus transport latency for host compensation"
 );
 
+const rackParameters = await rack.getParameters();
+await rack.setPreset("dub-delay");
+await rack.setParameter("filter", 0.75);
+await rack.setParameterEvents([{ parameterId: "filter", normalizedValue: 0.25, time: 16 }]);
+await rack.setParameterCurve("filter", [{ time: 0, normalizedValue: 0.1 }, { time: 64, normalizedValue: 0.9 }], "linear");
+await rack.sendMidiEvents([{ type: "controlChange", controller: 1, value: 0.5, channel: 0 }]);
+assert(rackParameters.parameters[0]?.id === "filter", "live rack exposes rack-owned parameter metadata");
+assert(
+  client.parameterRequests.at(-1) === rack.instanceId &&
+    client.presets.at(-1)?.instanceId === rack.instanceId &&
+    client.parameterSets.at(-1)?.instanceId === rack.instanceId &&
+    client.parameterEvents.at(-1)?.instanceId === rack.instanceId &&
+    client.parameterCurves.at(-1)?.instanceId === rack.instanceId &&
+    client.midiEvents.at(-1)?.instanceId === rack.instanceId,
+  "live rack binds control helpers to its owned instance"
+);
+
 let latencyEvents = 0;
 rack.addEventListener("latencychange", () => {
   latencyEvents += 1;
@@ -248,6 +291,8 @@ rack.setWetMix(4);
 assert(rack.health.wetMix === 1 && wetMixEvents === 2, "setWetMix clamps over-range mix values");
 
 rack.setBypassed(true);
+await rack.setParameter("filter", 0.33);
+assert(client.parameterSets.at(-1)?.normalizedValue === 0.33, "manual bypass still allows live control changes");
 const processedBeforeBypass = client.processed.length;
 const bypassed = await rack.processBlock({ blockId: 2, channels: inputChannels });
 assert(bypassed.bypassed === true && bypassed.channels[0][0] === 1, "manual bypass returns dry audio");
@@ -280,6 +325,13 @@ assert(rack.health.unhealthyReason === "processing-error", "processing failure r
 const stillDry = await rack.processBlock({ blockId: 4, channels: inputChannels });
 assert(stillDry.bypassed === true && client.processed.length === processedBeforeFailure + 1, "unhealthy rack stays dry until recreated");
 assert(rack.health.healthy === false, "processing-error rack does not auto-recover");
+let controlRejected = false;
+try {
+  await rack.setParameter("filter", 0.1);
+} catch (error) {
+  controlRejected = /not controllable/.test(String(error?.message));
+}
+assert(controlRejected === true, "unhealthy live rack rejects control helpers until recreated");
 
 client.failProcessing = false;
 await rack.recreate();

@@ -1429,6 +1429,20 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     return true;
   }
 
+  getParameters() { return this.client.getParameters(this.requireControllableInstance()); }
+
+  setPreset(presetId) { return this.client.setPreset(this.requireControllableInstance(), presetId); }
+
+  setParameter(parameterId, normalizedValue) { return this.client.setParameter(this.requireControllableInstance(), parameterId, normalizedValue); }
+
+  setParameterEvents(events) { return this.client.setParameterEvents(this.requireControllableInstance(), events); }
+
+  setParameterCurve(parameterId, points, interpolation = "linear") {
+    return this.client.setParameterCurve(this.requireControllableInstance(), parameterId, points, interpolation);
+  }
+
+  sendMidiEvents(events) { return this.client.sendMidiEvents(this.requireControllableInstance(), events); }
+
   async recreate() {
     this.destroyed = false;
     this.recoveryInProgress = false;
@@ -1788,6 +1802,13 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       !this.instanceId ||
       !this.healthy
     );
+  }
+
+  requireControllableInstance() {
+    if (this.destroyed || !this.instanceId || !this.healthy) {
+      throw new Error("SoundBridgeLiveEffectRack is not controllable while destroyed, missing an instance, or unhealthy.");
+    }
+    return this.instanceId;
   }
 
   finishResponse(response, dryInput, wetMixOverride) {

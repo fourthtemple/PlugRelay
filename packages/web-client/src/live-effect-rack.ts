@@ -347,6 +347,24 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     return true;
   }
 
+  getParameters(): ReturnType<SoundBridgeClient["getParameters"]> { return this.client.getParameters(this.requireControllableInstance()); }
+
+  setPreset(presetId: string): ReturnType<SoundBridgeClient["setPreset"]> { return this.client.setPreset(this.requireControllableInstance(), presetId); }
+
+  setParameter(parameterId: string, normalizedValue: number): ReturnType<SoundBridgeClient["setParameter"]> { return this.client.setParameter(this.requireControllableInstance(), parameterId, normalizedValue); }
+
+  setParameterEvents(events: Parameters<SoundBridgeClient["setParameterEvents"]>[1]): ReturnType<SoundBridgeClient["setParameterEvents"]> { return this.client.setParameterEvents(this.requireControllableInstance(), events); }
+
+  setParameterCurve(
+    parameterId: string,
+    points: Parameters<SoundBridgeClient["setParameterCurve"]>[2],
+    interpolation: Parameters<SoundBridgeClient["setParameterCurve"]>[3] = "linear"
+  ): ReturnType<SoundBridgeClient["setParameterCurve"]> {
+    return this.client.setParameterCurve(this.requireControllableInstance(), parameterId, points, interpolation);
+  }
+
+  sendMidiEvents(events: Parameters<SoundBridgeClient["sendMidiEvents"]>[1]): ReturnType<SoundBridgeClient["sendMidiEvents"]> { return this.client.sendMidiEvents(this.requireControllableInstance(), events); }
+
   async recreate(): Promise<void> {
     this.destroyed = false;
     this.recoveryInProgress = false;
@@ -706,6 +724,13 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       !this.instanceId ||
       !this.healthy
     );
+  }
+
+  private requireControllableInstance(): string {
+    if (this.destroyed || !this.instanceId || !this.healthy) {
+      throw new Error("SoundBridgeLiveEffectRack is not controllable while destroyed, missing an instance, or unhealthy.");
+    }
+    return this.instanceId;
   }
 
   private finishResponse(response: LiveEffectBlockResponse, dryInput?: ArrayLike<number>[], wetMixOverride?: number): LiveEffectBlockResponse {
