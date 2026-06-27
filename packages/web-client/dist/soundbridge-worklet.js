@@ -206,7 +206,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
 
     if (message.type === "process-diagnostics" && typeof message.renderEngine === "string") {
-      this.port.postMessage({ type: "process-diagnostics", blockId: message.blockId, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs });
+      this.port.postMessage({ type: "process-diagnostics", blockId: message.blockId, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs, renderBudgetMs: message.renderBudgetMs, renderBudgetExceeded: message.renderBudgetExceeded });
       return;
     }
 
@@ -233,7 +233,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     this.queueOutputBlock(blockId, message.channels.slice(0, this.outputChannels).map((channel) => this.outputChannelBlock(channel)));
     if (typeof message.renderEngine === "string") {
-      this.port.postMessage({ type: "process-diagnostics", blockId, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs });
+      this.port.postMessage({ type: "process-diagnostics", blockId, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs, renderBudgetMs: message.renderBudgetMs, renderBudgetExceeded: message.renderBudgetExceeded });
     }
   }
 

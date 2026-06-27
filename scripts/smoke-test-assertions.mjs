@@ -175,6 +175,11 @@ export function assertRenderDuration(block, message) {
     typeof block.renderDurationMs === "number" && block.renderDurationMs >= 0 && block.renderDurationMs <= 60000,
     `${message}: render duration is bounded`
   );
+  assert(
+    typeof block.renderBudgetMs === "number" && block.renderBudgetMs >= 0 && block.renderBudgetMs <= 60000,
+    `${message}: render budget is bounded`
+  );
+  assert(typeof block.renderBudgetExceeded === "boolean", `${message}: render budget verdict is present`);
 }
 
 export function blockHasSignal(channels) {

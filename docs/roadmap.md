@@ -150,7 +150,7 @@ Future sandboxing work should evaluate:
 SoundBridge is ready to call production-grade for the core compatibility profile when:
 
 - a normal developer can install the bridge, pair a site, scan plugins, create VST3/AU/LV2 instances, and process audio without reading internal docs
-- common commercial and open-source VST3/AU/LV2 plugins work through the compatibility probe
+- common commercial and open-source VST3/AU/LV2 plugins work through the compatibility probe, including render-duration and render-budget evidence
 - native editor and file workflows are brokered, opt-in, and path-free from the browser perspective
 - all host adapters have smoke coverage for malformed input, oversized payloads, ownership violations, and worker failure
 - the build ships with platform packaging, update, signing, and first-run approval UX

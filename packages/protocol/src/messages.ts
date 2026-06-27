@@ -511,6 +511,8 @@ export interface AudioBlockResponse {
   tailSamples?: number;
   infiniteTail?: boolean;
   renderDurationMs?: number;
+  renderBudgetMs?: number;
+  renderBudgetExceeded?: boolean;
   renderEngine?: "bundle-worker" | "bundle-executable" | "native-example" | "js-fallback" | string;
 }
 

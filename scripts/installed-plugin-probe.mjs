@@ -387,6 +387,8 @@ async function probePlugin(socket, session, plugin) {
     });
     result.renderedChannels = Array.isArray(rendered.channels) ? rendered.channels.length : 0;
     if (Number.isFinite(Number(rendered.renderDurationMs))) result.renderDurationMs = Math.round(Number(rendered.renderDurationMs));
+    if (Number.isFinite(Number(rendered.renderBudgetMs))) result.renderBudgetMs = Math.round(Number(rendered.renderBudgetMs));
+    if (typeof rendered.renderBudgetExceeded === "boolean") result.renderBudgetExceeded = rendered.renderBudgetExceeded;
     result.renderSignal = summarizeProbeRenderSignal(rendered);
     result.outputBusSignalProfile = summarizeProbeOutputBusSignal(rendered, result.layout);
     result.hostTransport = "accepted";

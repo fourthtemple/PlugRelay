@@ -594,7 +594,8 @@ async function processAudioBlock(payload, session) {
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
       infiniteTail: Boolean(instance.pluginInfiniteTail),
-      renderDurationMs
+      renderDurationMs,
+      ...renderBudgetDiagnostics(renderDurationMs, frames, blockSampleRate)
     };
   }
 
@@ -618,6 +619,7 @@ async function processAudioBlock(payload, session) {
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
       infiniteTail: Boolean(instance.pluginInfiniteTail),
       renderDurationMs,
+      ...renderBudgetDiagnostics(renderDurationMs, frames, blockSampleRate),
       renderEngine: instance.renderEngine ?? instance.worker.renderEngine ?? "native-host"
     };
   }
@@ -641,6 +643,7 @@ async function processAudioBlock(payload, session) {
     output.push(new Array(output[0]?.length ?? 128).fill(0));
   }
 
+  const renderDurationMs = boundedRenderDurationMs(renderStartedAt);
   return {
     blockId: payload.blockId,
     channels: output,
@@ -649,7 +652,8 @@ async function processAudioBlock(payload, session) {
     latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
     tailSamples: normalizeTailSamples(instance.pluginTailSamples),
     infiniteTail: Boolean(instance.pluginInfiniteTail),
-    renderDurationMs: boundedRenderDurationMs(renderStartedAt)
+    renderDurationMs,
+    ...renderBudgetDiagnostics(renderDurationMs, frames, blockSampleRate)
   };
 }
 
@@ -660,6 +664,12 @@ function renderTimestampMs() {
 function boundedRenderDurationMs(startedAt) {
   const elapsed = renderTimestampMs() - startedAt;
   return Number.isFinite(elapsed) ? Math.max(0, Math.min(60000, Math.round(elapsed * 1000) / 1000)) : 0;
+}
+
+function renderBudgetDiagnostics(renderDurationMs, frames, sampleRate) {
+  const budget = (Number(frames) / Number(sampleRate)) * 1000;
+  const renderBudgetMs = Number.isFinite(budget) ? Math.max(0, Math.min(60000, Math.round(budget * 1000) / 1000)) : 0;
+  return { renderBudgetMs, renderBudgetExceeded: renderBudgetMs > 0 && renderDurationMs > renderBudgetMs };
 }
 
 function getInstance(instanceId, session) {

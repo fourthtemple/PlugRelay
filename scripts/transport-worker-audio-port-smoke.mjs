@@ -162,6 +162,8 @@ socket.emit("message", {
       channels: [[0.75, 1]],
       latencySamples: 0,
       renderDurationMs: 1.25,
+      renderBudgetMs: 2.667,
+      renderBudgetExceeded: false,
       renderEngine: "json-compat"
     }
   })
@@ -173,6 +175,8 @@ assert(
   "transport worker does not try to transfer plain JSON channel arrays"
 );
 assert(processed.renderDurationMs === 1.25, "transport worker routes render timing diagnostics on the port path");
+assert(processed.renderBudgetMs === 2.667, "transport worker routes render budget diagnostics on the port path");
+assert(processed.renderBudgetExceeded === false, "transport worker routes render budget verdict on the port path");
 
 const sharedAudio = createSharedAudio(2, 1, 2);
 writeSharedInput(sharedAudio, 13, [Float32Array.from([0.1, 0.2])]);
@@ -207,6 +211,8 @@ socket.emit("message", {
       channels: [Float32Array.from([0.9, 0.8])],
       latencySamples: 0,
       renderDurationMs: 2.5,
+      renderBudgetMs: 1.333,
+      renderBudgetExceeded: true,
       renderEngine: "shared-worker"
     }
   })
@@ -226,7 +232,13 @@ assert(
   "transport worker writes shared output samples"
 );
 assert(
-  sharedPort.messages.some((message) => message.type === "process-diagnostics" && message.renderEngine === "shared-worker" && message.renderDurationMs === 2.5),
+  sharedPort.messages.some((message) =>
+    message.type === "process-diagnostics" &&
+    message.renderEngine === "shared-worker" &&
+    message.renderDurationMs === 2.5 &&
+    message.renderBudgetMs === 1.333 &&
+    message.renderBudgetExceeded === true
+  ),
   "transport worker forwards shared path render timing diagnostics"
 );
 

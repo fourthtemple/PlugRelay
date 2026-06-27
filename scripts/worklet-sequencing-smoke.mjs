@@ -116,6 +116,8 @@ directTransportPort.onmessage({
     blockId: 0,
     channels: [transferredOutput],
     renderDurationMs: 0.75,
+    renderBudgetMs: 1.333,
+    renderBudgetExceeded: false,
     renderEngine: "direct-worker"
   }
 });
@@ -127,7 +129,13 @@ assert(
   "direct worklet transport queues transferred Float32Array output without an extra copy"
 );
 assert(
-  directMainPort.messages.some((message) => message.type === "process-diagnostics" && message.renderEngine === "direct-worker" && message.renderDurationMs === 0.75),
+  directMainPort.messages.some((message) =>
+    message.type === "process-diagnostics" &&
+    message.renderEngine === "direct-worker" &&
+    message.renderDurationMs === 0.75 &&
+    message.renderBudgetMs === 1.333 &&
+    message.renderBudgetExceeded === false
+  ),
   "direct worklet transport forwards render timing diagnostics to the page port"
 );
 directProcessor.process([[Float32Array.from([6, 6])]], [[new Float32Array(2)]]);

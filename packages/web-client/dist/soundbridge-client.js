@@ -776,7 +776,9 @@ export class SoundBridgeAudioNode extends EventTarget {
               detail: {
                 blockId: response.blockId,
                 renderEngine: response.renderEngine,
-                renderDurationMs: response.renderDurationMs
+                renderDurationMs: response.renderDurationMs,
+                renderBudgetMs: response.renderBudgetMs,
+                renderBudgetExceeded: response.renderBudgetExceeded
               }
             })
           );
@@ -786,7 +788,9 @@ export class SoundBridgeAudioNode extends EventTarget {
           blockId: response.blockId,
           channels: response.channels,
           latencySamples: response.latencySamples,
-          renderDurationMs: response.renderDurationMs
+          renderDurationMs: response.renderDurationMs,
+          renderBudgetMs: response.renderBudgetMs,
+          renderBudgetExceeded: response.renderBudgetExceeded
         });
       })
       .catch((error) => {
