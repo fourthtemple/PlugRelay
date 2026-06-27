@@ -2027,6 +2027,109 @@ export function createLiveEffectRackAdaptiveLatencyController(options) {
   return new LiveEffectRackAdaptiveLatencyController(options);
 }
 
+const LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID = 9_007_199_254_740_991;
+const LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION = 9_007_199_254_740_991;
+
+export class LiveEffectRackBlockScheduler {
+  constructor(options) {
+    this.sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
+    this.maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
+    this.nextBlockId = boundedLiveEffectInteger(options.startBlockId, 0, 0, LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID);
+    this.nextSamplePosition = optionalLiveEffectSchedulerInteger(options.startSamplePosition, 0, LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION);
+    this.transportLatencySamples = boundedLiveEffectLatencySamples(options.transportLatencySamples, 0);
+    this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, 0, 0, 60000);
+    this.compensateOutputLatency = options.compensateOutputLatency !== false;
+    this.nowMs = typeof options.nowMs === "function" ? options.nowMs : liveEffectNowMs;
+    this.baseTransport = { ...options.transport };
+  }
+
+  schedule(channels, options = {}) {
+    const now = this.nowMs();
+    const blockId = boundedLiveEffectInteger(options.blockId, this.nextBlockId, 0, LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID);
+    const samplePosition = optionalLiveEffectSchedulerInteger(
+      options.samplePosition ?? this.nextSamplePosition,
+      0,
+      LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION
+    );
+    const timestamp = finiteLiveEffectSchedulerNumber(options.timestamp, now);
+    const transportLatencySamples = boundedLiveEffectLatencySamples(options.transportLatencySamples, this.transportLatencySamples);
+    const transport = options.transport ?? liveTransportForBlock({
+      ...this.baseTransport,
+      ...options.transportOptions,
+      sampleRate: options.sampleRate ?? this.sampleRate,
+      maxBlockSize: this.maxBlockSize,
+      blockId,
+      samplePosition,
+      reportedLatencySamples: transportLatencySamples,
+      compensateOutputLatency: this.compensateOutputLatency
+    });
+    this.advance(blockId, samplePosition);
+    const request = {
+      blockId,
+      channels,
+      inputBuses: options.inputBuses,
+      sampleRate: options.sampleRate ?? this.sampleRate,
+      transport,
+      timestamp,
+      wetMix: options.wetMix
+    };
+    const captureAgeMs = Math.max(0, now - timestamp);
+    return {
+      request,
+      blockId,
+      samplePosition,
+      timestamp,
+      captureAgeMs,
+      stale: this.maxInputAgeMs > 0 && captureAgeMs > this.maxInputAgeMs,
+      transport
+    };
+  }
+
+  updateLatency(transportLatencySamples) {
+    this.transportLatencySamples = boundedLiveEffectLatencySamples(transportLatencySamples, this.transportLatencySamples);
+    return this.transportLatencySamples;
+  }
+
+  updateFromRackHealth(health) {
+    return this.updateLatency(health.transportLatencySamples);
+  }
+
+  reset(options = {}) {
+    this.nextBlockId = boundedLiveEffectInteger(options.nextBlockId, 0, 0, LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID);
+    this.nextSamplePosition = optionalLiveEffectSchedulerInteger(options.nextSamplePosition, 0, LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION);
+  }
+
+  snapshot() {
+    return {
+      nextBlockId: this.nextBlockId,
+      nextSamplePosition: this.nextSamplePosition,
+      transportLatencySamples: this.transportLatencySamples,
+      maxInputAgeMs: this.maxInputAgeMs
+    };
+  }
+
+  advance(blockId, samplePosition) {
+    this.nextBlockId = Math.min(LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID, blockId + 1);
+    if (samplePosition !== void 0) {
+      this.nextSamplePosition = Math.min(LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION, samplePosition + this.maxBlockSize);
+    }
+  }
+}
+
+export function createLiveEffectRackBlockScheduler(options) {
+  return new LiveEffectRackBlockScheduler(options);
+}
+
+function optionalLiveEffectSchedulerInteger(value, min, max) {
+  if (value === void 0 || value === null) return void 0;
+  return boundedLiveEffectInteger(value, 0, min, max);
+}
+
+function finiteLiveEffectSchedulerNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 export function liveTransportForBlock(options) {
   const sampleRate = boundedLiveEffectInteger(options.sampleRate, 48000, 1, 384000);
   const maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
