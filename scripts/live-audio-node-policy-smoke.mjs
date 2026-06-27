@@ -76,6 +76,45 @@ assert(readySnapshot.recommendedOptions.audioRequestTimeoutMs === 250, "live Aud
 const unchangedReadySnapshot = readyWindow.record({ lastRenderDurationMs: Number.NaN });
 assert(unchangedReadySnapshot.samples === 1, "live AudioNode calibration window ignores non-finite samples");
 
+const baselineWindow = createLivePerformanceAudioNodeCalibrationWindow({
+  instanceId: "inst-baseline-window",
+  sampleRate: 48000,
+  maxBlockFrames: 128,
+  transportLatencySamples: 256,
+  safetyMarginBlocks: 0
+});
+const baselineSnapshot = baselineWindow.record({
+  lastRenderDurationMs: 0.4,
+  responseJitterBlocks: 0.25,
+  responseDeadlineLeadSamples: 128,
+  underruns: 9,
+  droppedInputBlocks: 3,
+  staleOutputBlocks: 2,
+  sharedInputDroppedBlocks: 1,
+  sharedOutputDroppedBlocks: 1
+});
+assert(baselineSnapshot.calibration.realtimeReady === true, "live AudioNode calibration window treats first pressure counters as the baseline");
+assert(!baselineSnapshot.calibration.warnings.includes("audio-drop-pressure"), "live AudioNode calibration window ignores pressure before the window starts");
+const deltaSnapshot = baselineWindow.record({
+  lastRenderDurationMs: 0.5,
+  responseJitterBlocks: 0.25,
+  responseDeadlineLeadSamples: 128,
+  underruns: 10,
+  droppedInputBlocks: 3,
+  staleOutputBlocks: 2,
+  sharedInputDroppedBlocks: 1,
+  sharedOutputDroppedBlocks: 1
+});
+assert(deltaSnapshot.calibration.warnings.includes("audio-drop-pressure"), "live AudioNode calibration window counts pressure deltas after the baseline");
+baselineWindow.reset();
+const resetBaselineSnapshot = baselineWindow.record({
+  lastRenderDurationMs: 0.4,
+  responseJitterBlocks: 0.25,
+  responseDeadlineLeadSamples: 128,
+  underruns: 10
+});
+assert(resetBaselineSnapshot.calibration.realtimeReady === true, "live AudioNode calibration window reset also resets the pressure baseline");
+
 const stressedCalibration = calibrateLivePerformanceAudioNodePolicy({
   instanceId: "inst-stress",
   sampleRate: 48000,

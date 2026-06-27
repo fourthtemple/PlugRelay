@@ -182,6 +182,14 @@ export interface LivePerformanceAudioNodeLatencyRefresher<T = unknown> {
   refreshLatency(transportLatencySamples?: number): Promise<T>;
 }
 
+interface LivePerformanceAudioNodeCalibrationPressureCounters {
+  underruns: number;
+  droppedInputBlocks: number;
+  staleOutputBlocks: number;
+  sharedInputDroppedBlocks: number;
+  sharedOutputDroppedBlocks: number;
+}
+
 export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAudioNodeOptions): SoundBridgeAudioNodeOptions {
   const maxQueuedOutputBlocks = boundedInteger(options.maxQueuedOutputBlocks, LIVE_AUDIO_NODE_MAX_QUEUED_OUTPUT_BLOCKS, 1, 64);
   const outputLatencyBlocks = boundedInteger(options.outputLatencyBlocks, Math.min(LIVE_AUDIO_NODE_OUTPUT_LATENCY_BLOCKS, maxQueuedOutputBlocks), 1, maxQueuedOutputBlocks);
@@ -434,6 +442,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
   private staleOutputBlocks = 0;
   private sharedInputDroppedBlocks = 0;
   private sharedOutputDroppedBlocks = 0;
+  private pressureBaseline?: LivePerformanceAudioNodeCalibrationPressureCounters;
   private droppedSamples = 0;
 
   constructor(options: LivePerformanceAudioNodeCalibrationWindowOptions) {
@@ -464,6 +473,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.pressureBaseline = undefined;
     this.droppedSamples = 0;
   }
 
@@ -507,11 +517,26 @@ export class LivePerformanceAudioNodeCalibrationWindow {
   }
 
   private recordPressure(health: LivePerformanceAudioNodeCalibrationHealthSample): void {
-    this.underruns = Math.max(this.underruns, boundedInteger(health.underruns, 0, 0, Number.MAX_SAFE_INTEGER));
-    this.droppedInputBlocks = Math.max(this.droppedInputBlocks, boundedInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
-    this.staleOutputBlocks = Math.max(this.staleOutputBlocks, boundedInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
-    this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, boundedInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
-    this.sharedOutputDroppedBlocks = Math.max(this.sharedOutputDroppedBlocks, boundedInteger(health.sharedOutputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
+    const counters = this.pressureCounters(health);
+    if (this.pressureBaseline === undefined) {
+      this.pressureBaseline = counters;
+      return;
+    }
+    this.underruns = Math.max(this.underruns, pressureCounterDelta(counters.underruns, this.pressureBaseline.underruns));
+    this.droppedInputBlocks = Math.max(this.droppedInputBlocks, pressureCounterDelta(counters.droppedInputBlocks, this.pressureBaseline.droppedInputBlocks));
+    this.staleOutputBlocks = Math.max(this.staleOutputBlocks, pressureCounterDelta(counters.staleOutputBlocks, this.pressureBaseline.staleOutputBlocks));
+    this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, pressureCounterDelta(counters.sharedInputDroppedBlocks, this.pressureBaseline.sharedInputDroppedBlocks));
+    this.sharedOutputDroppedBlocks = Math.max(this.sharedOutputDroppedBlocks, pressureCounterDelta(counters.sharedOutputDroppedBlocks, this.pressureBaseline.sharedOutputDroppedBlocks));
+  }
+
+  private pressureCounters(health: LivePerformanceAudioNodeCalibrationHealthSample): LivePerformanceAudioNodeCalibrationPressureCounters {
+    return {
+      underruns: boundedInteger(health.underruns, 0, 0, Number.MAX_SAFE_INTEGER),
+      droppedInputBlocks: boundedInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      staleOutputBlocks: boundedInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      sharedInputDroppedBlocks: boundedInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      sharedOutputDroppedBlocks: boundedInteger(health.sharedOutputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER)
+    };
   }
 }
 
@@ -551,4 +576,8 @@ function audioNodeDeadlineLeadBlocks(responseDeadlineLeadSamples: unknown, maxBl
   const leadSamples = boundedOptionalNumber(responseDeadlineLeadSamples, -1_048_576, 1_048_576);
   if (leadSamples === undefined) return undefined;
   return roundedAudioNodeNumber(leadSamples / boundedInteger(Number(maxBlockFrames), 128, 1, 8192));
+}
+
+function pressureCounterDelta(current: number, baseline: number): number {
+  return current >= baseline ? current - baseline : current;
 }

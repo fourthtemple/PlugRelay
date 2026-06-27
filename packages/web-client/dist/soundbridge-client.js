@@ -1417,6 +1417,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.pressureBaseline = void 0;
     this.droppedSamples = 0;
     this.options = { ...options };
     this.maxSamples = boundedAudioNodeInteger(options.maxSamples, LIVE_AUDIO_NODE_CALIBRATION_SAMPLES, 1, LIVE_AUDIO_NODE_CALIBRATION_SAMPLES);
@@ -1445,6 +1446,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.pressureBaseline = void 0;
     this.droppedSamples = 0;
   }
 
@@ -1488,11 +1490,26 @@ export class LivePerformanceAudioNodeCalibrationWindow {
   }
 
   recordPressure(health) {
-    this.underruns = Math.max(this.underruns, boundedAudioNodeInteger(health.underruns, 0, 0, Number.MAX_SAFE_INTEGER));
-    this.droppedInputBlocks = Math.max(this.droppedInputBlocks, boundedAudioNodeInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
-    this.staleOutputBlocks = Math.max(this.staleOutputBlocks, boundedAudioNodeInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
-    this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, boundedAudioNodeInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
-    this.sharedOutputDroppedBlocks = Math.max(this.sharedOutputDroppedBlocks, boundedAudioNodeInteger(health.sharedOutputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER));
+    const counters = this.pressureCounters(health);
+    if (this.pressureBaseline === void 0) {
+      this.pressureBaseline = counters;
+      return;
+    }
+    this.underruns = Math.max(this.underruns, audioNodePressureCounterDelta(counters.underruns, this.pressureBaseline.underruns));
+    this.droppedInputBlocks = Math.max(this.droppedInputBlocks, audioNodePressureCounterDelta(counters.droppedInputBlocks, this.pressureBaseline.droppedInputBlocks));
+    this.staleOutputBlocks = Math.max(this.staleOutputBlocks, audioNodePressureCounterDelta(counters.staleOutputBlocks, this.pressureBaseline.staleOutputBlocks));
+    this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, audioNodePressureCounterDelta(counters.sharedInputDroppedBlocks, this.pressureBaseline.sharedInputDroppedBlocks));
+    this.sharedOutputDroppedBlocks = Math.max(this.sharedOutputDroppedBlocks, audioNodePressureCounterDelta(counters.sharedOutputDroppedBlocks, this.pressureBaseline.sharedOutputDroppedBlocks));
+  }
+
+  pressureCounters(health) {
+    return {
+      underruns: boundedAudioNodeInteger(health.underruns, 0, 0, Number.MAX_SAFE_INTEGER),
+      droppedInputBlocks: boundedAudioNodeInteger(health.droppedInputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      staleOutputBlocks: boundedAudioNodeInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      sharedInputDroppedBlocks: boundedAudioNodeInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      sharedOutputDroppedBlocks: boundedAudioNodeInteger(health.sharedOutputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER)
+    };
   }
 }
 
@@ -1526,6 +1543,10 @@ function audioNodeDeadlineLeadBlocks(responseDeadlineLeadSamples, maxBlockFrames
   const leadSamples = boundedAudioNodeOptionalNumber(responseDeadlineLeadSamples, -1048576, 1048576);
   if (leadSamples === undefined) return undefined;
   return roundedAudioNodeNumber(leadSamples / boundedAudioNodeInteger(Number(maxBlockFrames), 128, 1, 8192));
+}
+
+function audioNodePressureCounterDelta(current, baseline) {
+  return current >= baseline ? current - baseline : current;
 }
 
 const LIVE_PERFORMANCE_INPUT_AGE_BLOCKS = 4;
