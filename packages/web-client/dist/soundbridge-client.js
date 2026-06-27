@@ -2027,6 +2027,144 @@ export function createLiveEffectRackAdaptiveLatencyController(options) {
   return new LiveEffectRackAdaptiveLatencyController(options);
 }
 
+const LIVE_EFFECT_CHAIN_MAX_STAGES = 16;
+
+export class LiveEffectRackChain {
+  constructor(options) {
+    const maxStages = boundedLiveEffectInteger(options.maxStages, LIVE_EFFECT_CHAIN_MAX_STAGES, 0, LIVE_EFFECT_CHAIN_MAX_STAGES);
+    const stages = Array.from(
+      { length: boundedLiveEffectInteger(options.stages?.length, 0, 0, maxStages) },
+      (_unused, index) => options.stages[index]
+    ).filter((stage) => typeof stage?.processBlock === "function");
+    this.stages = stages.slice(0, maxStages);
+    this.maxBlockSize = boundedLiveEffectInteger(options.maxBlockSize, 128, 1, 8192);
+    this.outputChannels = options.outputChannels === void 0
+      ? void 0
+      : boundedLiveEffectInteger(options.outputChannels, 2, 1, 32);
+  }
+
+  async processBlock(request, options = {}) {
+    const outputChannels = this.chainOutputChannels(request.channels);
+    if (this.stages.length === 0) {
+      return this.chainDryResponse(request, "chain-empty", outputChannels);
+    }
+    let channels = boundedLiveEffectChannels(request.channels, outputChannels, this.maxBlockSize);
+    let latencySamples = 0;
+    let tailSamples = 0;
+    let infiniteTail = false;
+    const stageResults = [];
+    for (let index = 0; index < this.stages.length; index += 1) {
+      const stage = this.stages[index];
+      try {
+        const response = await stage.processBlock({
+          ...request,
+          channels,
+          wetMix: liveEffectChainStageWetMix(options.stageWetMixes, index, request.wetMix)
+        });
+        channels = boundedLiveEffectChannels(response.channels, outputChannels, this.maxBlockSize);
+        latencySamples = boundedLiveEffectLatencySamples(
+          latencySamples + boundedLiveEffectLatencySamples(response.latencySamples, 0),
+          latencySamples
+        );
+        tailSamples = boundedLiveEffectLatencySamples(
+          tailSamples + boundedLiveEffectLatencySamples(response.tailSamples, 0),
+          tailSamples
+        );
+        infiniteTail = infiniteTail || response.infiniteTail === true;
+        stageResults.push(liveEffectChainStageResult(index, stage, response));
+      } catch (error) {
+        stageResults.push(liveEffectChainStageErrorResult(index, stage, error));
+        return {
+          blockId: request.blockId,
+          channels,
+          latencySamples,
+          tailSamples,
+          infiniteTail,
+          renderEngine: "chain-stage-error",
+          bypassed: stageResults.every((stage) => stage.bypassed),
+          healthy: false,
+          error,
+          stageCount: this.stages.length,
+          processedStages: stageResults.length,
+          failedStageIndex: index,
+          stageResults
+        };
+      }
+    }
+    return {
+      blockId: request.blockId,
+      channels,
+      latencySamples,
+      tailSamples,
+      infiniteTail,
+      renderEngine: "live-effect-rack-chain",
+      bypassed: stageResults.length === 0 || stageResults.every((stage) => stage.bypassed),
+      healthy: stageResults.every((stage) => stage.healthy),
+      stageCount: this.stages.length,
+      processedStages: stageResults.length,
+      stageResults
+    };
+  }
+
+  processScheduledBlock(scheduled, options = {}) {
+    if (scheduled.stale) {
+      return Promise.resolve(this.chainDryResponse(scheduled.request, "chain-stale-input", this.chainOutputChannels(scheduled.request.channels)));
+    }
+    return this.processBlock(scheduled.request, options);
+  }
+
+  chainDryResponse(request, renderEngine, outputChannels) {
+    return {
+      blockId: request.blockId,
+      channels: dryLiveEffectChannels(request.channels, outputChannels, this.maxBlockSize),
+      latencySamples: 0,
+      tailSamples: 0,
+      infiniteTail: false,
+      renderEngine,
+      bypassed: true,
+      healthy: true,
+      stageCount: this.stages.length,
+      processedStages: 0,
+      stageResults: []
+    };
+  }
+
+  chainOutputChannels(channels) {
+    return this.outputChannels ?? boundedLiveEffectInteger(channels.length, 2, 1, 32);
+  }
+}
+
+export function createLiveEffectRackChain(options) {
+  return new LiveEffectRackChain(options);
+}
+
+function liveEffectChainStageWetMix(stageWetMixes, index, fallback) {
+  return stageWetMixes && index < stageWetMixes.length ? Number(stageWetMixes[index]) : fallback;
+}
+
+function liveEffectChainStageResult(index, stage, response) {
+  return {
+    index,
+    bypassed: response.bypassed === true,
+    healthy: response.healthy !== false,
+    instanceId: stage.health?.instanceId,
+    renderEngine: typeof response.renderEngine === "string" ? response.renderEngine : void 0,
+    lastDryReason: typeof stage.health?.lastDryReason === "string" ? stage.health.lastDryReason : void 0,
+    error: response.error
+  };
+}
+
+function liveEffectChainStageErrorResult(index, stage, error) {
+  return {
+    index,
+    bypassed: true,
+    healthy: false,
+    instanceId: stage.health?.instanceId,
+    lastDryReason: typeof stage.health?.lastDryReason === "string" ? stage.health.lastDryReason : void 0,
+    error
+  };
+}
+
 const LIVE_EFFECT_SCHEDULER_MAX_BLOCK_ID = 9_007_199_254_740_991;
 const LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION = 9_007_199_254_740_991;
 
