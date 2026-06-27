@@ -113,6 +113,9 @@ const livePerformanceOptions = createLivePerformanceRackOptions({
 });
 assert(livePerformanceOptions.audioTransport === "binary", "live performance preset uses binary audio by default");
 assert(livePerformanceOptions.maxInFlightBlocks === 1, "live performance preset bounds in-flight processing");
+assert(near(livePerformanceOptions.processBudgetMs, 128 / 48000 * 1000), "live performance preset tracks one-block processing budget");
+assert(livePerformanceOptions.maxConsecutiveProcessBudgetMisses === 3, "live performance preset fails dry after repeated process budget misses");
+assert(livePerformanceOptions.processBudgetRecoveryBlocks === 16, "live performance preset allows bounded process-budget recovery");
 assert(livePerformanceOptions.maxConsecutiveRenderBudgetMisses === 2, "live performance preset fails dry after repeated budget misses");
 assert(livePerformanceOptions.renderBudgetRecoveryBlocks === 16, "live performance preset allows bounded render-pressure recovery");
 assert(livePerformanceOptions.processTimeoutRecoveryBlocks === 16, "live performance preset cools down before process-timeout recovery");
@@ -127,22 +130,28 @@ const overriddenLivePerformance = createLivePerformanceRackOptions({
   maxBlockSize: 128,
   audioTransport: "json",
   maxInputAgeBlocks: 2,
+  processBudgetBlocks: 2,
   processTimeoutBlocks: 3,
   transitionFadeBlocks: 1,
   maxInFlightBlocks: 3,
+  maxConsecutiveProcessBudgetMisses: 5,
   maxConsecutiveRenderBudgetMisses: 5,
+  processBudgetRecoveryBlocks: 7,
   renderBudgetRecoveryBlocks: 6,
   processTimeoutRecoveryBlocks: 4,
   maxProcessTimeoutRecoveries: 2
 });
 assert(overriddenLivePerformance.audioTransport === "json", "live performance preset preserves explicit transport overrides");
 assert(overriddenLivePerformance.maxInFlightBlocks === 3, "live performance preset preserves explicit in-flight overrides");
+assert(overriddenLivePerformance.maxConsecutiveProcessBudgetMisses === 5, "live performance preset preserves explicit process budget miss overrides");
 assert(overriddenLivePerformance.maxConsecutiveRenderBudgetMisses === 5, "live performance preset preserves explicit budget miss overrides");
+assert(overriddenLivePerformance.processBudgetRecoveryBlocks === 7, "live performance preset preserves process budget recovery overrides");
 assert(overriddenLivePerformance.renderBudgetRecoveryBlocks === 6, "live performance preset preserves explicit recovery overrides");
 assert(overriddenLivePerformance.processTimeoutRecoveryBlocks === 4, "live performance preset preserves process-timeout recovery overrides");
 assert(overriddenLivePerformance.maxProcessTimeoutRecoveries === 2, "live performance preset preserves process-timeout recovery attempt overrides");
 assert(overriddenLivePerformance.transitionFadeSamples === 128, "live performance preset derives fade overrides from block size");
 assert(near(overriddenLivePerformance.maxInputAgeMs, (128 / 48000) * 1000 * 2), "live performance preset derives freshness overrides from block time");
+assert(near(overriddenLivePerformance.processBudgetMs, (128 / 48000) * 1000 * 2), "live performance preset derives process budget overrides from block time");
 assert(near(overriddenLivePerformance.processTimeoutMs, (128 / 48000) * 1000 * 3), "live performance preset derives timeout overrides from block time");
 
 const rack = await SoundBridgeLiveEffectRack.create({
@@ -165,6 +174,12 @@ assert(
   "live effect rack starts with plugin-only latency health"
 );
 assert(rack.health.renderBudgetMisses === 0 && rack.health.renderBudgetExceeded === false, "live effect rack starts without budget pressure");
+assert(
+  rack.health.processBudgetMs === 0 &&
+    rack.health.processBudgetMisses === 0 &&
+    rack.health.processBudgetExceeded === false,
+  "live effect rack starts without process budget pressure"
+);
 
 const refreshedLatency = await rack.refreshLatency(128);
 assert(
@@ -351,6 +366,41 @@ client.renderBudgetExceeded = false;
 const pressureRecovered = await pressureRack.processBlock({ blockId: 14, channels: inputChannels });
 assert(pressureRecovered.bypassed === false && pressureRack.health.renderBudgetMisses === 0, "recovered render pressure rack resumes wet processing");
 await pressureRack.destroy();
+
+const processPressureRack = await SoundBridgeLiveEffectRack.create({
+  client,
+  plugin,
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processBudgetMs: 25,
+  maxConsecutiveProcessBudgetMisses: 2,
+  processBudgetRecoveryBlocks: 2
+});
+let processBudgetEvents = 0;
+let processBudgetRecoveredEvents = 0;
+processPressureRack.addEventListener("process-budget-exceeded", () => {
+  processBudgetEvents += 1;
+});
+processPressureRack.addEventListener("process-budget-recovered", () => {
+  processBudgetRecoveredEvents += 1;
+});
+client.processingDelayMs = 35;
+const processPressured = await processPressureRack.processBlock({ blockId: 15, channels: inputChannels });
+assert(processPressured.bypassed === false && processPressureRack.health.processBudgetMisses === 1, "first process budget miss stays wet");
+assert(processPressureRack.health.lastProcessBudgetMs === 25 && processPressureRack.health.processBudgetExceeded === true, "process budget telemetry records slow bridge trips");
+const processOverloaded = await processPressureRack.processBlock({ blockId: 16, channels: inputChannels });
+assert(processOverloaded.bypassed === true && processOverloaded.healthy === false, "repeated process budget misses fail closed to dry audio");
+assert(processPressureRack.health.unhealthyReason === "process-budget-exceeded", "process budget pressure records a recoverable reason");
+assert(processBudgetEvents === 2, "process budget misses emit host-visible events");
+client.processingDelayMs = 0;
+const processCooldownOne = await processPressureRack.processBlock({ blockId: 17, channels: inputChannels });
+assert(processCooldownOne.bypassed === true && processPressureRack.health.recoveryDryBlocks === 1, "process budget recovery waits through dry cooldown blocks");
+const processCooldownTwo = await processPressureRack.processBlock({ blockId: 18, channels: inputChannels });
+assert(processCooldownTwo.bypassed === true && processCooldownTwo.healthy === false, "final process budget cooldown block stays dry");
+assert(processPressureRack.health.healthy === true && processBudgetRecoveredEvents === 1, "process budget rack recovers after bounded dry cooldown");
+const processRecovered = await processPressureRack.processBlock({ blockId: 19, channels: inputChannels });
+assert(processRecovered.bypassed === false && processPressureRack.health.processBudgetMisses === 0, "recovered process budget rack resumes wet processing");
+await processPressureRack.destroy();
 
 const backpressureRack = await SoundBridgeLiveEffectRack.create({
   client,

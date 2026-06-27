@@ -1227,6 +1227,8 @@ function audioNodeLatencyMilliseconds(samples, sampleRate) {
 }
 
 const LIVE_PERFORMANCE_INPUT_AGE_BLOCKS = 4;
+const LIVE_PERFORMANCE_PROCESS_BUDGET_BLOCKS = 1;
+const LIVE_PERFORMANCE_PROCESS_BUDGET_MISSES = 3;
 const LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS = 4;
 const LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS = 0.5;
 const LIVE_PERFORMANCE_RECOVERY_BLOCKS = 16;
@@ -1236,6 +1238,7 @@ const LIVE_EFFECT_MAX_LATENCY_SAMPLES = 1048576;
 export function createLivePerformanceRackOptions(options) {
   const {
     maxInputAgeBlocks,
+    processBudgetBlocks,
     processTimeoutBlocks,
     transitionFadeBlocks,
     ...rackOptions
@@ -1243,6 +1246,7 @@ export function createLivePerformanceRackOptions(options) {
   const blockMs = liveEffectBlockDurationMs(options.sampleRate, options.maxBlockSize);
   const blockFrames = liveEffectBlockFrames(options.maxBlockSize);
   const inputAgeBlocks = boundedLiveEffectNumber(maxInputAgeBlocks, LIVE_PERFORMANCE_INPUT_AGE_BLOCKS, 0, 128);
+  const budgetBlocks = boundedLiveEffectNumber(processBudgetBlocks, LIVE_PERFORMANCE_PROCESS_BUDGET_BLOCKS, 0, 128);
   const timeoutBlocks = boundedLiveEffectNumber(processTimeoutBlocks, LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS, 0, 128);
   const fadeBlocks = boundedLiveEffectNumber(transitionFadeBlocks, LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS, 0, 8);
 
@@ -1251,9 +1255,17 @@ export function createLivePerformanceRackOptions(options) {
     audioTransport: options.audioTransport ?? "binary",
     maxInputAgeMs: boundedLiveEffectNumber(options.maxInputAgeMs, blockMs * inputAgeBlocks, 0, 60000),
     maxInFlightBlocks: boundedLiveEffectInteger(options.maxInFlightBlocks, 1, 1, 32),
+    processBudgetMs: boundedLiveEffectNumber(options.processBudgetMs, blockMs * budgetBlocks, 0, 60000),
     processTimeoutMs: boundedLiveEffectNumber(options.processTimeoutMs, blockMs * timeoutBlocks, 0, 60000),
     transitionFadeSamples: boundedLiveEffectInteger(options.transitionFadeSamples, Math.ceil(blockFrames * fadeBlocks), 0, 4096),
+    maxConsecutiveProcessBudgetMisses: boundedLiveEffectInteger(
+      options.maxConsecutiveProcessBudgetMisses,
+      LIVE_PERFORMANCE_PROCESS_BUDGET_MISSES,
+      0,
+      1024
+    ),
     maxConsecutiveRenderBudgetMisses: boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 2, 0, 1024),
+    processBudgetRecoveryBlocks: boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
     renderBudgetRecoveryBlocks: boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
     processTimeoutRecoveryBlocks: boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, LIVE_PERFORMANCE_RECOVERY_BLOCKS, 0, 4096),
     maxProcessTimeoutRecoveries: boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES, 0, 32)
@@ -1278,6 +1290,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.droppedInputBlocks = 0;
     this.staleInputBlocks = 0;
     this.staleOutputBlocks = 0;
+    this.processBudgetMisses = 0;
+    this.lastProcessDurationMs = void 0;
+    this.lastProcessBudgetMs = void 0;
+    this.lastProcessBudgetExceeded = false;
     this.renderBudgetMisses = 0;
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
@@ -1302,9 +1318,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.audioTransport = options.audioTransport === "json" ? "json" : "binary";
     this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, 0, 0, 60000);
     this.maxInFlightBlocks = boundedLiveEffectInteger(options.maxInFlightBlocks, 1, 1, 32);
+    this.processBudgetMs = boundedLiveEffectNumber(options.processBudgetMs, 0, 0, 60000);
     this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, 0, 0, 60000);
     this.transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, 0, 0, 4096);
+    this.maxConsecutiveProcessBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveProcessBudgetMisses, 0, 0, 1024);
     this.maxConsecutiveRenderBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveRenderBudgetMisses, 3, 0, 1024);
+    this.processBudgetRecoveryBlocks = boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, 0, 0, 4096);
     this.renderBudgetRecoveryBlocks = boundedLiveEffectInteger(options.renderBudgetRecoveryBlocks, 0, 0, 4096);
     this.processTimeoutRecoveryBlocks = boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, 0, 0, 4096);
     this.maxProcessTimeoutRecoveries = boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, 0, 0, 32);
@@ -1339,6 +1358,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       pluginLatencyMs: liveEffectLatencyMilliseconds(this.created?.latencySamples ?? 0, this.sampleRate),
       transportLatencyMs: liveEffectLatencyMilliseconds(this.transportLatencySamples, this.sampleRate),
       reportedLatencyMs: liveEffectLatencyMilliseconds(this.reportedLatencySamples, this.sampleRate),
+      processBudgetMisses: this.processBudgetMisses,
+      lastProcessDurationMs: this.lastProcessDurationMs,
+      lastProcessBudgetMs: this.lastProcessBudgetMs,
+      processBudgetExceeded: this.lastProcessBudgetExceeded,
       renderBudgetMisses: this.renderBudgetMisses,
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
@@ -1352,10 +1375,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       unhealthyReason: this.unhealthyReason,
       recoveryDryBlocks: this.recoveryDryBlocks,
       recoveryInProgress: this.recoveryInProgress,
+      processBudgetRecoveryBlocks: this.processBudgetRecoveryBlocks,
       renderBudgetRecoveryBlocks: this.renderBudgetRecoveryBlocks,
       processTimeoutRecoveryBlocks: this.processTimeoutRecoveryBlocks,
       processTimeoutRecoveryAttempts: this.processTimeoutRecoveryAttempts,
       maxProcessTimeoutRecoveries: this.maxProcessTimeoutRecoveries,
+      processBudgetMs: this.processBudgetMs,
       processTimeoutMs: this.processTimeoutMs,
       maxInputAgeMs: this.maxInputAgeMs,
       inFlightBlocks: this.inFlightBlocks,
@@ -1454,6 +1479,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
 
     let inFlightEpoch = this.inFlightEpoch;
     let outputStateVersion = this.outputStateVersion;
+    const processStartedAt = liveEffectNowMs();
     try {
       const processRequest = {
         instanceId: this.instanceId,
@@ -1485,6 +1511,11 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       if (this.outputStateChanged(inFlightEpoch, outputStateVersion)) {
         return this.dryResponse(request, void 0, this.bypassed ? "dry-bypass" : "dry-state-changed");
       }
+      if (this.recordProcessBudget(liveEffectNowMs() - processStartedAt)) {
+        const error = new Error("process_budget_exceeded");
+        this.failClosed(error, "process-budget-exceeded");
+        return this.dryResponse(request, error);
+      }
       if (this.isStaleInput(request.timestamp)) {
         this.staleOutputBlocks = Math.min(1024, this.staleOutputBlocks + 1);
         const dry = this.dryResponse(request, void 0, "dry-stale-output");
@@ -1502,6 +1533,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       if (this.outputStateChanged(inFlightEpoch, outputStateVersion)) {
         return this.dryResponse(request, void 0, this.bypassed ? "dry-bypass" : "dry-state-changed");
       }
+      this.recordProcessBudget(liveEffectNowMs() - processStartedAt);
       this.failClosed(error, liveEffectFailureReason(error));
       return this.dryResponse(request, error);
     }
@@ -1527,6 +1559,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.droppedInputBlocks = 0;
     this.staleInputBlocks = 0;
     this.staleOutputBlocks = 0;
+    this.processBudgetMisses = 0;
+    this.lastProcessDurationMs = void 0;
+    this.lastProcessBudgetMs = void 0;
+    this.lastProcessBudgetExceeded = false;
     this.transportLatencySamples = 0;
     this.reportedLatencySamples = this.created.latencySamples;
     this.renderBudgetMisses = 0;
@@ -1579,6 +1615,17 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     return this.maxConsecutiveRenderBudgetMisses > 0 && this.renderBudgetMisses >= this.maxConsecutiveRenderBudgetMisses;
   }
 
+  recordProcessBudget(durationMs) {
+    this.lastProcessDurationMs = boundedLiveEffectOptionalNumber(durationMs, 0, 60000);
+    this.lastProcessBudgetMs = this.processBudgetMs > 0 ? this.processBudgetMs : void 0;
+    this.lastProcessBudgetExceeded = this.processBudgetMs > 0 && (this.lastProcessDurationMs ?? 0) > this.processBudgetMs;
+    this.processBudgetMisses = this.lastProcessBudgetExceeded ? Math.min(1024, this.processBudgetMisses + 1) : 0;
+    if (this.lastProcessBudgetExceeded) {
+      this.dispatchEvent(new CustomEvent("process-budget-exceeded", { detail: { durationMs: this.lastProcessDurationMs, health: this.health } }));
+    }
+    return this.maxConsecutiveProcessBudgetMisses > 0 && this.processBudgetMisses >= this.maxConsecutiveProcessBudgetMisses;
+  }
+
   recordResponseLatency(response) {
     if (!this.created) {
       return;
@@ -1596,6 +1643,8 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   maybeRecoverFromFailure() {
     if (this.unhealthyReason === "render-budget-exceeded") {
       this.maybeRecoverFromRenderPressure();
+    } else if (this.unhealthyReason === "process-budget-exceeded") {
+      this.maybeRecoverFromProcessBudget();
     } else if (this.unhealthyReason === "process-timeout") {
       this.maybeRecoverFromProcessTimeout();
     }
@@ -1616,6 +1665,24 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.renderBudgetMisses = 0;
     this.lastRenderBudgetExceeded = false;
     this.dispatchEvent(new CustomEvent("render-budget-recovered", { detail: { health: this.health } }));
+    this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  maybeRecoverFromProcessBudget() {
+    if (this.healthy || this.unhealthyReason !== "process-budget-exceeded" || this.processBudgetRecoveryBlocks <= 0) {
+      return;
+    }
+    this.recoveryDryBlocks = Math.min(4096, this.recoveryDryBlocks + 1);
+    if (this.recoveryDryBlocks < this.processBudgetRecoveryBlocks) {
+      return;
+    }
+    this.healthy = true;
+    this.lastError = void 0;
+    this.unhealthyReason = void 0;
+    this.recoveryDryBlocks = 0;
+    this.processBudgetMisses = 0;
+    this.lastProcessBudgetExceeded = false;
+    this.dispatchEvent(new CustomEvent("process-budget-recovered", { detail: { health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
