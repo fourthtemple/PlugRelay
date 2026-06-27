@@ -45,6 +45,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.inputBufferAllocations = 0;
     this.inputBufferReuses = 0;
     this.pooledInputBuffers = 0;
+    this.outputBufferAllocations = 0;
+    this.outputBufferReuses = 0;
+    this.pooledOutputBuffers = 0;
     this.inFlightBlocks = 0;
     this.responseBlocks = 0;
     this.responseBlocksSinceLastStats = 0;
@@ -55,8 +58,10 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.responseDeadlineLeadMaxBlocks = void 0;
     this.outputBlocks = new Map();
     this.inputBufferPool = new Map();
+    this.outputBufferPool = new Map();
     this.maxInFlightBlocks = this.boundedInteger(processorOptions.maxInFlightBlocks, 8, 1, 64);
     this.maxRecycledInputBuffers = this.outputChannels * Math.max(2, this.maxInFlightBlocks);
+    this.maxRecycledOutputBuffers = this.outputChannels * Math.max(2, this.maxQueuedOutputBlocks + this.maxOutputLatencyBlocks);
     this.sharedAudio = void 0;
     this.sharedAudioWakeMode = "none";
     this.port.onmessage = (event) => this.handleMessage(event.data);
@@ -77,6 +82,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     if (queued) {
       this.outputBlocks.delete(targetBlockId);
       this.writeBlock(output, queued, frames);
+      this.recycleOutputBlock(queued, frames);
       this.processedBlocks += 1;
     } else if (insertingSafetyBlock) {
       this.writeBlock(output, outgoing, frames);
@@ -128,6 +134,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         inputBufferAllocations: this.inputBufferAllocations,
         inputBufferReuses: this.inputBufferReuses,
         pooledInputBuffers: this.pooledInputBuffers,
+        outputBufferAllocations: this.outputBufferAllocations,
+        outputBufferReuses: this.outputBufferReuses,
+        pooledOutputBuffers: this.pooledOutputBuffers,
         inFlightBlocks: this.inFlightBlocks,
         responseBlocks: this.responseBlocks,
         responseBlocksSinceLastStats: this.responseBlocksSinceLastStats,
@@ -154,8 +163,10 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     if (message.type === "destroy") {
       this.outputBlocks.clear();
       this.inputBufferPool.clear();
+      this.outputBufferPool.clear();
       this.resetResponseDeadlineState();
       this.pooledInputBuffers = 0;
+      this.pooledOutputBuffers = 0;
       this.sharedAudio = void 0;
       this.sharedAudioWakeMode = "none";
       this.transportPort?.postMessage({ type: "destroy" });
@@ -220,7 +231,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       this.dropOldestOutputBlock();
     }
 
-    this.outputBlocks.set(blockId, message.channels.slice(0, this.outputChannels).map((channel) => this.outputChannelBlock(channel)));
+    this.queueOutputBlock(blockId, message.channels.slice(0, this.outputChannels).map((channel) => this.outputChannelBlock(channel)));
     if (typeof message.renderEngine === "string") {
       this.port.postMessage({ type: "process-diagnostics", blockId, renderEngine: message.renderEngine });
     }
@@ -345,12 +356,20 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     const outputChannels = [];
     const base = this.sharedAudioOffset(shared, slotIndex);
     for (let channelIndex = 0; channelIndex < channels; channelIndex += 1) {
-      const channel = new Float32Array(frames);
+      const channel = this.takeOutputBuffer(frames);
       const sourceOffset = base + channelIndex * shared.frames;
       channel.set(shared.outputAudio.subarray(sourceOffset, sourceOffset + frames));
       outputChannels.push(channel);
     }
-    this.outputBlocks.set(blockId, outputChannels);
+    this.queueOutputBlock(blockId, outputChannels);
+  }
+
+  queueOutputBlock(blockId, channels) {
+    const existing = this.outputBlocks.get(blockId);
+    if (existing && existing !== channels) {
+      this.recycleOutputBlock(existing, existing[0]?.length);
+    }
+    this.outputBlocks.set(blockId, channels);
   }
 
   writeSharedSlot(control, audio, slotIndex, blockId, frames, channels, shared) {
@@ -541,6 +560,20 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     return new Float32Array(frames);
   }
 
+  takeOutputBuffer(frames) {
+    const pool = this.outputBufferPool.get(frames);
+    const recycled = pool?.pop();
+    if (recycled) {
+      this.pooledOutputBuffers = Math.max(0, this.pooledOutputBuffers - 1);
+      if (recycled.length === frames && recycled.buffer.byteLength >= frames * Float32Array.BYTES_PER_ELEMENT) {
+        this.outputBufferReuses += 1;
+        return recycled;
+      }
+    }
+    this.outputBufferAllocations += 1;
+    return new Float32Array(frames);
+  }
+
   recycleInputBlock(channels, requestedFrames) {
     const frames = this.boundedInteger(requestedFrames, channels[0]?.length ?? 128, 1, 8192);
     const pool = this.inputBufferPool.get(frames) ?? [];
@@ -567,13 +600,43 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
   }
 
+  recycleOutputBlock(channels, requestedFrames) {
+    const frames = this.boundedInteger(requestedFrames, channels[0]?.length ?? 128, 1, 8192);
+    const pool = this.outputBufferPool.get(frames) ?? [];
+    const seenBuffers = new Set();
+    for (const channel of channels) {
+      if (
+        this.pooledOutputBuffers >= this.maxRecycledOutputBuffers ||
+        !(channel instanceof Float32Array) ||
+        channel.length !== frames ||
+        channel.byteOffset !== 0 ||
+        !(channel.buffer instanceof ArrayBuffer) ||
+        channel.byteLength !== channel.buffer.byteLength ||
+        channel.buffer.byteLength < frames * Float32Array.BYTES_PER_ELEMENT ||
+        seenBuffers.has(channel.buffer)
+      ) {
+        continue;
+      }
+      seenBuffers.add(channel.buffer);
+      pool.push(channel);
+      this.pooledOutputBuffers += 1;
+    }
+    if (pool.length > 0) {
+      this.outputBufferPool.set(frames, pool);
+    }
+  }
+
   dropOldestOutputBlock() {
     let oldestBlockId = Number.POSITIVE_INFINITY;
     for (const blockId of this.outputBlocks.keys()) {
       oldestBlockId = Math.min(oldestBlockId, blockId);
     }
     if (Number.isFinite(oldestBlockId)) {
+      const block = this.outputBlocks.get(oldestBlockId);
       this.outputBlocks.delete(oldestBlockId);
+      if (block) {
+        this.recycleOutputBlock(block, block[0]?.length);
+      }
       this.staleOutputBlocks += 1;
     }
   }
@@ -585,7 +648,11 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     let dropped = 0;
     for (const blockId of Array.from(this.outputBlocks.keys())) {
       if (blockId < targetBlockId) {
+        const block = this.outputBlocks.get(blockId);
         this.outputBlocks.delete(blockId);
+        if (block) {
+          this.recycleOutputBlock(block, block[0]?.length);
+        }
         this.staleOutputBlocks += 1;
         dropped += 1;
       }

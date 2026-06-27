@@ -159,6 +159,12 @@ sharedProcessor.process([[Float32Array.from([8, 8])]], [sharedOutput]);
 assert(equal(Array.from(sharedOutput[0]), [70, 70]), "shared worklet transport drains shared output blocks");
 assert(sharedProcessor.responseBlocks === 1, "shared worklet transport counts returned response blocks");
 assert(sharedProcessor.responseDeadlineLeadBlocks === 0, "shared worklet transport records shared deadline lead");
+assert(sharedProcessor.outputBufferAllocations === 1, "shared worklet transport allocates its first shared output buffer");
+writeSharedOutput(sharedAudio, 1, [Float32Array.from([71, 71])]);
+const sharedOutputReuse = [new Float32Array(2)];
+sharedProcessor.process([[Float32Array.from([9, 9])]], [sharedOutputReuse]);
+assert(equal(Array.from(sharedOutputReuse[0]), [71, 71]), "shared worklet transport plays reused output buffers");
+assert(sharedProcessor.outputBufferReuses === 1, "shared worklet transport reuses pooled output buffers");
 
 const adaptiveProcessor = new processorCtor({
   processorOptions: {
@@ -233,6 +239,9 @@ assert(typeof statsMessage?.sharedOutputDroppedBlocks === "number", "worklet sta
 assert(typeof statsMessage?.inputBufferAllocations === "number", "worklet stats report input buffer allocations");
 assert(typeof statsMessage?.inputBufferReuses === "number", "worklet stats report input buffer reuse");
 assert(typeof statsMessage?.pooledInputBuffers === "number", "worklet stats report pooled input buffers");
+assert(typeof statsMessage?.outputBufferAllocations === "number", "worklet stats report output buffer allocations");
+assert(typeof statsMessage?.outputBufferReuses === "number", "worklet stats report output buffer reuse");
+assert(typeof statsMessage?.pooledOutputBuffers === "number", "worklet stats report pooled output buffers");
 assert(typeof statsMessage?.responseBlocks === "number", "worklet stats report response blocks");
 assert(typeof statsMessage?.responseBlocksSinceLastStats === "number", "worklet stats report windowed response blocks");
 assert(typeof statsMessage?.responseDeadlineLeadBlocks === "number", "worklet stats report latest response deadline lead");

@@ -107,6 +107,15 @@ export function createNativeWorkerProcesses({
     DEFAULT_NATIVE_WORKER_COMMAND_TIMEOUT_MS
   );
 
+  function requestWorkerQuit(process) {
+    const stdin = process?.stdin;
+    if (!process || process.killed || !stdin?.writable || stdin.destroyed || stdin.writableEnded) return;
+    stdin.once("error", () => {});
+    try { stdin.write("quit\n", "utf8", () => {
+      if (!stdin.destroyed && !stdin.writableEnded) stdin.end();
+    }); } catch {}
+  }
+
   class ExampleInstrumentWorker {
     constructor(executablePath) {
       this.executablePath = executablePath;
@@ -276,10 +285,7 @@ export function createNativeWorkerProcesses({
       if (!this.process || this.process.killed) {
         return;
       }
-      try {
-        this.process.stdin.write("quit\n");
-        this.process.stdin.end();
-      } catch {}
+      requestWorkerQuit(this.process);
       setTimeout(() => {
         terminateWorkerProcess(this.process, this.workerTerminationGraceMs);
       }, 250).unref?.();
@@ -663,10 +669,7 @@ export function createNativeWorkerProcesses({
       if (!this.process || this.process.killed) {
         return;
       }
-      try {
-        this.process.stdin.write("quit\n");
-        this.process.stdin.end();
-      } catch {}
+      requestWorkerQuit(this.process);
       setTimeout(() => {
         terminateWorkerProcess(this.process, this.workerTerminationGraceMs);
       }, 250).unref?.();

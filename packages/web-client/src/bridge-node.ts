@@ -170,6 +170,9 @@ export class SoundBridgeAudioNode extends EventTarget {
       inputBufferAllocations?: number;
       inputBufferReuses?: number;
       pooledInputBuffers?: number;
+      outputBufferAllocations?: number;
+      outputBufferReuses?: number;
+      pooledOutputBuffers?: number;
       inFlightBlocks?: number;
       responseBlocks?: number;
       responseBlocksSinceLastStats?: number;
