@@ -35,8 +35,8 @@ import {
 } from "./live-effect-rack-metrics";
 import type { LiveEffectDryReason, LiveEffectRackTiming } from "./live-effect-rack-metrics";
 import { createLiveEffectRackPolicy } from "./live-effect-rack-policy";
-export { createLiveEffectRackPolicy } from "./live-effect-rack-policy";
-export type { LiveEffectRackPolicy, LiveEffectRackPolicyOptions } from "./live-effect-rack-policy";
+export { calibrateLiveEffectRackPolicy, createLiveEffectRackPolicy } from "./live-effect-rack-policy";
+export type { LiveEffectRackCalibration, LiveEffectRackCalibrationOptions, LiveEffectRackPolicy, LiveEffectRackPolicyOptions } from "./live-effect-rack-policy";
 import { liveTransportForBlock } from "./live-transport";
 export interface LiveEffectRackOptions {
   client: SoundBridgeClient;

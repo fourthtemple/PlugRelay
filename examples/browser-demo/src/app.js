@@ -594,7 +594,12 @@ async function noteOn(note, button) {
       return;
     }
 
+    const resumeBeforeStartup = audioContext?.state !== "running" ? audioContext?.resume() : undefined;
     await ensureBridgeInstance();
+    await resumeBeforeStartup;
+    if (audioContext?.state !== "running") {
+      await audioContext.resume();
+    }
     activeNotes.add(note);
     button?.classList.add("active");
     await client.sendMidiEvents(selectedInstanceId, [

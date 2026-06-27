@@ -1246,6 +1246,7 @@ const LIVE_PERFORMANCE_PROCESS_TIMEOUT_BLOCKS = 4;
 const LIVE_PERFORMANCE_TRANSITION_FADE_BLOCKS = 0.5;
 const LIVE_PERFORMANCE_RECOVERY_BLOCKS = 16;
 const LIVE_PERFORMANCE_PROCESS_TIMEOUT_RECOVERIES = 1;
+const LIVE_EFFECT_CALIBRATION_SAMPLES = 256;
 const LIVE_EFFECT_MAX_LATENCY_SAMPLES = 1048576;
 const LIVE_TRANSPORT_MAX_SAMPLE_POSITION = 9007199254740991;
 const LIVE_TRANSPORT_MAX_MUSIC = 1000000000;
@@ -1294,6 +1295,117 @@ export function createLiveEffectRackPolicy(options) {
 
 function liveEffectPolicyBlockUnits(value, blockValue) {
   return blockValue > 0 ? Number((value / blockValue).toFixed(3)) : 0;
+}
+
+export function calibrateLiveEffectRackPolicy(options) {
+  const policy = createLiveEffectRackPolicy(options);
+  const safetyBlocks = boundedLiveEffectNumber(options.safetyMarginBlocks, 1, 0, 8);
+  const safetyMs = policy.blockDurationMs * safetyBlocks;
+  const observedProcessP95Ms = liveEffectPercentileSample(options.processDurationsMs, 0, 60000);
+  const observedRenderP95Ms = liveEffectPercentileSample(options.renderDurationsMs, 0, 60000);
+  const observedResponseJitterP95Blocks = liveEffectPercentileSample(options.responseJitterBlocks, 0, 64);
+  const observedDeadlineLeadMinBlocks = liveEffectMinimumSample(options.deadlineLeadBlocks, -64, 64);
+  const currentLatencyBlocks = liveEffectPolicyBlockUnits(policy.transportLatencySamples, policy.maxBlockSize);
+  const jitterLatencyBlocks = Math.ceil(
+    (observedResponseJitterP95Blocks ?? 0) +
+      Math.max(0, -(observedDeadlineLeadMinBlocks ?? 0)) +
+      safetyBlocks
+  );
+  const recommendedTransportLatencyBlocks = boundedLiveEffectInteger(
+    Math.max(currentLatencyBlocks, jitterLatencyBlocks),
+    currentLatencyBlocks,
+    0,
+    128
+  );
+  const recommendedTransportLatencySamples = boundedLiveEffectLatencySamples(
+    recommendedTransportLatencyBlocks * policy.maxBlockSize,
+    policy.transportLatencySamples
+  );
+  const recommendedProcessBudgetMs = roundedLiveEffectPolicyNumber(
+    boundedLiveEffectNumber(
+      Math.max(policy.processBudgetMs, observedProcessP95Ms ?? 0, observedRenderP95Ms ?? 0) + safetyMs,
+      policy.processBudgetMs,
+      0,
+      60000
+    )
+  );
+  const recommendedProcessTimeoutMs = roundedLiveEffectPolicyNumber(
+    boundedLiveEffectNumber(
+      Math.max(policy.processTimeoutMs, recommendedProcessBudgetMs + safetyMs),
+      policy.processTimeoutMs,
+      0,
+      60000
+    )
+  );
+  const recommendedReportedLatencySamples = combinedLiveEffectLatencySamples(policy.pluginLatencySamples, recommendedTransportLatencySamples);
+  const warnings = liveEffectCalibrationWarnings({
+    policy,
+    observedProcessP95Ms,
+    observedRenderP95Ms,
+    observedResponseJitterP95Blocks,
+    observedDeadlineLeadMinBlocks,
+    recommendedProcessBudgetMs,
+    recommendedProcessTimeoutMs,
+    recommendedTransportLatencyBlocks,
+    currentLatencyBlocks
+  });
+  return {
+    policy,
+    observedProcessP95Ms,
+    observedRenderP95Ms,
+    observedResponseJitterP95Blocks,
+    observedDeadlineLeadMinBlocks,
+    recommendedProcessBudgetMs,
+    recommendedProcessTimeoutMs,
+    recommendedTransportLatencyBlocks,
+    recommendedTransportLatencySamples,
+    recommendedReportedLatencySamples,
+    recommendedReportedLatencyMs: liveEffectLatencyMilliseconds(recommendedReportedLatencySamples, policy.sampleRate),
+    realtimeReady: warnings.length === 0,
+    warnings
+  };
+}
+
+function liveEffectPercentileSample(samples, min, max) {
+  const values = boundedLiveEffectSamples(samples, min, max);
+  if (values.length === 0) return void 0;
+  values.sort((left, right) => left - right);
+  return roundedLiveEffectPolicyNumber(values[Math.min(values.length - 1, Math.ceil(values.length * 0.95) - 1)] ?? 0);
+}
+
+function liveEffectMinimumSample(samples, min, max) {
+  const values = boundedLiveEffectSamples(samples, min, max);
+  return values.length > 0 ? roundedLiveEffectPolicyNumber(Math.min(...values)) : void 0;
+}
+
+function boundedLiveEffectSamples(samples, min, max) {
+  const length = boundedLiveEffectInteger(samples?.length, 0, 0, LIVE_EFFECT_CALIBRATION_SAMPLES);
+  const values = [];
+  for (let index = 0; index < length; index += 1) {
+    const sample = Number(samples?.[index]);
+    if (Number.isFinite(sample)) values.push(Math.max(min, Math.min(max, sample)));
+  }
+  return values;
+}
+
+function liveEffectCalibrationWarnings(calibration) {
+  const warnings = [];
+  if (exceedsLiveEffectPolicy(calibration.observedProcessP95Ms ?? 0, calibration.policy.processBudgetMs)) warnings.push("process-over-budget");
+  if (exceedsLiveEffectPolicy(calibration.observedRenderP95Ms ?? 0, calibration.policy.blockDurationMs)) warnings.push("render-over-block-budget");
+  if ((calibration.observedDeadlineLeadMinBlocks ?? 0) < 0) warnings.push("deadline-miss");
+  if ((calibration.observedResponseJitterP95Blocks ?? 0) > calibration.currentLatencyBlocks) warnings.push("response-jitter");
+  if (exceedsLiveEffectPolicy(calibration.recommendedProcessBudgetMs, calibration.policy.processBudgetMs)) warnings.push("increase-process-budget");
+  if (exceedsLiveEffectPolicy(calibration.recommendedProcessTimeoutMs, calibration.policy.processTimeoutMs)) warnings.push("increase-process-timeout");
+  if (calibration.recommendedTransportLatencyBlocks > calibration.currentLatencyBlocks) warnings.push("increase-transport-latency");
+  return Array.from(new Set(warnings));
+}
+
+function roundedLiveEffectPolicyNumber(value) {
+  return Number(value.toFixed(3));
+}
+
+function exceedsLiveEffectPolicy(value, policyValue) {
+  return value - policyValue > 0.001;
 }
 
 export function liveTransportForBlock(options) {

@@ -106,12 +106,19 @@ async function playKeyUntilProcessed(page) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const before = await processedBlocks(page);
     const key = page.locator('.piano-key[data-note="60"]');
-    const box = await key.boundingBox();
-    assert(box, "Keyboard key is visible.");
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.waitForTimeout(500);
-    await page.mouse.up();
+    if (attempt === 0) {
+      await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+      await page.keyboard.down((await key.getAttribute("data-key")) ?? "a");
+      await page.waitForTimeout(500);
+      await page.keyboard.up((await key.getAttribute("data-key")) ?? "a");
+    } else {
+      const box = await key.boundingBox();
+      assert(box, "Keyboard key is visible.");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.waitForTimeout(500);
+      await page.mouse.up();
+    }
     try {
       await page.waitForFunction(
         (previous) => Number(document.querySelector("#processedBlocks")?.textContent ?? 0) > previous,

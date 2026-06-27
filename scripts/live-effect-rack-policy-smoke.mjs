@@ -1,4 +1,5 @@
 import {
+  calibrateLiveEffectRackPolicy,
   createLiveEffectRackPolicy,
   createLivePerformanceRackOptions
 } from "../packages/web-client/dist/soundbridge-client.js";
@@ -71,5 +72,53 @@ assert(near(rackOptions.maxInputAgeMs, (128 / 48000) * 1000 * 2), "live rack pre
 assert(near(rackOptions.processBudgetMs, (128 / 48000) * 1000 * 2), "live rack preset uses policy budget timing");
 assert(near(rackOptions.processTimeoutMs, (128 / 48000) * 1000 * 3), "live rack preset uses policy timeout timing");
 assert(rackOptions.transitionFadeSamples === 128, "live rack preset uses policy fade timing");
+
+const readyCalibration = calibrateLiveEffectRackPolicy({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  transportLatencySamples: 256,
+  processDurationsMs: [0.6, 0.7, 0.8],
+  renderDurationsMs: [0.4, 0.5, 0.6],
+  responseJitterBlocks: [0, 0.25, 0.5],
+  deadlineLeadBlocks: [1, 1.25, 1.5],
+  safetyMarginBlocks: 0
+});
+assert(readyCalibration.realtimeReady === true, "live effect calibration accepts in-budget measurements");
+assert(readyCalibration.warnings.length === 0, "live effect calibration stays quiet for in-budget measurements");
+assert(readyCalibration.recommendedTransportLatencySamples === 256, "live effect calibration preserves enough existing transport latency");
+
+const stressedCalibration = calibrateLiveEffectRackPolicy({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  pluginLatencySamples: 32,
+  processDurationsMs: [2.5, 3.1, 4],
+  renderDurationsMs: [1, 2.9, 3.2],
+  responseJitterBlocks: [1, 2, 3],
+  deadlineLeadBlocks: [1, -1, 0.5],
+  safetyMarginBlocks: 1
+});
+assert(stressedCalibration.realtimeReady === false, "live effect calibration flags stressed live measurements");
+assert(stressedCalibration.observedProcessP95Ms === 4, "live effect calibration reports process p95");
+assert(stressedCalibration.observedRenderP95Ms === 3.2, "live effect calibration reports render p95");
+assert(stressedCalibration.observedResponseJitterP95Blocks === 3, "live effect calibration reports jitter p95");
+assert(stressedCalibration.observedDeadlineLeadMinBlocks === -1, "live effect calibration reports missed deadline lead");
+assert(stressedCalibration.recommendedTransportLatencyBlocks === 5, "live effect calibration recommends bounded transport latency for jitter");
+assert(stressedCalibration.recommendedTransportLatencySamples === 640, "live effect calibration converts recommended latency to samples");
+assert(stressedCalibration.recommendedReportedLatencySamples === 672, "live effect calibration combines plugin and recommended transport latency");
+assert(stressedCalibration.warnings.includes("render-over-block-budget"), "live effect calibration warns on render budget misses");
+assert(stressedCalibration.warnings.includes("increase-transport-latency"), "live effect calibration warns when latency should grow");
+
+const boundedCalibration = calibrateLiveEffectRackPolicy({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processDurationsMs: [Number.NaN, -10, 100000],
+  responseJitterBlocks: Array(300).fill(200),
+  deadlineLeadBlocks: [-100],
+  safetyMarginBlocks: 99
+});
+assert(boundedCalibration.observedProcessP95Ms === 60000, "live effect calibration clamps duration samples");
+assert(boundedCalibration.observedResponseJitterP95Blocks === 64, "live effect calibration clamps jitter samples");
+assert(boundedCalibration.observedDeadlineLeadMinBlocks === -64, "live effect calibration clamps deadline lead samples");
+assert(boundedCalibration.recommendedTransportLatencyBlocks === 128, "live effect calibration clamps recommended latency blocks");
 
 console.log("Live effect rack policy smoke checks passed.");
