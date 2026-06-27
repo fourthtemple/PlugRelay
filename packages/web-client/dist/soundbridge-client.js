@@ -3711,14 +3711,14 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   async process(targets, options = {}) {
     const frame = options.frame ?? this.scheduler.captureFrame(options.frameOptions);
     const targetCount = boundedLiveEffectInteger(targets?.length, 0, 0, this.maxTargets);
+    if (this.processBudgetTripped || this.processTimeoutTripped) {
+      return this.processPressureDryResult(frame, targets, targetCount);
+    }
     if (frame.stale) {
       return this.schedulerDryResult(frame, targets, targetCount, "frame-batch-stale-input");
     }
     if (shouldSkipLiveEffectDeadlinePressure(frame.deadlinePressure, options)) {
       return this.schedulerDryResult(frame, targets, targetCount, "frame-batch-deadline-pressure");
-    }
-    if (this.processBudgetTripped || this.processTimeoutTripped) {
-      return this.processPressureDryResult(frame, targets, targetCount);
     }
     const startedAt = this.nowMs();
     const processing = Promise.all(

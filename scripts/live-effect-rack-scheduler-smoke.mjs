@@ -614,6 +614,7 @@ const recoveryScheduler = createLiveEffectRackBlockScheduler({
   maxBlockSize: 128,
   startBlockId: 400,
   startSamplePosition: 51200,
+  maxInputAgeMs: 1,
   nowMs: () => now
 });
 const recoveryTarget = {
@@ -644,13 +645,17 @@ recoveryProcessor.addEventListener("frame-batch-process-budget-recovered", (even
   assert(event.detail.health.processBudgetTripped === false, "live frame batch recovered events include cleared health");
 });
 await recoveryProcessor.process([{ id: "recovering", target: recoveryTarget, channels: [[1]] }]);
-const recoveryDry = await recoveryProcessor.process([{ id: "recovering", target: recoveryTarget, channels: [[1]] }]);
+const recoveryDry = await recoveryProcessor.process(
+  [{ id: "recovering", target: recoveryTarget, channels: [[1]] }],
+  { frameOptions: { timestamp: now - 10 } }
+);
 assert(
   recoveryTargetCalls === 1 &&
     recoveryDry.skippedTargets === 1 &&
+    recoveryDry.results[0].response.renderEngine === "frame-batch-process-budget-exceeded" &&
     recoveredEvents === 1 &&
     recoveryProcessor.health.processBudgetTripped === false,
-  "live frame batch can auto-recover after a bounded dry budget window"
+  "live frame batch can auto-recover after a bounded dry budget window even when the next shared frame is stale"
 );
 
 now = 6000;
