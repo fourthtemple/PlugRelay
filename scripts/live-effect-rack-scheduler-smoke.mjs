@@ -479,4 +479,76 @@ assert(
   "live frame batch can auto-recover after a bounded dry budget window"
 );
 
+now = 6000;
+let timeoutTargetCalls = 0;
+const timeoutScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  startBlockId: 500,
+  startSamplePosition: 64000,
+  nowMs: () => now
+});
+const timeoutTarget = {
+  health: { healthy: true },
+  async processScheduledBlock() {
+    timeoutTargetCalls += 1;
+    return new Promise(() => undefined);
+  }
+};
+const timeoutProcessor = createLiveEffectRackFrameBatchProcessor({
+  scheduler: timeoutScheduler,
+  processTimeoutMs: 1,
+  processTimeoutRecoveryBlocks: 1,
+  nowMs: () => now
+});
+const timeoutEvents = { timeout: 0, tripped: 0, recovered: 0 };
+timeoutProcessor.addEventListener("frame-batch-process-timeout", (event) => {
+  timeoutEvents.timeout += 1;
+  assert(event.detail.health.processTimeoutTripped === true, "live frame batch timeout events include tripped timeout health");
+});
+timeoutProcessor.addEventListener("frame-batch-process-timeout-tripped", (event) => {
+  timeoutEvents.tripped += 1;
+  assert(event.detail.result.processTimedOut === true, "live frame batch timeout trip events include timeout result details");
+});
+timeoutProcessor.addEventListener("frame-batch-process-timeout-recovered", (event) => {
+  timeoutEvents.recovered += 1;
+  assert(event.detail.health.processTimeoutTripped === false, "live frame batch timeout recovery events include cleared health");
+});
+const timeoutTrip = await timeoutProcessor.process([
+  { id: "timeout-deck", target: timeoutTarget, channels: [[1, 0]] }
+]);
+assert(
+  timeoutTrip.processTimedOut === true &&
+    timeoutTrip.processTimeoutTripped === true &&
+    timeoutTrip.processTimeouts === 1 &&
+    timeoutTrip.totalDurationMs === 1,
+  "live frame batch trips on a bounded aggregate process timeout"
+);
+assert(
+  timeoutTrip.processedTargets === 0 &&
+    timeoutTrip.skippedTargets === 1 &&
+    timeoutTrip.dryTargets === 1 &&
+    timeoutTrip.results[0].response.renderEngine === "frame-batch-process-timeout",
+  "live frame batch returns dry skipped results when the aggregate timeout trips"
+);
+assert(
+  timeoutEvents.timeout === 1 &&
+    timeoutEvents.tripped === 1 &&
+    timeoutProcessor.health.processTimeoutTripped === true &&
+    timeoutProcessor.health.skippedTargets === 1,
+  "live frame batch exposes aggregate timeout pressure through events and health"
+);
+const timeoutDry = await timeoutProcessor.process([
+  { id: "timeout-deck", target: timeoutTarget, channels: [[0, 1]] }
+]);
+assert(
+  timeoutTargetCalls === 1 &&
+    timeoutDry.processedTargets === 0 &&
+    timeoutDry.skippedTargets === 1 &&
+    timeoutDry.processTimeoutTripped === true &&
+    timeoutEvents.recovered === 1 &&
+    timeoutProcessor.health.processTimeoutTripped === false,
+  "live frame batch can auto-recover after a bounded dry timeout window"
+);
+
 console.log("Live effect rack scheduler smoke checks passed.");

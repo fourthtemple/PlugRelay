@@ -68,6 +68,8 @@ export interface LiveEffectRackFrameBatchCalibrationHealthSample
   skippedTargets?: unknown;
   failedTargets?: unknown;
   processBudgetTripped?: unknown;
+  processTimedOut?: unknown;
+  processTimeoutTripped?: unknown;
 }
 
 export class LiveEffectRackCalibrationWindow {
@@ -297,6 +299,8 @@ export class LiveEffectRackFrameBatchCalibrationWindow {
   private hasDryPressure(health: LiveEffectRackFrameBatchCalibrationHealthSample): boolean {
     return (
       health.processBudgetTripped === true ||
+      health.processTimedOut === true ||
+      health.processTimeoutTripped === true ||
       boundedLiveEffectInteger(health.dryTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0 ||
       boundedLiveEffectInteger(health.skippedTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0 ||
       boundedLiveEffectInteger(health.failedTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0

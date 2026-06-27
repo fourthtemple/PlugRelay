@@ -2291,6 +2291,8 @@ export class LiveEffectRackFrameBatchCalibrationWindow {
   hasDryPressure(health) {
     return (
       health.processBudgetTripped === true ||
+      health.processTimedOut === true ||
+      health.processTimeoutTripped === true ||
       boundedLiveEffectInteger(health.dryTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0 ||
       boundedLiveEffectInteger(health.skippedTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0 ||
       boundedLiveEffectInteger(health.failedTargets, 0, 0, Number.MAX_SAFE_INTEGER) > 0
@@ -3609,6 +3611,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     this.scheduler = options.scheduler;
     this.maxTargets = boundedLiveEffectInteger(options.maxTargets, LIVE_EFFECT_FRAME_BATCH_TARGETS, 1, 32);
     this.processBudgetMs = boundedLiveEffectNumber(options.processBudgetMs, 0, 0, 60000);
+    this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, 0, 0, 60000);
     this.maxConsecutiveProcessBudgetMisses = boundedLiveEffectInteger(
       options.maxConsecutiveProcessBudgetMisses,
       0,
@@ -3616,10 +3619,14 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       1024
     );
     this.processBudgetRecoveryBlocks = boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, 0, 0, 4096);
+    this.processTimeoutRecoveryBlocks = boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, 0, 0, 4096);
     this.nowMs = typeof options.nowMs === "function" ? options.nowMs : liveEffectNowMs;
     this.processBudgetMisses = 0;
     this.processBudgetTripped = false;
+    this.processTimeouts = 0;
+    this.processTimeoutTripped = false;
     this.recoveryDryBlocks = 0;
+    this.timeoutRecoveryDryBlocks = 0;
     this.lastError = void 0;
     this.lastResult = void 0;
     this.lastHealthKey = "";
@@ -3632,23 +3639,32 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   async process(targets, options = {}) {
     const frame = options.frame ?? this.scheduler.captureFrame(options.frameOptions);
     const targetCount = boundedLiveEffectInteger(targets?.length, 0, 0, this.maxTargets);
-    if (this.processBudgetTripped) {
-      return this.processBudgetDryResult(frame, targets, targetCount);
+    if (this.processBudgetTripped || this.processTimeoutTripped) {
+      return this.processPressureDryResult(frame, targets, targetCount);
     }
     const startedAt = this.nowMs();
-    const results = await Promise.all(
+    const processing = Promise.all(
       Array.from({ length: targetCount }, (_unused, index) => this.processTarget(frame, targets[index], index))
     );
-    return this.recordProcessBudget(frame, results, this.nowMs() - startedAt);
+    try {
+      const results = await withLiveEffectTimeout(processing, this.processTimeoutMs);
+      return this.recordProcessBudget(frame, results, this.nowMs() - startedAt);
+    } catch (error) {
+      processing.catch(() => void 0);
+      return this.recordProcessTimeout(frame, targets, targetCount, this.nowMs() - startedAt, error);
+    }
   }
 
   retry() {
-    if (!this.processBudgetTripped) {
+    if (!this.processBudgetTripped && !this.processTimeoutTripped) {
       return false;
     }
     this.processBudgetTripped = false;
+    this.processTimeoutTripped = false;
     this.processBudgetMisses = 0;
+    this.processTimeouts = 0;
     this.recoveryDryBlocks = 0;
+    this.timeoutRecoveryDryBlocks = 0;
     this.lastError = void 0;
     this.lastResult = void 0;
     this.dispatchEvent(new CustomEvent("retry", { detail: { health: this.health } }));
@@ -3698,7 +3714,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     };
   }
 
-  dryTargetResult(frame, targetRequest, index, error) {
+  dryTargetResult(frame, targetRequest, index, error, renderEngine = "frame-batch-process-budget-exceeded") {
     const scheduled = this.scheduler.scheduleFromFrame(
       frame,
       targetRequest?.channels ?? [],
@@ -3710,7 +3726,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       latencySamples: 0,
       tailSamples: 0,
       infiniteTail: false,
-      renderEngine: "frame-batch-process-budget-exceeded",
+      renderEngine,
       bypassed: true,
       healthy: false,
       error
@@ -3748,16 +3764,35 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
         results.map((result) => this.dryTargetFromScheduledResult(result, this.lastError)),
         boundedDurationMs,
         true,
+        false,
         this.lastError
       );
       this.dispatchEvent(new CustomEvent("frame-batch-process-budget-exceeded", { detail: { result, health: this.health } }));
       this.dispatchEvent(new CustomEvent("frame-batch-process-budget-tripped", { detail: { result, health: this.health } }));
       return result;
     }
-    const result = this.result(frame, results, boundedDurationMs, processBudgetExceeded, void 0);
+    const result = this.result(frame, results, boundedDurationMs, processBudgetExceeded, false, void 0);
     if (processBudgetExceeded) {
       this.dispatchEvent(new CustomEvent("frame-batch-process-budget-exceeded", { detail: { result, health: this.health } }));
     }
+    return result;
+  }
+
+  recordProcessTimeout(frame, targets, targetCount, totalDurationMs, error) {
+    this.processTimeouts = Math.min(1024, this.processTimeouts + 1);
+    this.processTimeoutTripped = true;
+    this.timeoutRecoveryDryBlocks = 0;
+    this.lastError = error;
+    const boundedDurationMs = Math.max(
+      this.processTimeoutMs,
+      boundedLiveEffectOptionalNumber(totalDurationMs, 0, 60000) ?? 0
+    );
+    const results = Array.from({ length: targetCount }, (_unused, index) =>
+      this.dryTargetResult(frame, targets[index], index, error, "frame-batch-process-timeout")
+    );
+    const result = this.result(frame, results, boundedDurationMs, false, true, error);
+    this.dispatchEvent(new CustomEvent("frame-batch-process-timeout", { detail: { result, health: this.health } }));
+    this.dispatchEvent(new CustomEvent("frame-batch-process-timeout-tripped", { detail: { result, health: this.health } }));
     return result;
   }
 
@@ -3787,10 +3822,19 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   }
 
   processBudgetDryResult(frame, targets, targetCount) {
-    const error = this.lastError ?? new Error("frame_batch_process_budget_exceeded");
-    const results = Array.from({ length: targetCount }, (_unused, index) => this.dryTargetResult(frame, targets[index], index, error));
-    const result = this.result(frame, results, 0, false, error);
+    return this.processPressureDryResult(frame, targets, targetCount);
+  }
+
+  processPressureDryResult(frame, targets, targetCount) {
+    const timeoutActive = this.processTimeoutTripped;
+    const error = this.lastError ?? new Error(timeoutActive ? "frame_batch_process_timeout" : "frame_batch_process_budget_exceeded");
+    const renderEngine = timeoutActive ? "frame-batch-process-timeout" : "frame-batch-process-budget-exceeded";
+    const results = Array.from({ length: targetCount }, (_unused, index) =>
+      this.dryTargetResult(frame, targets[index], index, error, renderEngine)
+    );
+    const result = this.result(frame, results, 0, false, false, error);
     this.maybeRecoverFromProcessBudget();
+    this.maybeRecoverFromProcessTimeout();
     return result;
   }
 
@@ -3811,7 +3855,24 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     this.dispatchHealthChangeIfNeeded();
   }
 
-  result(frame, results, totalDurationMs, processBudgetExceeded, error) {
+  maybeRecoverFromProcessTimeout() {
+    if (!this.processTimeoutTripped || this.processTimeoutRecoveryBlocks <= 0) {
+      return;
+    }
+    this.timeoutRecoveryDryBlocks = Math.min(4096, this.timeoutRecoveryDryBlocks + 1);
+    if (this.timeoutRecoveryDryBlocks < this.processTimeoutRecoveryBlocks) {
+      return;
+    }
+    this.processTimeoutTripped = false;
+    this.processTimeouts = 0;
+    this.timeoutRecoveryDryBlocks = 0;
+    this.lastError = void 0;
+    this.lastResult = void 0;
+    this.dispatchEvent(new CustomEvent("frame-batch-process-timeout-recovered", { detail: { health: this.health } }));
+    this.dispatchHealthChangeIfNeeded();
+  }
+
+  result(frame, results, totalDurationMs, processBudgetExceeded, processTimedOut, error) {
     const failedTargets = results.filter((result) => result.error !== void 0 || result.healthy === false).length;
     const dryTargets = results.filter((result) => result.dry).length;
     const bypassedTargets = results.filter((result) => result.bypassed).length;
@@ -3825,16 +3886,21 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       failedTargets,
       dryTargets,
       bypassedTargets,
-      healthy: failedTargets === 0 && !this.processBudgetTripped,
+      healthy: failedTargets === 0 && !this.processBudgetTripped && !this.processTimeoutTripped,
       latencySamples: maxLiveEffectFrameBatchLatency(results, "latencySamples"),
       reportedLatencySamples: maxLiveEffectFrameBatchLatency(results, "reportedLatencySamples"),
       maxDurationMs: results.reduce((max, result) => Math.max(max, result.durationMs), 0),
       totalDurationMs: boundedLiveEffectOptionalNumber(totalDurationMs, 0, 60000) ?? 0,
       processBudgetMs: this.processBudgetMs > 0 ? this.processBudgetMs : void 0,
+      processTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : void 0,
       processBudgetExceeded,
+      processTimedOut,
       processBudgetMisses: this.processBudgetMisses,
       processBudgetTripped: this.processBudgetTripped,
+      processTimeouts: this.processTimeouts,
+      processTimeoutTripped: this.processTimeoutTripped,
       recoveryDryBlocks: this.recoveryDryBlocks,
+      timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
       error
     };
     this.lastResult = result;
@@ -3845,7 +3911,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   healthFromResult(result) {
     const failedTargets = result?.failedTargets ?? 0;
     return {
-      healthy: !this.processBudgetTripped && failedTargets === 0,
+      healthy: !this.processBudgetTripped && !this.processTimeoutTripped && failedTargets === 0,
       targetCount: result?.targetCount ?? 0,
       processedTargets: result?.processedTargets ?? 0,
       skippedTargets: result?.skippedTargets ?? 0,
@@ -3857,10 +3923,15 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       maxDurationMs: boundedLiveEffectOptionalNumber(result?.maxDurationMs, 0, 60000) ?? 0,
       totalDurationMs: boundedLiveEffectOptionalNumber(result?.totalDurationMs, 0, 60000) ?? 0,
       processBudgetMs: this.processBudgetMs > 0 ? this.processBudgetMs : void 0,
+      processTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : void 0,
       processBudgetExceeded: result?.processBudgetExceeded === true,
+      processTimedOut: result?.processTimedOut === true,
       processBudgetMisses: this.processBudgetMisses,
       processBudgetTripped: this.processBudgetTripped,
+      processTimeouts: this.processTimeouts,
+      processTimeoutTripped: this.processTimeoutTripped,
       recoveryDryBlocks: this.recoveryDryBlocks,
+      timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
       lastError: this.lastError ?? result?.error
     };
   }
@@ -3871,7 +3942,10 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       health.healthy,
       health.processBudgetMisses,
       health.processBudgetTripped,
+      health.processTimeouts,
+      health.processTimeoutTripped,
       health.recoveryDryBlocks,
+      health.timeoutRecoveryDryBlocks,
       health.failedTargets,
       health.dryTargets,
       health.skippedTargets,

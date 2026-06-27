@@ -279,6 +279,25 @@ assert(batchPressure.recommendedPolicyOptions.transportLatencySamples === 256, "
 batchWindow.reset();
 assert(batchWindow.snapshot().samples === 0, "live frame batch calibration window reset clears samples");
 
+const batchTimeoutWindow = createLiveEffectRackFrameBatchCalibrationWindow({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processBudgetMs: 4,
+  processTimeoutMs: 12,
+  safetyMarginBlocks: 0
+});
+batchTimeoutWindow.record({ totalDurationMs: 1, maxDurationMs: 0.5, latencySamples: 0 });
+const batchTimeoutPressure = batchTimeoutWindow.record({
+  totalDurationMs: 1,
+  maxDurationMs: 0.5,
+  latencySamples: 0,
+  processTimedOut: true
+});
+assert(
+  batchTimeoutPressure.calibration.warnings.includes("dry-output-pressure"),
+  "live frame batch calibration treats timeout-only health as dry pressure"
+);
+
 chainWindow.reset();
 const chainReset = chainWindow.snapshot();
 assert(chainReset.samples === 0 && chainWindow.maxSamples === 256, "live chain calibration window resets its inner sample window");
