@@ -369,6 +369,33 @@ firstMainSocket.emit("message", {
 });
 assert((await mainPair).sessionToken === "session-main", "main transport pair response resolves through client");
 
+const zeroTimeoutRequest = mainClient.processAudioBlock(
+  { instanceId: "inst-main", blockId: 91, sampleRate: 48000, channels: [[0, 0]] },
+  0
+);
+let zeroTimeoutRejected;
+zeroTimeoutRequest.catch((error) => {
+  zeroTimeoutRejected = error;
+});
+const zeroTimeoutEnvelope = JSON.parse(firstMainSocket.sent.at(-1));
+await new Promise((resolve) => setTimeout(resolve, 5));
+assert(zeroTimeoutRejected === undefined, "zero request timeout disables the main transport response timer");
+firstMainSocket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: zeroTimeoutEnvelope.id,
+    ok: true,
+    payload: {
+      blockId: 91,
+      channels: [[0.5, 0.25]],
+      latencySamples: 0,
+      tailSamples: 0,
+      infiniteTail: false
+    }
+  })
+});
+assert((await zeroTimeoutRequest).blockId === 91, "zero-timeout main transport audio requests still resolve");
+
 const retiredRequest = mainClient.heartbeat();
 let retiredError;
 retiredRequest.catch((error) => {

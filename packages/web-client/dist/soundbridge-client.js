@@ -283,10 +283,10 @@ export class SoundBridgeClient extends EventTarget {
     }
 
     return new Promise((resolve, reject) => {
-      const timeout = globalThis.setTimeout(() => {
+      const timeout = timeoutMs > 0 ? globalThis.setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`SoundBridge request timed out: ${command}`));
-      }, timeoutMs);
+      }, timeoutMs) : undefined;
       this.pending.set(id, { resolve, reject, timeout });
       if (this.transport === "worker") {
         this.worker?.postMessage({ type: "request", envelope, binaryAudioChannels, timeoutMs });
