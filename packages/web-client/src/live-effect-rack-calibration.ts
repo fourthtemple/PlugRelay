@@ -54,6 +54,7 @@ export interface LiveEffectRackChainCalibrationHealthSample
     LiveEffectRackChainHealth,
     "lastProcessDurationMs" | "latencySamples" | "lastResponseDeadlineLeadBlocks" | "responseJitterBlocks" | "responseDeadlineMisses"
   > {
+  dryOutputBlocks?: unknown;
   lastDryReason?: unknown;
 }
 
@@ -205,7 +206,9 @@ export class LiveEffectRackChainCalibrationWindow {
   }
 
   record(health: LiveEffectRackChainCalibrationHealthSample): LiveEffectRackCalibrationWindowSnapshot {
-    if (health.lastDryReason !== undefined) {
+    if (health.dryOutputBlocks !== undefined) {
+      this.dryOutputBlocks = boundedLiveEffectInteger(health.dryOutputBlocks, this.dryOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
+    } else if (health.lastDryReason !== undefined) {
       this.dryOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.dryOutputBlocks + 1);
     }
     return this.window.record({

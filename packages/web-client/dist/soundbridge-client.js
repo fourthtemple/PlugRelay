@@ -1874,7 +1874,9 @@ export class LiveEffectRackChainCalibrationWindow {
   }
 
   record(health) {
-    if (health.lastDryReason !== void 0) {
+    if (health.dryOutputBlocks !== void 0) {
+      this.dryOutputBlocks = boundedLiveEffectInteger(health.dryOutputBlocks, this.dryOutputBlocks, 0, Number.MAX_SAFE_INTEGER);
+    } else if (health.lastDryReason !== void 0) {
       this.dryOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.dryOutputBlocks + 1);
     }
     return this.window.record({
@@ -2389,6 +2391,7 @@ export class LiveEffectRackChain extends EventTarget {
     this.lastStageResults = [];
     this.lastStageError = void 0;
     this.lastDryReason = void 0;
+    this.dryOutputBlocks = 0;
     this.processBudgetMisses = 0;
     this.recoveryDryBlocks = 0;
     this.lastError = void 0;
@@ -2424,6 +2427,7 @@ export class LiveEffectRackChain extends EventTarget {
       stageResults: this.lastStageResults.slice(),
       lastStageError: this.lastStageError,
       lastDryReason: this.lastDryReason,
+      dryOutputBlocks: this.dryOutputBlocks,
       processBudgetMs: this.processBudgetMs,
       maxConsecutiveProcessBudgetMisses: this.maxConsecutiveProcessBudgetMisses,
       processBudgetRecoveryBlocks: this.processBudgetRecoveryBlocks,
@@ -2659,7 +2663,11 @@ export class LiveEffectRackChain extends EventTarget {
 
   finishOutputResponse(response, outputChannels) {
     const outputPath = response.bypassed ? "dry" : "wet";
-    this.recordDryReason(response);
+    const lastDryReason = liveEffectChainDryReason(response);
+    if (lastDryReason !== void 0) {
+      this.dryOutputBlocks = Math.min(Number.MAX_SAFE_INTEGER, this.dryOutputBlocks + 1);
+    }
+    this.recordDryReason(lastDryReason);
     const normalized = boundedLiveEffectChannels(response.channels, outputChannels, this.maxBlockSize);
     const channels = transitionLiveEffectOutputChannels(normalized, this.lastOutputTail, this.lastOutputPath, outputPath, this.transitionFadeSamples);
     this.lastOutputTail = liveEffectOutputTail(channels, outputChannels);
@@ -2667,8 +2675,7 @@ export class LiveEffectRackChain extends EventTarget {
     return channels === response.channels ? response : { ...response, channels };
   }
 
-  recordDryReason(response) {
-    const lastDryReason = liveEffectChainDryReason(response);
+  recordDryReason(lastDryReason) {
     if (lastDryReason === this.lastDryReason) {
       return;
     }

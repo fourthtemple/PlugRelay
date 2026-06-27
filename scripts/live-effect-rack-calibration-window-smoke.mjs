@@ -215,7 +215,29 @@ assert(chainStressed.recommendedPolicyOptions.processBudgetMs === 8.667, "live c
 chain.setBypassed(true);
 await chain.processBlock({ blockId: 22, channels: [[1, 1]], sampleRate: 48000 });
 const chainDry = chainWindow.record(chain.health);
-assert(chainDry.calibration.warnings.includes("dry-output-pressure"), "live chain calibration window counts chain dry output after baseline");
+assert(
+  chain.health.dryOutputBlocks === 1 &&
+    chainDry.calibration.warnings.includes("dry-output-pressure"),
+  "live chain calibration window counts chain dry output after baseline"
+);
+
+const repeatDryWindow = createLiveEffectRackChainCalibrationWindow({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processBudgetMs: 5,
+  processTimeoutMs: 12
+});
+repeatDryWindow.record({ lastProcessDurationMs: 1, latencySamples: 0, dryOutputBlocks: 1 });
+const repeatedDrySample = repeatDryWindow.record({ lastProcessDurationMs: 1, latencySamples: 0, dryOutputBlocks: 1 });
+assert(
+  !repeatedDrySample.calibration.warnings.includes("dry-output-pressure"),
+  "live chain calibration window does not count repeated snapshots as new dry output"
+);
+const nextDrySample = repeatDryWindow.record({ lastProcessDurationMs: 1, latencySamples: 0, dryOutputBlocks: 2 });
+assert(
+  nextDrySample.calibration.warnings.includes("dry-output-pressure"),
+  "live chain calibration window uses cumulative chain dry output deltas"
+);
 
 chainWindow.reset();
 const chainReset = chainWindow.snapshot();

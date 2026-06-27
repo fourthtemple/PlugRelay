@@ -80,6 +80,7 @@ assert(response.stageCount === 2 && response.processedStages === 2, "live rack c
 assert(response.stageResults[0].instanceId === "inst-left", "live rack chain reports stage instance ids");
 assert(left.requests[0].wetMix === 0.25 && right.requests[0].wetMix === 0.75, "live rack chain applies per-stage wet mix overrides");
 assert(response.chainProcessBudgetExceeded === false && response.chainProcessBudgetMisses === 0, "live rack chain starts without chain budget pressure");
+assert(chain.health.dryOutputBlocks === 0, "live rack chain starts without dry output pressure");
 
 const liveChainOptions = createLivePerformanceRackChainOptions({
   stages: [new FakeStage("live-option", 1)],
@@ -276,6 +277,7 @@ assert(
   stageBypassResponse.bypassed === true &&
     stageBypassResponse.renderEngine === "live-effect-rack-chain" &&
     stageBypassChain.health.lastDryReason === "chain-stage-bypass" &&
+    stageBypassChain.health.dryOutputBlocks === 1 &&
     stageBypassChain.health.stageResults[0].lastDryReason === "manual-bypass",
   "live rack chain records all-stage-bypass dry reason"
 );
@@ -543,7 +545,11 @@ const staleResponse = await chain.processScheduledBlock(staleScheduled);
 assert(staleResponse.bypassed === true, "live rack chain bypasses stale scheduled blocks");
 assert(staleResponse.processedStages === 0 && left.requests.length === 1, "live rack chain does not process stale scheduled blocks");
 assert(staleResponse.renderEngine === "chain-stale-input", "live rack chain labels stale scheduled bypasses");
-assert(chain.health.lastDryReason === "chain-stale-input", "live rack chain records stale scheduled dry reason");
+assert(
+  chain.health.lastDryReason === "chain-stale-input" &&
+    chain.health.dryOutputBlocks === 1,
+  "live rack chain records stale scheduled dry pressure"
+);
 
 const deadlinePressureStage = new FakeStage("deadline-pressure-scheduled", 7);
 const deadlinePressureChain = createLiveEffectRackChain({
@@ -572,6 +578,7 @@ const pressuredDryResponse = await deadlinePressureChain.processScheduledBlock(p
 assert(
   pressuredWetResponse.bypassed === false &&
     pressuredWetResponse.channels[0][0] === 7 &&
+    deadlinePressureChain.health.dryOutputBlocks === 1 &&
     deadlinePressureStage.requests.length === 1,
   "live rack chain still processes deadline-pressure blocks unless the host opts into dry skip"
 );
@@ -587,6 +594,7 @@ assert(
   deadlinePressureChain.health.lastDryReason === "chain-deadline-pressure",
   "live rack chain records scheduler deadline-pressure dry reason"
 );
+assert(deadlinePressureChain.health.dryOutputBlocks === 1, "live rack chain counts scheduler deadline-pressure dry output");
 
 const throwingStage = {
   health: { instanceId: "inst-throw" },
@@ -603,6 +611,7 @@ assert(
     failingChain.health.stageHealthy === false &&
     failingChain.health.failedStageIndex === 1 &&
     failingChain.health.lastDryReason === "chain-stage-error" &&
+    failingChain.health.dryOutputBlocks === 1 &&
     failingChain.health.lastStageError instanceof Error,
   "live rack chain health exposes the last failed stage"
 );
