@@ -53,22 +53,43 @@ self.onmessage = (event) => {
 };
 
 function connect(url) {
-  socket?.close();
-  socket = new WebSocket(url);
-  socket.binaryType = "arraybuffer";
-  socket.addEventListener("open", () => {
+  const previousSocket = socket;
+  if (previousSocket) {
+    socket = undefined;
+    clearPendingRequests();
+    rejectPendingAudioRequests("SoundBridge worker transport closed before reconnect.");
+    post({ type: "closed" });
+    previousSocket.close();
+  }
+  const activeSocket = new WebSocket(url);
+  socket = activeSocket;
+  activeSocket.binaryType = "arraybuffer";
+  activeSocket.addEventListener("open", () => {
+    if (!isCurrentSocket(activeSocket)) {
+      return;
+    }
     post({ type: "connected" });
     resumeSharedAudioPumps();
   });
-  socket.addEventListener("error", () => {
+  activeSocket.addEventListener("error", () => {
+    if (!isCurrentSocket(activeSocket)) {
+      return;
+    }
     post({ type: "connect-error", message: `Unable to connect to ${url}` });
   });
-  socket.addEventListener("close", () => {
+  activeSocket.addEventListener("close", () => {
+    if (!isCurrentSocket(activeSocket)) {
+      return;
+    }
+    socket = undefined;
     clearPendingRequests();
     rejectPendingAudioRequests("SoundBridge worker transport closed before audio response.");
     post({ type: "closed" });
   });
-  socket.addEventListener("message", (event) => {
+  activeSocket.addEventListener("message", (event) => {
+    if (!isCurrentSocket(activeSocket)) {
+      return;
+    }
     try {
       const envelope = typeof event.data === "string" ? JSON.parse(event.data) : decodeBinaryAudioEnvelope(event.data);
       if (routeAudioResponse(envelope)) {
@@ -82,6 +103,10 @@ function connect(url) {
       post({ type: "protocol-error", message: "SoundBridge worker transport received an invalid message." });
     }
   });
+}
+
+function isCurrentSocket(candidate) {
+  return socket === candidate;
 }
 
 function connectAudioPort(port, config, sharedAudioDescriptor) {

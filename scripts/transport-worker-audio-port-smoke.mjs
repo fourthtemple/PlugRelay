@@ -130,7 +130,7 @@ context.globalThis = context;
 vm.runInNewContext(workerSource, context, { filename: workerPath });
 
 self.onmessage({ data: { type: "connect", url: "ws://127.0.0.1:47370/bridge" } });
-const socket = FakeSocket.instances[0];
+let socket = FakeSocket.instances[0];
 assert(socket, "transport worker creates a WebSocket");
 socket.emit("open", {});
 assert(postedMessages.some((message) => message.type === "connected"), "transport worker reports connection open");
@@ -551,6 +551,35 @@ assert(
     postedMessages.at(-1)?.type === "message" &&
     postedMessages.at(-1)?.envelope?.id === "generic-cap-0",
   "transport worker evicts oldest stale response ids after the bounded cache fills"
+);
+
+const oldSocket = socket;
+self.onmessage({ data: { type: "connect", url: "ws://127.0.0.1:47370/bridge?reconnect=1" } });
+socket = FakeSocket.instances.at(-1);
+assert(socket && socket !== oldSocket, "transport worker creates a fresh socket on reconnect");
+socket.emit("open", {});
+const reconnectEnvelope = {
+  type: "request",
+  id: "generic-reconnect",
+  command: "hello",
+  payload: {}
+};
+self.onmessage({ data: { type: "request", envelope: reconnectEnvelope, timeoutMs: 23 } });
+const postedBeforeOldSocketEvents = postedMessages.length;
+oldSocket.emit("message", {
+  data: JSON.stringify({ type: "response", id: "generic-reconnect", ok: true, payload: { stale: true } })
+});
+oldSocket.emit("error", {});
+oldSocket.emit("close", {});
+assert(postedMessages.length === postedBeforeOldSocketEvents, "transport worker ignores stale socket events after reconnect");
+socket.emit("message", {
+  data: JSON.stringify({ type: "response", id: "generic-reconnect", ok: true, payload: { fresh: true } })
+});
+assert(
+  postedMessages.at(-1)?.type === "message" &&
+    postedMessages.at(-1)?.envelope?.id === "generic-reconnect" &&
+    postedMessages.at(-1)?.envelope?.payload?.fresh === true,
+  "transport worker routes the active socket response after reconnect"
 );
 
 clearTimersWithDelay(1);
