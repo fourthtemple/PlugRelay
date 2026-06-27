@@ -354,6 +354,42 @@ assert(
 assert(processedTargets[0].options.role === "deck", "live frame batch passes per-target process options");
 assert(batch.results[1].scheduled.request.wetMix === 0.25, "live frame batch passes per-target schedule options");
 
+let staleBatchTargetCalls = 0;
+let staleBatchEvents = 0;
+const staleBatchScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  maxInputAgeMs: 2,
+  nowMs: () => now
+});
+const staleBatchProcessor = createLiveEffectRackFrameBatchProcessor({
+  scheduler: staleBatchScheduler,
+  nowMs: () => now
+});
+staleBatchProcessor.addEventListener("frame-batch-stale-input", (event) => {
+  staleBatchEvents += 1;
+  assert(event.detail.result.frame.stale === true, "live frame batch stale events include the stale shared frame");
+});
+const staleBatch = await staleBatchProcessor.process(
+  [{
+    id: "stale-deck",
+    target: { health: { healthy: true, reportedLatencySamples: 320 }, async processScheduledBlock() { staleBatchTargetCalls += 1; } },
+    channels: [[0.25, 0.75]]
+  }],
+  { frameOptions: { timestamp: now - 10 } }
+);
+assert(
+  staleBatch.processedTargets === 0 &&
+    staleBatch.skippedTargets === 1 &&
+    staleBatch.failedTargets === 0 &&
+    staleBatch.healthy === true &&
+    staleBatch.reportedLatencySamples === 320 &&
+    staleBatch.results[0].response.renderEngine === "frame-batch-stale-input" &&
+    staleBatchTargetCalls === 0 &&
+    staleBatchEvents === 1,
+  "live frame batch fails dry before processing stale shared-frame targets"
+);
+
 const batchLatencyScheduler = createLiveEffectRackBlockScheduler({
   sampleRate: 48000,
   maxBlockSize: 128,

@@ -205,8 +205,11 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   ): Promise<LiveEffectRackFrameBatchResult> {
     const frame = options.frame ?? this.scheduler.captureFrame(options.frameOptions);
     const targetCount = boundedLiveEffectInteger(targets?.length, 0, 0, this.maxTargets);
+    if (frame.stale) {
+      return this.schedulerDryResult(frame, targets, targetCount, "frame-batch-stale-input");
+    }
     if (shouldSkipLiveEffectDeadlinePressure(frame.deadlinePressure, options)) {
-      return this.deadlinePressureDryResult(frame, targets, targetCount);
+      return this.schedulerDryResult(frame, targets, targetCount, "frame-batch-deadline-pressure");
     }
     if (this.processBudgetTripped || this.processTimeoutTripped) {
       return this.processPressureDryResult(frame, targets, targetCount);
@@ -333,10 +336,11 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     };
   }
 
-  private deadlinePressureTargetResult(
+  private schedulerDryTargetResult(
     frame: LiveEffectRackScheduledFrame,
     targetRequest: LiveEffectRackFrameBatchTargetRequest | undefined,
-    index: number
+    index: number,
+    renderEngine: string
   ): LiveEffectRackFrameBatchTargetResult {
     const scheduled = this.scheduler.scheduleFromFrame(frame, targetRequest?.channels ?? [], targetRequest?.scheduleOptions);
     const health = targetRequest?.target.health;
@@ -351,7 +355,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
         latencySamples: 0,
         tailSamples: 0,
         infiniteTail: false,
-        renderEngine: "frame-batch-deadline-pressure",
+        renderEngine,
         bypassed: true,
         healthy: health?.healthy !== false
       },
@@ -479,16 +483,17 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     return result;
   }
 
-  private deadlinePressureDryResult(
+  private schedulerDryResult(
     frame: LiveEffectRackScheduledFrame,
     targets: ArrayLike<LiveEffectRackFrameBatchTargetRequest>,
-    targetCount: number
+    targetCount: number,
+    renderEngine: string
   ): LiveEffectRackFrameBatchResult {
     const results = Array.from({ length: targetCount }, (_unused, index) =>
-      this.deadlinePressureTargetResult(frame, targets[index], index)
+      this.schedulerDryTargetResult(frame, targets[index], index, renderEngine)
     );
     const result = this.result(frame, results, 0, false, false, undefined);
-    this.dispatchEvent(new CustomEvent("frame-batch-deadline-pressure", { detail: { result, health: this.health } }));
+    this.dispatchEvent(new CustomEvent(renderEngine, { detail: { result, health: this.health } }));
     return result;
   }
 
