@@ -101,7 +101,7 @@ Then create a plugin instance and put it in your Web Audio graph:
     await client.setPreset(instanceId, plugin.presets[0].id);
   }
 
-  const pluginNode = await SoundBridgeAudioNode.create(audioContext, client, {
+  const pluginNode = await SoundBridgeAudioNode.createLivePerformance(audioContext, client, {
     instanceId,
     inputChannels: negotiatedInputChannels,
     outputChannels: negotiatedOutputChannels,
@@ -117,7 +117,7 @@ Then create a plugin instance and put it in your Web Audio graph:
 </script>
 ```
 
-That is the core integration: scan, create an instance, connect `SoundBridgeAudioNode`.
+That is the core integration: scan, create an instance, connect `SoundBridgeAudioNode` with the live-performance Web Audio defaults.
 
 If your host owns the audio blocks directly, such as a browser DJ deck or live effects rack, use the live-performance rack defaults:
 

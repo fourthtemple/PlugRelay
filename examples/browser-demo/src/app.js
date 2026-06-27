@@ -345,16 +345,10 @@ async function doEnsureBridgeInstance(recreate = false) {
   activeInstancePlugin = created.plugin ?? pluginBrowser.selectedPlugin();
   latestTransportLatencySamples = 0;
   elements.renderEngine.textContent = "Waiting";
-  bridge = await SoundBridgeAudioNode.create(audioContext, client, {
+  bridge = await SoundBridgeAudioNode.createLivePerformance(audioContext, client, {
     instanceId,
     inputChannels,
     outputChannels,
-    maxInFlightBlocks: 8,
-    minOutputLatencyBlocks: 1,
-    maxOutputLatencyBlocks: 4,
-    adaptiveOutputLatency: true,
-    audioTransferMode: "auto",
-    sharedBufferBlocks: 8,
     maxBlockFrames: 128,
     workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627c"
   });

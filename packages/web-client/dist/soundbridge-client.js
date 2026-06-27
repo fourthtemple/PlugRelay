@@ -608,6 +608,58 @@ export {
   encodeBinaryAudioEnvelope as __soundBridgeEncodeBinaryAudioEnvelope
 };
 
+const LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS = 4;
+const LIVE_AUDIO_NODE_MAX_QUEUED_OUTPUT_BLOCKS = 8;
+const LIVE_AUDIO_NODE_OUTPUT_LATENCY_BLOCKS = 2;
+const LIVE_AUDIO_NODE_MAX_OUTPUT_LATENCY_BLOCKS = 4;
+const LIVE_AUDIO_NODE_LATENCY_RECOVERY_BLOCKS = 128;
+const LIVE_AUDIO_NODE_LATENCY_PRESSURE_THRESHOLD_BLOCKS = 2;
+const LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS = 4;
+
+export function createLivePerformanceAudioNodeOptions(options) {
+  const maxQueuedOutputBlocks = boundedAudioNodeInteger(
+    options.maxQueuedOutputBlocks,
+    LIVE_AUDIO_NODE_MAX_QUEUED_OUTPUT_BLOCKS,
+    1,
+    64
+  );
+  const outputLatencyBlocks = boundedAudioNodeInteger(
+    options.outputLatencyBlocks,
+    Math.min(LIVE_AUDIO_NODE_OUTPUT_LATENCY_BLOCKS, maxQueuedOutputBlocks),
+    1,
+    maxQueuedOutputBlocks
+  );
+  const maxOutputLatencyBlocks = boundedAudioNodeInteger(
+    options.maxOutputLatencyBlocks,
+    Math.min(maxQueuedOutputBlocks, Math.max(outputLatencyBlocks + 2, LIVE_AUDIO_NODE_MAX_OUTPUT_LATENCY_BLOCKS)),
+    outputLatencyBlocks,
+    maxQueuedOutputBlocks
+  );
+
+  return {
+    ...options,
+    maxInFlightBlocks: boundedAudioNodeInteger(options.maxInFlightBlocks, LIVE_AUDIO_NODE_MAX_IN_FLIGHT_BLOCKS, 1, 64),
+    maxQueuedOutputBlocks,
+    outputLatencyBlocks,
+    minOutputLatencyBlocks: boundedAudioNodeInteger(options.minOutputLatencyBlocks, 1, 1, outputLatencyBlocks),
+    maxOutputLatencyBlocks,
+    adaptiveOutputLatency: options.adaptiveOutputLatency !== false,
+    latencyMissThresholdBlocks: boundedAudioNodeInteger(options.latencyMissThresholdBlocks, 2, 1, 32),
+    latencyRecoveryBlocks: boundedAudioNodeInteger(options.latencyRecoveryBlocks, LIVE_AUDIO_NODE_LATENCY_RECOVERY_BLOCKS, 32, 8192),
+    targetResponseDeadlineLeadBlocks: boundedAudioNodeInteger(options.targetResponseDeadlineLeadBlocks, 1, 0, 16),
+    latencyPressureThresholdBlocks: boundedAudioNodeInteger(
+      options.latencyPressureThresholdBlocks,
+      LIVE_AUDIO_NODE_LATENCY_PRESSURE_THRESHOLD_BLOCKS,
+      1,
+      64
+    ),
+    audioTransport: options.audioTransport === "json" ? "json" : "binary",
+    audioTransferMode: options.audioTransferMode ?? "auto",
+    sharedBufferBlocks: boundedAudioNodeInteger(options.sharedBufferBlocks, LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS, 2, 64),
+    maxBlockFrames: boundedAudioNodeInteger(options.maxBlockFrames, 128, 1, 8192)
+  };
+}
+
 export class SoundBridgeAudioNode extends EventTarget {
   constructor(context, client, options) {
     super();
@@ -700,6 +752,10 @@ export class SoundBridgeAudioNode extends EventTarget {
     );
     await context.audioWorklet.addModule(normalized.workletUrl);
     return new SoundBridgeAudioNode(context, client, normalized);
+  }
+
+  static createLivePerformance(context, client, options) {
+    return SoundBridgeAudioNode.create(context, client, createLivePerformanceAudioNodeOptions(options));
   }
 
   connect(destination, output, input) {
