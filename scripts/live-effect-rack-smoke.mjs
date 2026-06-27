@@ -32,6 +32,7 @@ class FakeLiveClient {
     this.renderBudgetExceeded = false;
     this.latencySamples = 12;
     this.protocolErrorCode = undefined;
+    this.protocolErrorDetails = {};
   }
 
   async createInstance(request) {
@@ -64,7 +65,7 @@ class FakeLiveClient {
       await delay(this.processingDelayMs);
     }
     if (this.protocolErrorCode) {
-      throw new SoundBridgeProtocolError(this.protocolErrorCode, "native render deadline missed", {});
+      throw new SoundBridgeProtocolError(this.protocolErrorCode, "native render deadline missed", this.protocolErrorDetails);
     }
     if (this.failProcessing) {
       throw new Error("plugin worker crashed");
@@ -452,12 +453,33 @@ const daemonTimeoutRack = await SoundBridgeLiveEffectRack.create({
   maxBlockSize: 128
 });
 client.protocolErrorCode = "render_timeout";
+client.protocolErrorDetails = {
+  renderTimeoutMs: 4,
+  renderBudgetMs: 2.667,
+  renderTimeoutBudgetDeltaMs: 1.333,
+  renderTimeouts: 2,
+  consecutiveRenderTimeouts: 1,
+  renderQuarantined: true
+};
 const daemonTimedOut = await daemonTimeoutRack.processBlock({ blockId: 25, channels: inputChannels });
 assert(
   daemonTimedOut.bypassed === true && daemonTimeoutRack.health.unhealthyReason === "process-timeout",
   "daemon render_timeout errors use live process-timeout policy"
 );
+assert(
+  daemonTimeoutRack.health.lastRenderTimeoutMs === 4 &&
+    daemonTimeoutRack.health.lastRenderTimeoutBudgetMs === 2.667 &&
+    daemonTimeoutRack.health.lastRenderTimeoutBudgetDeltaMs === 1.333,
+  "daemon render_timeout details are exposed in live rack health"
+);
+assert(
+  daemonTimeoutRack.health.renderTimeouts === 2 &&
+    daemonTimeoutRack.health.consecutiveRenderTimeouts === 1 &&
+    daemonTimeoutRack.health.renderQuarantined === true,
+  "daemon render_timeout counts are exposed in live rack health"
+);
 client.protocolErrorCode = undefined;
+client.protocolErrorDetails = {};
 await daemonTimeoutRack.destroy();
 
 const daemonQuarantineRack = await SoundBridgeLiveEffectRack.create({
@@ -467,12 +489,27 @@ const daemonQuarantineRack = await SoundBridgeLiveEffectRack.create({
   maxBlockSize: 128
 });
 client.protocolErrorCode = "render_quarantined";
+client.protocolErrorDetails = {
+  renderTimeoutMs: 5,
+  renderBudgetMs: 2.667,
+  renderTimeoutBudgetDeltaMs: 2.333,
+  renderTimeouts: 3,
+  consecutiveRenderTimeouts: 2,
+  renderQuarantined: true
+};
 const daemonQuarantined = await daemonQuarantineRack.processBlock({ blockId: 26, channels: inputChannels });
 assert(
   daemonQuarantined.bypassed === true && daemonQuarantineRack.health.unhealthyReason === "process-timeout",
   "daemon render_quarantined errors use live process-timeout policy"
 );
+assert(
+  daemonQuarantineRack.health.renderQuarantined === true &&
+    daemonQuarantineRack.health.renderTimeouts === 3 &&
+    daemonQuarantineRack.health.lastRenderTimeoutBudgetDeltaMs === 2.333,
+  "daemon render_quarantined details are exposed in live rack health"
+);
 client.protocolErrorCode = undefined;
+client.protocolErrorDetails = {};
 await daemonQuarantineRack.destroy();
 
 const livePerformanceRack = await SoundBridgeLiveEffectRack.createLivePerformance({

@@ -944,6 +944,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
     this.lastRenderBudgetExceeded = false;
+    this.lastRenderTimeoutMs = void 0;
+    this.lastRenderTimeoutBudgetMs = void 0;
+    this.lastRenderTimeoutBudgetDeltaMs = void 0;
+    this.renderTimeouts = 0;
+    this.consecutiveRenderTimeouts = 0;
+    this.renderQuarantined = false;
     this.lastOutputPath = void 0;
     this.lastOutputTail = void 0;
     this.transportLatencySamples = 0;
@@ -993,6 +999,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
       renderBudgetExceeded: this.lastRenderBudgetExceeded,
+      lastRenderTimeoutMs: this.lastRenderTimeoutMs,
+      lastRenderTimeoutBudgetMs: this.lastRenderTimeoutBudgetMs,
+      lastRenderTimeoutBudgetDeltaMs: this.lastRenderTimeoutBudgetDeltaMs,
+      renderTimeouts: this.renderTimeouts,
+      consecutiveRenderTimeouts: this.consecutiveRenderTimeouts,
+      renderQuarantined: this.renderQuarantined,
       unhealthyReason: this.unhealthyReason,
       recoveryDryBlocks: this.recoveryDryBlocks,
       recoveryInProgress: this.recoveryInProgress,
@@ -1166,6 +1178,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastRenderDurationMs = void 0;
     this.lastRenderBudgetMs = void 0;
     this.lastRenderBudgetExceeded = false;
+    this.lastRenderTimeoutMs = void 0;
+    this.lastRenderTimeoutBudgetMs = void 0;
+    this.lastRenderTimeoutBudgetDeltaMs = void 0;
+    this.renderTimeouts = 0;
+    this.consecutiveRenderTimeouts = 0;
+    this.renderQuarantined = false;
     this.lastOutputPath = void 0;
     this.lastOutputTail = void 0;
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
@@ -1284,10 +1302,29 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.healthy = false;
     this.lastError = error;
     this.unhealthyReason = reason;
+    this.recordRenderDeadlineDiagnostics(error);
     this.recoveryDryBlocks = 0;
     this.recoveryInProgress = false;
     this.dispatchEvent(new CustomEvent("effect-error", { detail: { error, health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  recordRenderDeadlineDiagnostics(error) {
+    if (!isRenderDeadlineProtocolError(error)) {
+      return;
+    }
+    const details = renderDeadlineDetails(error);
+    this.lastRenderTimeoutMs = boundedLiveEffectOptionalNumber(details.renderTimeoutMs, 0, 60000);
+    this.lastRenderTimeoutBudgetMs = boundedLiveEffectOptionalNumber(details.renderBudgetMs, 0, 60000);
+    this.lastRenderTimeoutBudgetDeltaMs = boundedLiveEffectOptionalNumber(details.renderTimeoutBudgetDeltaMs, -60000, 60000);
+    this.renderTimeouts = boundedLiveEffectInteger(details.renderTimeouts, Math.max(1, this.renderTimeouts), 0, 1e6);
+    this.consecutiveRenderTimeouts = boundedLiveEffectInteger(
+      details.consecutiveRenderTimeouts,
+      Math.max(1, this.consecutiveRenderTimeouts),
+      0,
+      1e6
+    );
+    this.renderQuarantined = details.renderQuarantined === true || error.code === "render_quarantined" || error.code === "render_timeout";
   }
 
   isStaleInput(timestamp) {
@@ -1389,10 +1426,17 @@ function liveEffectTimeoutError() {
 }
 
 function liveEffectFailureReason(error) {
-  return error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout" ||
-    error instanceof SoundBridgeProtocolError && (error.code === "render_timeout" || error.code === "render_quarantined")
+  return error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout" || isRenderDeadlineProtocolError(error)
     ? "process-timeout"
     : "processing-error";
+}
+
+function isRenderDeadlineProtocolError(error) {
+  return error instanceof SoundBridgeProtocolError && (error.code === "render_timeout" || error.code === "render_quarantined");
+}
+
+function renderDeadlineDetails(error) {
+  return typeof error.details === "object" && error.details !== null ? error.details : {};
 }
 
 function liveEffectNowMs() {

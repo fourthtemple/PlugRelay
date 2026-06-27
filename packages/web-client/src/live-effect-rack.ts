@@ -61,6 +61,12 @@ export interface LiveEffectRackHealth {
   lastRenderDurationMs?: number;
   lastRenderBudgetMs?: number;
   renderBudgetExceeded: boolean;
+  lastRenderTimeoutMs?: number;
+  lastRenderTimeoutBudgetMs?: number;
+  lastRenderTimeoutBudgetDeltaMs?: number;
+  renderTimeouts: number;
+  consecutiveRenderTimeouts: number;
+  renderQuarantined: boolean;
   unhealthyReason?: "processing-error" | "process-timeout" | "render-budget-exceeded" | "destroyed";
   recoveryDryBlocks: number;
   recoveryInProgress: boolean;
@@ -148,6 +154,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   private lastRenderDurationMs?: number;
   private lastRenderBudgetMs?: number;
   private lastRenderBudgetExceeded = false;
+  private lastRenderTimeoutMs?: number;
+  private lastRenderTimeoutBudgetMs?: number;
+  private lastRenderTimeoutBudgetDeltaMs?: number;
+  private renderTimeouts = 0;
+  private consecutiveRenderTimeouts = 0;
+  private renderQuarantined = false;
   private lastOutputPath?: "wet" | "dry";
   private lastOutputTail?: number[];
   private transportLatencySamples = 0;
@@ -200,6 +212,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       lastRenderDurationMs: this.lastRenderDurationMs,
       lastRenderBudgetMs: this.lastRenderBudgetMs,
       renderBudgetExceeded: this.lastRenderBudgetExceeded,
+      lastRenderTimeoutMs: this.lastRenderTimeoutMs,
+      lastRenderTimeoutBudgetMs: this.lastRenderTimeoutBudgetMs,
+      lastRenderTimeoutBudgetDeltaMs: this.lastRenderTimeoutBudgetDeltaMs,
+      renderTimeouts: this.renderTimeouts,
+      consecutiveRenderTimeouts: this.consecutiveRenderTimeouts,
+      renderQuarantined: this.renderQuarantined,
       unhealthyReason: this.unhealthyReason,
       recoveryDryBlocks: this.recoveryDryBlocks,
       recoveryInProgress: this.recoveryInProgress,
@@ -373,6 +391,12 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.lastRenderDurationMs = undefined;
     this.lastRenderBudgetMs = undefined;
     this.lastRenderBudgetExceeded = false;
+    this.lastRenderTimeoutMs = undefined;
+    this.lastRenderTimeoutBudgetMs = undefined;
+    this.lastRenderTimeoutBudgetDeltaMs = undefined;
+    this.renderTimeouts = 0;
+    this.consecutiveRenderTimeouts = 0;
+    this.renderQuarantined = false;
     this.lastOutputPath = undefined;
     this.lastOutputTail = undefined;
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
@@ -491,10 +515,29 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.healthy = false;
     this.lastError = error;
     this.unhealthyReason = reason;
+    this.recordRenderDeadlineDiagnostics(error);
     this.recoveryDryBlocks = 0;
     this.recoveryInProgress = false;
     this.dispatchEvent(new CustomEvent("effect-error", { detail: { error, health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  private recordRenderDeadlineDiagnostics(error: unknown): void {
+    if (!isRenderDeadlineProtocolError(error)) {
+      return;
+    }
+    const details = renderDeadlineDetails(error);
+    this.lastRenderTimeoutMs = boundedOptionalNumber(details.renderTimeoutMs, 0, 60000);
+    this.lastRenderTimeoutBudgetMs = boundedOptionalNumber(details.renderBudgetMs, 0, 60000);
+    this.lastRenderTimeoutBudgetDeltaMs = boundedOptionalNumber(details.renderTimeoutBudgetDeltaMs, -60000, 60000);
+    this.renderTimeouts = boundedLiveEffectInteger(details.renderTimeouts, Math.max(1, this.renderTimeouts), 0, 1_000_000);
+    this.consecutiveRenderTimeouts = boundedLiveEffectInteger(
+      details.consecutiveRenderTimeouts,
+      Math.max(1, this.consecutiveRenderTimeouts),
+      0,
+      1_000_000
+    );
+    this.renderQuarantined = details.renderQuarantined === true || error.code === "render_quarantined" || error.code === "render_timeout";
   }
 
   private isStaleInput(timestamp: unknown): boolean {
@@ -596,10 +639,17 @@ function liveEffectTimeoutError(): Error {
 }
 
 function liveEffectFailureReason(error: unknown): LiveEffectRackHealth["unhealthyReason"] {
-  return (error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout") ||
-    (error instanceof SoundBridgeProtocolError && (error.code === "render_timeout" || error.code === "render_quarantined"))
+  return (error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout") || isRenderDeadlineProtocolError(error)
     ? "process-timeout"
     : "processing-error";
+}
+
+function isRenderDeadlineProtocolError(error: unknown): error is SoundBridgeProtocolError {
+  return error instanceof SoundBridgeProtocolError && (error.code === "render_timeout" || error.code === "render_quarantined");
+}
+
+function renderDeadlineDetails(error: SoundBridgeProtocolError): Record<string, unknown> {
+  return typeof error.details === "object" && error.details !== null ? error.details as Record<string, unknown> : {};
 }
 
 function liveEffectNowMs(): number {
