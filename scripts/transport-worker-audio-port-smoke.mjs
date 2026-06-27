@@ -381,6 +381,76 @@ socket.emit("message", {
 });
 assert(postedMessages.length === postedBeforeLateShared, "transport worker suppresses late shared audio responses after timeout");
 
+const destroyPort = new TestPort();
+self.onmessage({
+  data: {
+    type: "audio-port",
+    port: destroyPort,
+    instanceId: "inst-destroy-direct",
+    sampleRate: 48000,
+    sessionToken: "session-1",
+    audioRequestTimeoutMs: 41,
+    audioTransport: "binary"
+  }
+});
+destroyPort.onmessage({
+  data: {
+    type: "process",
+    blockId: 60,
+    frames: 2,
+    channels: [Float32Array.from([0.6, 0.6])]
+  }
+});
+const destroyedDirectId = encodedBinaryEnvelopes.at(-1)?.id;
+assert(countTimersWithDelay(41) === 1, "direct audio destroy setup leaves one pending render timer");
+destroyPort.onmessage({ data: { type: "destroy" } });
+assert(destroyPort.closed === true, "direct audio destroy closes the message port");
+assert(countTimersWithDelay(41) === 0, "direct audio destroy clears pending render timers");
+const postedBeforeDestroyedDirect = postedMessages.length;
+socket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: destroyedDirectId,
+    ok: true,
+    payload: { blockId: 60, channels: [Float32Array.from([0.6, 0.6])], latencySamples: 0 }
+  })
+});
+assert(!destroyPort.messages.some((message) => message.type === "processed"), "direct audio destroy drops late render output");
+assert(postedMessages.length === postedBeforeDestroyedDirect, "direct audio destroy suppresses late worker responses");
+
+const destroySharedAudio = createSharedAudio(2, 1, 2);
+writeSharedInput(destroySharedAudio, 61, [Float32Array.from([0.61, 0.61])]);
+const destroySharedPort = new TestPort();
+self.onmessage({
+  data: {
+    type: "audio-port",
+    port: destroySharedPort,
+    instanceId: "inst-destroy-shared",
+    sampleRate: 48000,
+    sessionToken: "session-1",
+    maxInFlightBlocks: 1,
+    audioRequestTimeoutMs: 43,
+    audioTransport: "binary",
+    sharedAudio: destroySharedAudio
+  }
+});
+const destroyedSharedId = encodedBinaryEnvelopes.at(-1)?.id;
+assert(countTimersWithDelay(43) === 1, "shared audio destroy setup leaves one pending render timer");
+destroySharedPort.onmessage({ data: { type: "destroy" } });
+assert(destroySharedPort.closed === true, "shared audio destroy closes the message port");
+assert(countTimersWithDelay(43) === 0, "shared audio destroy clears pending render timers");
+const postedBeforeDestroyedShared = postedMessages.length;
+socket.emit("message", {
+  data: JSON.stringify({
+    type: "response",
+    id: destroyedSharedId,
+    ok: true,
+    payload: { blockId: 61, channels: [Float32Array.from([0.61, 0.61])], latencySamples: 0 }
+  })
+});
+assert(Atomics.load(new Int32Array(destroySharedAudio.outputControl), 2) === 0, "shared audio destroy drops late output blocks");
+assert(postedMessages.length === postedBeforeDestroyedShared, "shared audio destroy suppresses late worker responses");
+
 clearTimersWithDelay(1);
 const timerFallbackAudio = createSharedAudio(2, 1, 2);
 const timerFallbackPort = new TestPort();

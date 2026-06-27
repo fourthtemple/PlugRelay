@@ -130,11 +130,7 @@ function connectAudioPort(port: MessagePort, config: AudioPortConfig, sharedAudi
   port.onmessage = (event) => {
     const message = event.data;
     if (message?.type === "destroy") {
-      if (sharedAudio) {
-        sharedAudio.closed = true;
-        sharedAudioPorts.delete(sharedAudio);
-      }
-      port.close();
+      closeAudioPort(port, sharedAudio);
       return;
     }
     if (message?.type === "process") {
@@ -146,6 +142,41 @@ function connectAudioPort(port: MessagePort, config: AudioPortConfig, sharedAudi
     sharedAudioPorts.set(sharedAudio, config);
     port.postMessage({ type: "shared-audio-status", wakeMode: sharedAudio.wakeMode });
     pumpSharedAudio(config, sharedAudio);
+  }
+}
+
+function closeAudioPort(port: MessagePort, sharedAudio?: SharedAudioPort): void {
+  clearPendingAudioPortRequests(port);
+  if (sharedAudio) {
+    sharedAudio.closed = true;
+    sharedAudioPorts.delete(sharedAudio);
+    clearPendingSharedAudioRequests(sharedAudio);
+    sharedAudio.inputBufferPool.clear();
+    sharedAudio.pooledInputBuffers = 0;
+    sharedAudio.inFlightBlocks = 0;
+  }
+  port.close();
+}
+
+function clearPendingAudioPortRequests(port: MessagePort): void {
+  for (const [id, pending] of pendingAudioPorts) {
+    if (pending.port !== port) {
+      continue;
+    }
+    clearAudioRequestTimeout(pending.timeout);
+    pendingAudioPorts.delete(id);
+    rememberStaleRequestId(id);
+  }
+}
+
+function clearPendingSharedAudioRequests(shared: SharedAudioPort): void {
+  for (const [id, pending] of pendingSharedAudio) {
+    if (pending.shared !== shared) {
+      continue;
+    }
+    clearAudioRequestTimeout(pending.timeout);
+    pendingSharedAudio.delete(id);
+    rememberStaleRequestId(id);
   }
 }
 
