@@ -456,6 +456,38 @@ assert(
   "adaptive frame batch scheduler latency snapshots include aggregate deadline pressure reasons"
 );
 
+const batchTimeoutScheduler = createLiveEffectRackBlockScheduler({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  transportLatencySamples: 0
+});
+const batchTimeoutController = createLiveEffectRackFrameBatchSchedulerAdaptiveLatencyController({
+  scheduler: batchTimeoutScheduler,
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  transportLatencySamples: 0,
+  processBudgetMs: 4,
+  processTimeoutMs: 12,
+  minSamples: 1,
+  cooldownBlocks: 0,
+  safetyMarginBlocks: 0
+});
+batchTimeoutController.record({ totalDurationMs: 1, maxDurationMs: 0.5, latencySamples: 0, processTimedOut: false });
+const batchTimeoutPressure = batchTimeoutController.record({
+  totalDurationMs: 1,
+  maxDurationMs: 0.5,
+  latencySamples: 0,
+  processTimedOut: true,
+  dryTargets: 1,
+  skippedTargets: 1,
+  failedTargets: 0
+});
+assert(
+  batchTimeoutPressure.deadlinePressure?.reasons.includes("process-timeout") &&
+    batchTimeoutPressure.deadlinePressure?.reasons.includes("increase-process-timeout"),
+  "adaptive frame batch scheduler latency surfaces timeout calibration pressure"
+);
+
 const batchCooldown = batchController.record({
   totalDurationMs: 1,
   maxDurationMs: 0.5,
