@@ -64,3 +64,5 @@ assert(deadlineEvents === 1, "frame batch does not emit deadline events for in-b
 assert(processor.health.responseDeadlineMisses === 1, "frame-batch deadline miss counter is retained for scheduler calibration");
 
 console.log("Live effect rack frame-batch deadline event smoke checks passed.");
+
+await import("./live-effect-rack-frame-batch-dry-output-event-smoke.mjs");

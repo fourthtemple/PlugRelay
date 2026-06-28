@@ -596,6 +596,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       error
     };
     this.lastResult = result;
+    if (dryTargets > 0) this.dispatchEvent(new CustomEvent("frame-batch-dry-output", { detail: { result, health: this.health, deadlinePressure: frame.deadlinePressure } }));
     this.dispatchHealthChangeIfNeeded();
     return result;
   }

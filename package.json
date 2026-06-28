@@ -36,6 +36,7 @@
     "smoke:live-rack-scheduler": "node scripts/live-effect-rack-scheduler-smoke.mjs",
     "smoke:live-rack-scheduler-timing-policy": "node scripts/live-effect-rack-scheduler-timing-policy-smoke.mjs",
     "smoke:live-rack-frame-batch-deadline-event": "node scripts/live-effect-rack-frame-batch-deadline-event-smoke.mjs",
+    "smoke:live-rack-frame-batch-dry-output-event": "node scripts/live-effect-rack-frame-batch-dry-output-event-smoke.mjs",
     "smoke:live-rack-frame-batch-timing-policy": "node scripts/live-effect-rack-frame-batch-timing-policy-smoke.mjs",
     "smoke:live-rack-timing-policy": "node scripts/live-effect-rack-timing-policy-smoke.mjs",
     "smoke:live-rack-scheduled": "node scripts/live-effect-rack-scheduled-smoke.mjs",
