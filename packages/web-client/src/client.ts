@@ -535,6 +535,8 @@ const BINARY_AUDIO_MAGIC = 0x53424131;
 const BINARY_AUDIO_HEADER_BYTES = 8;
 const FLOAT_BYTES = 4;
 const LITTLE_ENDIAN_FLOATS = new Uint8Array(new Float32Array([1]).buffer)[0] === 0;
+const BINARY_TEXT_ENCODER = new TextEncoder();
+const BINARY_TEXT_DECODER = new TextDecoder();
 const MAX_BINARY_CHANNELS = 32;
 const MAX_BINARY_FRAMES = 8192;
 const MAX_BINARY_BUSES = 32;
@@ -562,7 +564,7 @@ function encodeBinaryAudioEnvelope(envelope: RequestEnvelope, channels: ArrayLik
   delete header.payload.channels;
   delete header.payload.inputBuses;
   delete header.payload.outputBuses;
-  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+  const headerBytes = BINARY_TEXT_ENCODER.encode(JSON.stringify(header));
   const blocks = [mainBlock, ...inputBuses, ...outputBuses];
   const sampleBytes = blocks.reduce((total, block) => total + block.channels.length * block.frames * FLOAT_BYTES, 0);
   const buffer = new ArrayBuffer(BINARY_AUDIO_HEADER_BYTES + headerBytes.length + sampleBytes);
@@ -591,7 +593,7 @@ function decodeBinaryAudioEnvelope(data: unknown): ResponseEnvelope {
   }
 
   const headerBytes = bytes.subarray(BINARY_AUDIO_HEADER_BYTES, headerEnd);
-  const envelope = JSON.parse(new TextDecoder().decode(headerBytes)) as ResponseEnvelope & {
+  const envelope = JSON.parse(BINARY_TEXT_DECODER.decode(headerBytes)) as ResponseEnvelope & {
     binaryAudio?: { channels?: number; frames?: number; inputBuses?: unknown; outputBuses?: unknown };
   };
   const channelCount = boundedBinaryInteger(envelope.binaryAudio?.channels, 0, MAX_BINARY_CHANNELS);
