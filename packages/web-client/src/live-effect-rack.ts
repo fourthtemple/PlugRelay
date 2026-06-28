@@ -92,11 +92,11 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   readonly inputChannels: number;
   readonly outputChannels: number;
   readonly audioTransport: "binary" | "json";
-  readonly maxInputAgeMs: number;
+  maxInputAgeMs: number;
   readonly maxInFlightBlocks: number;
-  readonly processBudgetMs: number;
-  readonly processTimeoutMs: number;
-  readonly transitionFadeSamples: number;
+  processBudgetMs: number;
+  processTimeoutMs: number;
+  transitionFadeSamples: number;
   readonly maxConsecutiveProcessBudgetMisses: number;
   readonly maxConsecutiveRenderBudgetMisses: number;
   readonly processBudgetRecoveryBlocks: number;
@@ -239,6 +239,21 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.wetMix = bounded;
     this.dispatchEvent(new CustomEvent("wetmixchange", { detail: this.health }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  setTimingPolicy(options: Partial<LiveEffectRackOptions>): LiveEffectRackHealth {
+    const previous = { maxInputAgeMs: this.maxInputAgeMs, processBudgetMs: this.processBudgetMs, processTimeoutMs: this.processTimeoutMs, transitionFadeSamples: this.transitionFadeSamples };
+    this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, this.maxInputAgeMs, 0, 60000);
+    this.processBudgetMs = boundedLiveEffectNumber(options.processBudgetMs, this.processBudgetMs, 0, 60000);
+    this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, this.processTimeoutMs, 0, 60000);
+    this.transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, this.transitionFadeSamples, 0, 4096);
+    const changed = this.maxInputAgeMs !== previous.maxInputAgeMs || this.processBudgetMs !== previous.processBudgetMs || this.processTimeoutMs !== previous.processTimeoutMs || this.transitionFadeSamples !== previous.transitionFadeSamples;
+    if (changed) {
+      const health = this.health;
+      this.dispatchEvent(new CustomEvent("timingpolicychange", { detail: { previous, health } }));
+      this.dispatchEvent(new CustomEvent("healthchange", { detail: health }));
+    }
+    return this.health;
   }
 
   retry(): boolean {
