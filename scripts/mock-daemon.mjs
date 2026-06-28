@@ -566,7 +566,7 @@ function getLayout(payload, session) {
   return clonePluginLayout(instance.layout);
 }
 
-async function processAudioBlock(payload, session) {
+async function processAudioBlock(payload, session, options = {}) {
   const instance = getInstance(payload.instanceId, session);
   const requestedFrames = firstAudioFrameCount(payload, instance.maxBlockSize);
   const frames = boundedFrames(requestedFrames, instance.maxBlockSize);
@@ -622,6 +622,7 @@ async function processAudioBlock(payload, session) {
         channels,
         inputBuses,
         transport,
+        preferTypedOutput: options.binaryAudioRequest === true,
         renderTimeoutMs
       });
     } catch (error) {
@@ -630,10 +631,11 @@ async function processAudioBlock(payload, session) {
     recordRenderSuccess(instance);
     const renderDurationMs = boundedRenderDurationMs(renderStartedAt);
     const renderedChannels = Array.isArray(rendered) ? rendered : rendered.channels;
+    const channels = normalizeAudioChannels(renderedChannels, instance.outputChannels, frames);
     return {
       blockId: payload.blockId,
-      channels: normalizeAudioChannels(renderedChannels, instance.outputChannels, frames),
-      outputBuses: normalizeOutputBusBlocks(rendered.outputBuses, renderedChannels, instance.layout, frames),
+      channels,
+      outputBuses: normalizeOutputBusBlocks(rendered.outputBuses, channels, instance.layout, frames),
       ...(transport ? { transport } : {}),
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),

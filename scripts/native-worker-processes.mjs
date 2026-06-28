@@ -21,6 +21,7 @@ import {
   normalizeWorkerCommandTimeout,
   normalizeWorkerDiagnosticLogLimit,
   normalizeWorkerFileGrantResult,
+  normalizeWorkerRenderChannels,
   normalizeWorkerPendingCommandByteLimit,
   normalizeWorkerPendingCommandLimit,
   normalizeWorkerReadyTimeout,
@@ -354,14 +355,17 @@ export function createNativeWorkerProcesses({
         if (!Array.isArray(parsed.channels)) {
           throw new Error("worker returned invalid channels");
         }
+        const preferTypedOutput = request.preferTypedOutput === true;
         const channels = normalizeWorkerRenderChannels(
           parsed.channels,
           this.fallbackLayout?.outputChannels ?? limits.maxAudioChannels,
-          request.frames
+          request.frames,
+          limits.maxAudioChannels,
+          preferTypedOutput
         );
         return {
           channels,
-          outputBuses: normalizeWorkerOutputBuses(parsed.outputBuses, channels, this.fallbackLayout, request.frames)
+          outputBuses: normalizeWorkerOutputBuses(parsed.outputBuses, channels, this.fallbackLayout, request.frames, preferTypedOutput)
         };
       });
     }
@@ -694,7 +698,7 @@ export function createNativeWorkerProcesses({
     return encoded || "-";
   }
 
-  function normalizeWorkerOutputBuses(value, mainChannels, layout, frames) {
+  function normalizeWorkerOutputBuses(value, mainChannels, layout, frames, preferTypedOutput = false) {
     if (!Array.isArray(value)) {
       return [{ index: 0, channels: mainChannels }];
     }
@@ -712,23 +716,11 @@ export function createNativeWorkerProcesses({
         limits.maxAudioChannels;
       byIndex.set(index, {
         index,
-        channels: normalizeWorkerRenderChannels(bus.channels, layoutChannels, frames)
+        channels: normalizeWorkerRenderChannels(bus.channels, layoutChannels, frames, limits.maxAudioChannels, preferTypedOutput)
       });
     }
     byIndex.set(0, { index: 0, channels: mainChannels });
     return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
-  }
-
-  function normalizeWorkerRenderChannels(channels, maxChannels, frames) {
-    if (!Array.isArray(channels) || maxChannels <= 0) {
-      return [];
-    }
-    return channels.slice(0, Math.min(maxChannels, limits.maxAudioChannels)).map((channel) =>
-      Array.from({ length: frames }, (_, frame) => {
-        const value = Number(Array.isArray(channel) ? channel[frame] : 0);
-        return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
-      })
-    );
   }
 
   function normalizeBusIndex(value) {

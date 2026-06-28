@@ -26,7 +26,8 @@ export function createDaemonRequestHandler({ dispatchCommand }) {
     }
 
     try {
-      const payload = await dispatchCommand(envelope, context);
+      const requestContext = binaryAudioRequest ? { ...context, binaryAudioRequest: true } : context;
+      const payload = await dispatchCommand(envelope, requestContext);
       const response = {
         type: "response",
         id: envelope.id,

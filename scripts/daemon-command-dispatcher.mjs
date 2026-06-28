@@ -81,7 +81,7 @@ export function createDaemonCommandDispatcher({
         return handlers.setState(payload.instanceId, payload.state, session);
 
       case "processAudioBlock":
-        return handlers.processAudioBlock(payload, session);
+        return handlers.processAudioBlock(payload, session, { binaryAudioRequest: context?.binaryAudioRequest === true });
 
       case "sendMidiEvents":
         return handlers.sendMidiEvents(payload.instanceId, payload.events, session);

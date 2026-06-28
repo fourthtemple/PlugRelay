@@ -38,7 +38,7 @@ import {
   exerciseVst3ProgramDataNativeWorker,
   writeVst3ProgramDataNativeWorkerIpcFixtures
 } from "./native-worker-ipc-vst3-program-data-fixtures.mjs";
-import { encodeAudioChannels } from "./native-worker-process-support.mjs";
+import { encodeAudioChannels, normalizeWorkerRenderChannels } from "./native-worker-process-support.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
@@ -79,6 +79,13 @@ try {
   check(
     encodeAudioChannels([Float32Array.from([2, -2, NaN, 0.25]), {}], 4) === "1,-1,0,0.25|0,0,0,0",
     "native worker audio command encoding accepts typed buffers and clamps samples"
+  );
+  const typedNormalizedChannel = normalizeWorkerRenderChannels([[2, -2, NaN]], 1, 3, 2, true)[0];
+  check(
+    Array.isArray(normalizeWorkerRenderChannels([[2, -2, NaN]], 1, 3, 2)[0]) &&
+      typedNormalizedChannel instanceof Float32Array &&
+      typedNormalizedChannel.join(",") === "1,-1,0",
+    "native worker render normalization supports binary typed output"
   );
 
   const cappedParameterResponse = parameterSnapshotResponse({ parameters: [{ id: "a" }, { id: "b" }] }, 2);

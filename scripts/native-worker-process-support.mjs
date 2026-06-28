@@ -18,17 +18,37 @@ export function encodeAudioChannels(channels, frames) {
   }
 
   const frameCount = finiteFrameCount(frames);
-  const encodedChannels = new Array(channels.length);
+  let encoded = "";
   for (let channelIndex = 0; channelIndex < channels.length; channelIndex += 1) {
     const channel = audioChannelSource(channels[channelIndex]) ? channels[channelIndex] : undefined;
-    const samples = new Array(frameCount);
-    for (let frame = 0; frame < frameCount; frame += 1) {
-      const value = Number(channel?.[frame] ?? 0);
-      samples[frame] = Number.isFinite(value) ? String(Math.max(-1, Math.min(1, value))) : "0";
+    if (channelIndex > 0) {
+      encoded += "|";
     }
-    encodedChannels[channelIndex] = samples.join(",");
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      if (frame > 0) {
+        encoded += ",";
+      }
+      const value = Number(channel === undefined ? 0 : channel[frame] ?? 0);
+      encoded += Number.isFinite(value) ? String(Math.max(-1, Math.min(1, value))) : "0";
+    }
   }
-  return encodedChannels.join("|");
+  return encoded;
+}
+
+export function normalizeWorkerRenderChannels(channels, maxChannels, frames, maxAudioChannels, preferTypedOutput = false) {
+  if (!Array.isArray(channels) || maxChannels <= 0) {
+    return [];
+  }
+  const frameCount = finiteFrameCount(frames);
+  return channels.slice(0, Math.min(maxChannels, maxAudioChannels)).map((channel) => {
+    const source = audioChannelSource(channel) ? channel : undefined;
+    const samples = preferTypedOutput ? new Float32Array(frameCount) : new Array(frameCount);
+    for (let frame = 0; frame < samples.length; frame += 1) {
+      const value = Number(source === undefined ? 0 : source[frame] ?? 0);
+      samples[frame] = Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+    }
+    return samples;
+  });
 }
 
 function audioChannelSource(channel) {
