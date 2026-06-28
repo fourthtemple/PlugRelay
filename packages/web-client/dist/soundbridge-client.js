@@ -4268,7 +4268,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       error
     };
     this.lastResult = result;
-    if (dryTargets > 0) this.dispatchEvent(new CustomEvent("frame-batch-dry-output", { detail: { result, health: this.health, deadlinePressure: frame.deadlinePressure } }));
+    if (dryTargets > 0) this.dispatchEvent(new CustomEvent("frame-batch-dry-output", { detail: { result, health: this.health, reason: result.processTimeoutTripped ? "frame-batch-process-timeout" : result.processBudgetTripped ? "frame-batch-process-budget-exceeded" : result.skippedTargets > 0 ? frame.stale ? "frame-batch-stale-input" : frame.deadlinePressure.pressure ? "frame-batch-deadline-pressure" : "frame-batch-skipped" : result.bypassedTargets >= dryTargets ? "frame-batch-bypass" : "frame-batch-target-dry", deadlinePressure: frame.deadlinePressure } }));
     this.dispatchHealthChangeIfNeeded();
     return result;
   }
