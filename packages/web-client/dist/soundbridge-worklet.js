@@ -273,11 +273,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     for (let channelIndex = 0; channelIndex < this.outputChannels; channelIndex += 1) {
       const source = input[channelIndex] ?? input[0];
       const copy = this.takeInputBuffer(frames);
-      if (source) {
-        copy.set(source.length === frames ? source : source.subarray(0, frames));
-      } else {
-        copy.fill(0);
-      }
+      if (source?.length === frames) copy.set(source);
+      else if (source) for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) copy[frameIndex] = source[frameIndex] ?? 0;
+      else copy.fill(0);
       channels[channelIndex] = copy;
     }
     return channels;
@@ -290,11 +288,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       if (!destination) {
         continue;
       }
-      if (source) {
-        destination.set(source.length === frames ? source : source.subarray(0, frames));
-      } else {
-        destination.fill(0);
-      }
+      if (source?.length === frames) destination.set(source);
+      else if (source) for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) destination[frameIndex] = source[frameIndex] ?? 0;
+      else destination.fill(0);
     }
   }
 
@@ -402,7 +398,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     for (let channelIndex = 0; channelIndex < channels; channelIndex += 1) {
       const channel = this.takeOutputBuffer(frames);
       const sourceOffset = base + channelIndex * shared.frames;
-      channel.set(shared.outputAudio.subarray(sourceOffset, sourceOffset + frames));
+      for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) channel[frameIndex] = shared.outputAudio[sourceOffset + frameIndex];
       outputChannels[channelIndex] = channel;
     }
     this.queueOutputBlock(blockId, outputChannels);
@@ -426,11 +422,12 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     for (let channelIndex = 0; channelIndex < shared.channels; channelIndex += 1) {
       const offset = base + channelIndex * shared.frames;
       const source = channels[channelIndex] ?? channels[0];
-      if (source) {
-        audio.set(source.length === frames ? source : source.subarray(0, frames), offset);
-        if (frames < shared.frames) {
-          audio.fill(0, offset + frames, offset + shared.frames);
-        }
+      if (source?.length === frames) {
+        audio.set(source, offset);
+        if (frames < shared.frames) audio.fill(0, offset + frames, offset + shared.frames);
+      } else if (source) {
+        for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) audio[offset + frameIndex] = source[frameIndex] ?? 0;
+        if (frames < shared.frames) audio.fill(0, offset + frames, offset + shared.frames);
       } else {
         audio.fill(0, offset, offset + shared.frames);
       }

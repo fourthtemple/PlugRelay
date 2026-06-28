@@ -450,7 +450,7 @@ function readSharedInputBlock(shared, slotIndex) {
   for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
     const offset = base + channelIndex * shared.frames;
     const channel = takeSharedInputBuffer(shared, frames);
-    channel.set(shared.inputAudio.subarray(offset, offset + frames));
+    for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) channel[frameIndex] = shared.inputAudio[offset + frameIndex];
     channels[channelIndex] = channel;
   }
   return { blockId, frames, channels, transportLatencySamples };
