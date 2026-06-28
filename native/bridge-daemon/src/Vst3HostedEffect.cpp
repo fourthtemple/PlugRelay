@@ -117,12 +117,14 @@ RenderedAudio HostedVst3Effect::render(
     const auto* requestedBus = findBusChannels(inputBuses, static_cast<std::uint32_t>(busIndex));
     for (std::uint32_t channelIndex = 0; channelIndex < channelCount; ++channelIndex) {
       auto& channel = inputStorage_[busIndex][channelIndex];
-      std::fill(channel.begin(), channel.begin() + frames, 0.0F);
       if (requestedBus != nullptr && channelIndex < requestedBus->size()) {
         const auto copyFrames = std::min<std::size_t>(frames, (*requestedBus)[channelIndex].size());
         for (std::size_t frame = 0; frame < copyFrames; ++frame) {
           channel[frame] = std::clamp((*requestedBus)[channelIndex][frame], -1.0F, 1.0F);
         }
+        if (copyFrames < frames) std::fill(channel.begin() + copyFrames, channel.begin() + frames, 0.0F);
+      } else {
+        std::fill(channel.begin(), channel.begin() + frames, 0.0F);
       }
     }
     inputBusBuffers_[busIndex].silenceFlags = 0;
