@@ -344,7 +344,7 @@ export function createNativeWorkerProcesses({
 
       const command = `render ${request.frames} ${request.sampleRate} ` +
         `${encodeAudioChannels(request.channels, request.frames)} ` +
-        `${encodeAudioBuses(request.inputBuses, request.frames)} ${encodeTransportState(request.transport)}`;
+        `${encodeAudioBuses(request.inputBuses, request.frames, request.channels)} ${encodeTransportState(request.transport)}`;
 
       return this.request(command, request.renderTimeoutMs).then((parsed) => {
         if (!Array.isArray(parsed.channels)) {
@@ -671,21 +671,24 @@ export function createNativeWorkerProcesses({
     }
   }
 
-  function encodeAudioBuses(buses, frames) {
+  function encodeAudioBuses(buses, frames, mainChannels) {
     if (!Array.isArray(buses) || buses.length === 0) {
       return "-";
     }
-    const encodedByIndex = new Array(limits.maxPluginBuses);
+    let encodedByIndex;
     const busCount = Math.min(buses.length, limits.maxPluginBuses);
     for (let busPosition = 0; busPosition < busCount; busPosition += 1) {
       const bus = buses[busPosition];
       if (!bus || typeof bus !== "object" || Array.isArray(bus)) continue;
       const index = normalizeBusIndex(bus.index);
       if (index === undefined) continue;
+      if (index === 0 && bus.channels === mainChannels) continue;
+      encodedByIndex ??= new Array(limits.maxPluginBuses);
       if (encodedByIndex[index] === undefined) {
         encodedByIndex[index] = encodeAudioChannels(bus.channels, frames);
       }
     }
+    if (encodedByIndex === undefined) return "-";
     let encoded = "";
     for (let index = 0; index < encodedByIndex.length; index += 1) {
       const channels = encodedByIndex[index];
