@@ -646,7 +646,11 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.recoveryDryBlocks = 0;
     this.recoveryInProgress = false;
     this.dispatchEvent(new CustomEvent("effect-error", { detail: { error, health: this.health } }));
-    if (reason === "process-timeout") {
+    if (reason === "process-budget-exceeded") {
+      this.dispatchEvent(new CustomEvent("process-budget-tripped", { detail: { error, health: this.health } }));
+    } else if (reason === "render-budget-exceeded") {
+      this.dispatchEvent(new CustomEvent("render-budget-tripped", { detail: { error, health: this.health } }));
+    } else if (reason === "process-timeout") {
       this.dispatchEvent(new CustomEvent("process-timeout", { detail: { error, health: this.health } }));
     }
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
