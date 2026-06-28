@@ -174,11 +174,18 @@ const sharedAllocationCalibration = calibrateLivePerformanceAudioNodePolicy({
   sharedInputBufferAllocations: 2
 });
 assert(sharedAllocationCalibration.observedSharedInputBufferAllocations === 2, "live AudioNode calibration reports shared input buffer allocations");
+assert(sharedAllocationCalibration.recommendedSharedBufferBlocks === 9, "live AudioNode calibration recommends shared ring headroom for allocation churn");
 assert(sharedAllocationCalibration.warnings.includes("shared-buffer-allocation"), "live AudioNode calibration warns on shared buffer allocation churn");
+assert(sharedAllocationCalibration.warnings.includes("increase-shared-buffer"), "live AudioNode calibration turns allocation churn into shared-buffer advice");
+assert(
+  calibrateLivePerformanceAudioNodePolicy({ instanceId: "inst-shared-allocation-margin", sharedInputBufferAllocations: 2, safetyMarginBlocks: 3 }).recommendedSharedBufferBlocks === 11,
+  "live AudioNode calibration applies the safety margin to shared allocation headroom"
+);
 const sharedAllocationWindow = createLivePerformanceAudioNodeCalibrationWindow({ instanceId: "inst-shared-allocation-window" });
 sharedAllocationWindow.record({ sharedInputBufferAllocations: 5 });
 const sharedAllocationSnapshot = sharedAllocationWindow.record({ sharedInputBufferAllocations: 6 });
 assert(sharedAllocationSnapshot.calibration.warnings.includes("shared-buffer-allocation"), "live AudioNode calibration window warns on post-baseline shared allocations");
+assert(sharedAllocationSnapshot.recommendedOptions.sharedBufferBlocks === 9, "live AudioNode calibration window recommends shared ring headroom after post-baseline allocations");
 
 const deadlineCounterCalibration = calibrateLivePerformanceAudioNodePolicy({
   instanceId: "inst-deadline-counter",

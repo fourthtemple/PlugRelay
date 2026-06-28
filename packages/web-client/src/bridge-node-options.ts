@@ -348,7 +348,11 @@ export function calibrateLivePerformanceAudioNodePolicy(options: LivePerformance
     policy.maxQueuedOutputBlocks
   );
   const recommendedSharedBufferBlocks = boundedInteger(
-    Math.max(policy.sharedBufferBlocks, policy.maxInFlightBlocks + recommendedMaxOutputLatencyBlocks, (observedSharedQueueMaxBlocks ?? 0) + safetyBlocks + 1),
+    Math.max(
+      policy.sharedBufferBlocks + (observedSharedInputBufferAllocations > 0 ? Math.max(1, safetyBlocks) : 0),
+      policy.maxInFlightBlocks + recommendedMaxOutputLatencyBlocks,
+      (observedSharedQueueMaxBlocks ?? 0) + safetyBlocks + 1
+    ),
     policy.sharedBufferBlocks,
     2,
     64
