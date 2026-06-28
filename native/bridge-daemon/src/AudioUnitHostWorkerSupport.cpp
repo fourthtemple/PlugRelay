@@ -554,7 +554,7 @@ AudioStreamBasicDescription streamDescription(double sampleRate, std::uint32_t c
   return description;
 }
 
-std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::uint32_t frames) {
+std::vector<std::vector<float>> parseChannels(std::string_view encoded, std::uint32_t frames) {
   frames = std::clamp<std::uint32_t>(frames, 1, kMaxWorkerFrames);
   if (encoded.empty() || encoded == "-") {
     return {};
@@ -616,7 +616,7 @@ bool parseAudioBuses(
     }
     buses.push_back(IndexedAudioBus{
         index,
-        parseChannels(std::string(separator + 1, static_cast<std::size_t>(tokenEnd - separator - 1)), frames)});
+        parseChannels(std::string_view(separator + 1, static_cast<std::size_t>(tokenEnd - separator - 1)), frames)});
     cursor = tokenEnd == end ? end : tokenEnd + 1;
   }
   return true;

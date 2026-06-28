@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace soundbridge::audio_unit_worker {
@@ -81,7 +82,7 @@ double normalizedValueForPlain(const AudioUnitParameterInfo& info, AudioUnitPara
 std::string displayValueForParameter(AudioUnit unit, AudioUnitParameterID parameterId, AudioUnitParameterValue plainValue);
 std::string parameterInfoToJson(AudioUnit unit, AudioUnitParameterID parameterId, AudioUnitParameterInfo& info);
 AudioStreamBasicDescription streamDescription(double sampleRate, std::uint32_t channels);
-std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::uint32_t frames);
+std::vector<std::vector<float>> parseChannels(std::string_view encoded, std::uint32_t frames);
 bool parseAudioBuses(const std::string& encoded, std::uint32_t frames, std::vector<IndexedAudioBus>& buses);
 const std::vector<std::vector<float>>* findBusChannels(const std::vector<IndexedAudioBus>& buses, std::uint32_t index);
 std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels);

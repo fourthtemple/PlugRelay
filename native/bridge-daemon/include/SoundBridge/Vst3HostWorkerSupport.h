@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace soundbridge::vst3_worker {
@@ -117,7 +118,7 @@ bool parseSampleRateArg(const char* text, double& out);
 bool parseDoubleArg(const char* text, double minValue, double maxValue, double& out);
 bool parseTransportContext(const std::string& encoded, double fallbackSampleTime, HostTransportContext& out);
 std::string cappedString(std::string value, std::size_t maxBytes = kMaxWorkerParameterStringBytes);
-std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::uint32_t frames);
+std::vector<std::vector<float>> parseChannels(std::string_view encoded, std::uint32_t frames);
 bool parseAudioBuses(const std::string& encoded, std::uint32_t frames, std::vector<IndexedAudioBus>& buses);
 const std::vector<std::vector<float>>* findBusChannels(const std::vector<IndexedAudioBus>& buses, std::uint32_t index);
 bool parseMidiEvents(const std::string& encoded, std::vector<PendingMidiEvent>& events);
