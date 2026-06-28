@@ -8,11 +8,13 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 
 namespace soundbridge::vst3_worker {
 namespace {
@@ -236,14 +238,43 @@ bool parseMidiEventToken(const std::string& token, PendingMidiEvent& event) {
 
 } // namespace
 
-float sanitizeSample(const std::string& text) {
-  char* end = nullptr;
-  const double value = std::strtod(text.c_str(), &end);
-  if (end == text.c_str() || !std::isfinite(value)) {
+namespace {
+
+float clampSample(double value) {
+  if (!std::isfinite(value)) {
     return 0.0F;
   }
   return static_cast<float>(std::clamp(value, -16.0, 16.0));
 }
+
+} // namespace
+
+float sanitizeSample(const std::string& text) {
+  char* end = nullptr;
+  const double value = std::strtod(text.c_str(), &end);
+  if (end == text.c_str()) {
+    return 0.0F;
+  }
+  return clampSample(value);
+}
+
+namespace {
+
+float sanitizeSampleSlice(const char* begin, const char* end) {
+  if (begin == nullptr || end == nullptr || begin >= end) {
+    return 0.0F;
+  }
+
+  double value = 0.0;
+  const auto parsed = std::from_chars(begin, end, value);
+  if (parsed.ec == std::errc{} && parsed.ptr != begin) {
+    return clampSample(value);
+  }
+
+  return sanitizeSample(std::string(begin, static_cast<std::size_t>(end - begin)));
+}
+
+} // namespace
 
 bool parseUint32Arg(const char* text, std::uint32_t minValue, std::uint32_t maxValue, std::uint32_t& out) {
   if (text == nullptr || *text == '\0') {
@@ -426,22 +457,27 @@ std::vector<std::vector<float>> parseChannels(const std::string& encoded, std::u
   }
 
   std::vector<std::vector<float>> channels;
-  std::stringstream channelStream(encoded);
-  std::string channelText;
-  while (channels.size() < kMaxWorkerChannels && std::getline(channelStream, channelText, '|')) {
+  const char* cursor = encoded.data();
+  const char* const end = cursor + encoded.size();
+  while (channels.size() < kMaxWorkerChannels && cursor < end) {
+    const char* const channelEnd = std::find(cursor, end, '|');
     std::vector<float> channel;
     channel.reserve(frames);
-    std::stringstream sampleStream(channelText);
-    std::string sampleText;
-    while (channel.size() < frames && std::getline(sampleStream, sampleText, ',')) {
-      if (sampleText.empty()) {
-        channel.push_back(0.0F);
-        continue;
+    const char* sampleStart = cursor;
+    while (channel.size() < frames && sampleStart < channelEnd) {
+      const char* const sampleEnd = std::find(sampleStart, channelEnd, ',');
+      channel.push_back(sanitizeSampleSlice(sampleStart, sampleEnd));
+      if (sampleEnd == channelEnd) {
+        break;
       }
-      channel.push_back(sanitizeSample(sampleText));
+      sampleStart = sampleEnd + 1;
     }
     channel.resize(frames, 0.0F);
     channels.push_back(std::move(channel));
+    if (channelEnd == end) {
+      break;
+    }
+    cursor = channelEnd + 1;
   }
   return channels;
 }
