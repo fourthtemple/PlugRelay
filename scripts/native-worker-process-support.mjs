@@ -40,15 +40,19 @@ export function normalizeWorkerRenderChannels(channels, maxChannels, frames, max
     return [];
   }
   const frameCount = finiteFrameCount(frames);
-  return channels.slice(0, Math.min(maxChannels, maxAudioChannels)).map((channel) => {
+  const channelCount = Math.min(channels.length, maxChannels, maxAudioChannels);
+  const normalized = new Array(channelCount);
+  for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+    const channel = channels[channelIndex];
     const source = audioChannelSource(channel) ? channel : undefined;
     const samples = preferTypedOutput ? new Float32Array(frameCount) : new Array(frameCount);
-    for (let frame = 0; frame < samples.length; frame += 1) {
+    for (let frame = 0; frame < frameCount; frame += 1) {
       const value = Number(source === undefined ? 0 : source[frame] ?? 0);
       samples[frame] = Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
     }
-    return samples;
-  });
+    normalized[channelIndex] = samples;
+  }
+  return normalized;
 }
 
 function audioChannelSource(channel) {
