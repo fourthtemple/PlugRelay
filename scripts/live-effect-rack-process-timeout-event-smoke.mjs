@@ -36,11 +36,17 @@ const timeoutRack = await SoundBridgeLiveEffectRack.create({
   processTimeoutMs: 1
 });
 let timeoutEvents = 0;
+let timeoutTripEvents = 0;
 let timeoutEventDetail;
+let timeoutTripEventDetail;
 let effectErrorEvents = 0;
 timeoutRack.addEventListener("process-timeout", (event) => {
   timeoutEvents += 1;
   timeoutEventDetail = event.detail;
+});
+timeoutRack.addEventListener("process-timeout-tripped", (event) => {
+  timeoutTripEvents += 1;
+  timeoutTripEventDetail = event.detail;
 });
 timeoutRack.addEventListener("effect-error", () => {
   effectErrorEvents += 1;
@@ -48,11 +54,16 @@ timeoutRack.addEventListener("effect-error", () => {
 const timedOut = await timeoutRack.processBlock({ blockId: 1, channels: [[0.5]] });
 assert(timedOut.bypassed === true && timedOut.healthy === false, "live rack process timeout fails dry");
 assert(timeoutClient.timeouts.at(-1) === 1, "live rack process timeout passes bounded request timeout");
-assert(timeoutEvents === 1 && effectErrorEvents === 1, "live rack emits process-timeout beside generic effect-error");
+assert(timeoutEvents === 1 && timeoutTripEvents === 1 && effectErrorEvents === 1, "live rack emits timeout and timeout-trip events beside generic effect-error");
 assert(
   timeoutEventDetail.health.unhealthyReason === "process-timeout" &&
     timeoutEventDetail.error?.name === "SoundBridgeLiveEffectTimeout",
   "live rack process-timeout event carries timeout health and error"
+);
+assert(
+  timeoutTripEventDetail.health.unhealthyReason === "process-timeout" &&
+    timeoutTripEventDetail.error?.name === "SoundBridgeLiveEffectTimeout",
+  "live rack process-timeout trip event carries timeout health and error"
 );
 await timeoutRack.destroy();
 
@@ -66,12 +77,16 @@ const failureRack = await SoundBridgeLiveEffectRack.create({
   maxBlockSize: 128
 });
 let unexpectedTimeoutEvents = 0;
+let unexpectedTimeoutTripEvents = 0;
 failureRack.addEventListener("process-timeout", () => {
   unexpectedTimeoutEvents += 1;
 });
+failureRack.addEventListener("process-timeout-tripped", () => {
+  unexpectedTimeoutTripEvents += 1;
+});
 const failed = await failureRack.processBlock({ blockId: 2, channels: [[0.25]] });
 assert(failed.bypassed === true && failureRack.health.unhealthyReason === "processing-error", "live rack still classifies ordinary processing errors");
-assert(unexpectedTimeoutEvents === 0, "live rack does not emit process-timeout for ordinary processing errors");
+assert(unexpectedTimeoutEvents === 0 && unexpectedTimeoutTripEvents === 0, "live rack does not emit timeout events for ordinary processing errors");
 await failureRack.destroy();
 
 console.log("Live effect rack process-timeout event smoke checks passed.");

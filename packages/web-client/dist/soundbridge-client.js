@@ -5094,6 +5094,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       this.dispatchEvent(new CustomEvent("render-budget-tripped", { detail: { error, health: this.health } }));
     } else if (reason === "process-timeout") {
       this.dispatchEvent(new CustomEvent("process-timeout", { detail: { error, health: this.health } }));
+      this.dispatchEvent(new CustomEvent("process-timeout-tripped", { detail: { error, health: this.health } }));
     }
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
