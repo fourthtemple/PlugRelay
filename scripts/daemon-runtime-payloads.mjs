@@ -127,15 +127,21 @@ export function createDaemonRuntimePayloads({
   }
 
   function normalizeAudioBusBlocks(value, mainChannels, busLayouts = [], frames, options = {}) {
-    const byIndex = new Map();
-    if (Array.isArray(mainChannels) && mainChannels.length > 0) {
-      byIndex.set(0, { index: 0, channels: mainChannels });
+    const mainBus = Array.isArray(mainChannels) && mainChannels.length > 0
+      ? { index: 0, channels: mainChannels }
+      : undefined;
+    if (value == null || (Array.isArray(value) && value.length === 0)) {
+      return mainBus ? [mainBus] : [];
     }
     if (value != null && !Array.isArray(value)) {
       if (options.strictRequest) {
         throw makeProtocolError("invalid_argument", `${options.label ?? "audioBuses"} must be an array.`);
       }
-      return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
+      return mainBus ? [mainBus] : [];
+    }
+    const byIndex = new Map();
+    if (mainBus) {
+      byIndex.set(0, mainBus);
     }
     if (Array.isArray(value)) {
       if (options.strictRequest && value.length > maxPluginBuses) {
@@ -144,7 +150,9 @@ export function createDaemonRuntimePayloads({
         });
       }
       const seenExplicitIndexes = new Set();
-      for (const [position, bus] of value.slice(0, maxPluginBuses).entries()) {
+      const busCount = Math.min(value.length, maxPluginBuses);
+      for (let position = 0; position < busCount; position += 1) {
+        const bus = value[position];
         if ((!bus || typeof bus !== "object" || Array.isArray(bus)) && options.strictRequest) {
           throw makeProtocolError("invalid_argument", `${options.label ?? "audioBuses"}[${position}] must be an object.`);
         }
