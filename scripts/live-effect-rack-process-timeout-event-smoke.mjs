@@ -111,10 +111,12 @@ cappedRecoveryRack.addEventListener("process-timeout-recovery-exhausted", () => 
 });
 await cappedRecoveryRack.processBlock({ blockId: 3, channels: [[0.5]] });
 assert(cappedRecoveryRack.health.processTimeoutRecoveryExhausted === false, "live rack does not report timeout recovery exhausted before its cooldown");
+assert(cappedRecoveryRack.health.recoveryDryBlocksRemaining === 1, "live rack reports timeout recovery dry blocks remaining");
 await cappedRecoveryRack.processBlock({ blockId: 4, channels: [[0.5]] });
 await new Promise((resolve) => setTimeout(resolve, 0));
 await cappedRecoveryRack.processBlock({ blockId: 5, channels: [[0.5]] });
 assert(cappedRecoveryRack.health.processTimeoutRecoveryExhausted === true, "live rack reports exhausted timeout recovery after the retry cap");
+assert(cappedRecoveryRack.health.recoveryDryBlocksRemaining === 0, "live rack clears remaining recovery blocks after exhaustion");
 assert(cappedRecoveryExhaustedEvents === 1, "live rack emits timeout recovery exhaustion after the retry cap");
 await cappedRecoveryRack.processBlock({ blockId: 6, channels: [[0.5]] });
 assert(cappedRecoveryExhaustedEvents === 1, "live rack does not repeat timeout recovery exhaustion");

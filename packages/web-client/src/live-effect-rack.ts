@@ -206,6 +206,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
       lastDryReason: this.lastDryReason,
       unhealthyReason: this.unhealthyReason,
       recoveryDryBlocks: this.recoveryDryBlocks,
+      recoveryDryBlocksRemaining: this.recoveryDryBlocksRemaining(),
       recoveryInProgress: this.recoveryInProgress,
       processBudgetRecoveryBlocks: this.processBudgetRecoveryBlocks,
       renderBudgetRecoveryBlocks: this.renderBudgetRecoveryBlocks,
@@ -675,6 +676,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   }
 
   private processTimeoutRecoveryExhausted(): boolean { return this.unhealthyReason === "process-timeout" && !this.recoveryInProgress && (this.maxProcessTimeoutRecoveries <= 0 || this.processTimeoutRecoveryAttempts >= this.maxProcessTimeoutRecoveries); }
+  private recoveryDryBlocksRemaining(): number { const target = this.unhealthyReason === "render-budget-exceeded" ? this.renderBudgetRecoveryBlocks : this.unhealthyReason === "process-budget-exceeded" ? this.processBudgetRecoveryBlocks : this.unhealthyReason === "process-timeout" && !this.processTimeoutRecoveryExhausted() && !this.recoveryInProgress ? this.processTimeoutRecoveryBlocks : 0; return Math.max(0, target - this.recoveryDryBlocks); }
   private dispatchProcessTimeoutRecoveryExhaustedIfNeeded(): void { if (!this.processTimeoutRecoveryExhausted() || this.processTimeoutRecoveryExhaustedEmitted) return; this.processTimeoutRecoveryExhaustedEmitted = true; this.dispatchEvent(new CustomEvent("process-timeout-recovery-exhausted", { detail: { health: this.health } })); }
 
   private recordRenderDeadlineDiagnostics(error: unknown): void {

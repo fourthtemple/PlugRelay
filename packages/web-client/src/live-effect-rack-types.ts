@@ -90,6 +90,7 @@ export interface LiveEffectRackHealth {
   lastDryReason?: LiveEffectDryReason;
   unhealthyReason?: "processing-error" | "process-timeout" | "process-budget-exceeded" | "render-budget-exceeded" | "destroyed";
   recoveryDryBlocks: number;
+  recoveryDryBlocksRemaining: number;
   recoveryInProgress: boolean;
   processBudgetRecoveryBlocks: number;
   renderBudgetRecoveryBlocks: number;
