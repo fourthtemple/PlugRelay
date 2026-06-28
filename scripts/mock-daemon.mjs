@@ -602,7 +602,7 @@ async function processAudioBlock(payload, session, options = {}) {
       blockId: payload.blockId,
       ...processed,
       channels: processedChannels,
-      outputBuses: normalizeOutputBusBlocks(processed.outputBuses, processedChannels, instance.layout, frames),
+      outputBuses: normalizeOutputBusBlocks(processed.outputBuses, processedChannels, instance.layout, frames, { normalizedMain: true }),
       ...(transport ? { transport } : {}),
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
@@ -635,7 +635,7 @@ async function processAudioBlock(payload, session, options = {}) {
     return {
       blockId: payload.blockId,
       channels,
-      outputBuses: normalizeOutputBusBlocks(rendered.outputBuses, channels, instance.layout, frames),
+      outputBuses: normalizeOutputBusBlocks(rendered.outputBuses, channels, instance.layout, frames, { normalizedMain: true }),
       ...(transport ? { transport } : {}),
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),

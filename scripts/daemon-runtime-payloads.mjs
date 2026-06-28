@@ -165,6 +165,9 @@ export function createDaemonRuntimePayloads({
           });
         }
         seenExplicitIndexes.add(index);
+        if (options.mainBusAuthoritative && index === 0) {
+          continue;
+        }
         const layoutChannels = busLayouts.find((layout) => layout.index === index)?.channels ?? maxAudioChannels;
         byIndex.set(index, {
           index,
@@ -175,20 +178,24 @@ export function createDaemonRuntimePayloads({
     return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
   }
 
-  function normalizeOutputBusBlocks(value, mainChannels, layout, frames) {
+  function normalizeOutputBusBlocks(value, mainChannels, layout, frames, options = {}) {
     const outputLayouts = layout?.outputBusLayouts ?? [];
+    const normalizedMainChannels = options.normalizedMain === true
+      ? mainChannels
+      : normalizeAudioChannels(mainChannels, layout?.outputChannels ?? maxAudioChannels, frames);
     const buses = normalizeAudioBusBlocks(
       value,
-      normalizeAudioChannels(mainChannels, layout?.outputChannels ?? maxAudioChannels, frames),
+      normalizedMainChannels,
       outputLayouts,
-      frames
+      frames,
+      { mainBusAuthoritative: true }
     );
     if (buses.length > 0) {
       return buses;
     }
     return [{
       index: 0,
-      channels: normalizeAudioChannels(mainChannels, layout?.outputChannels ?? maxAudioChannels, frames)
+      channels: normalizedMainChannels
     }];
   }
 
