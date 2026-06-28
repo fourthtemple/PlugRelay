@@ -79,6 +79,16 @@ export function stageErrorResult(
   };
 }
 
+export function timeoutStageResults(
+  stageResults: LiveEffectRackChainStageResult[],
+  index: number,
+  stage: LiveEffectRackChainStage,
+  error: unknown,
+  durationMs: number
+): LiveEffectRackChainStageResult[] {
+  return stageResults.concat(stageErrorResult(index, stage, error, durationMs));
+}
+
 export function isChainTimeoutError(error: unknown): boolean {
   return error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout";
 }
