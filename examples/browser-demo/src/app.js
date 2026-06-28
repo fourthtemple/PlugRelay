@@ -71,7 +71,8 @@ const retryController = createEngineRetryController({
   getBridge: () => bridge,
   controlsEnabled: () => controlsEnabled,
   setEngineStatus: (text, mode) => setStatus(elements.engineStatus, text, mode),
-  log
+  log,
+  recreate: () => ensureBridgeInstance(true)
 });
 const fileGrantActions = createFileGrantActions({
   client: () => {

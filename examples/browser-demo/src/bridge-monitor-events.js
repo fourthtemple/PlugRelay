@@ -31,9 +31,11 @@ export function bindBridgeMonitorEvents({ bridge, realtimeStats, elements, logEr
   });
 }
 
-export function createEngineRetryController({ button, getBridge, controlsEnabled, setEngineStatus, log }) {
+export function createEngineRetryController({ button, getBridge, controlsEnabled, setEngineStatus, log, recreate }) {
   function update(health = getBridge()?.health) {
-    const recoverable = health?.unhealthyReason !== "process-timeout" && Boolean(health?.transportPressureAutoBypassed || health?.renderBudgetAutoBypassed || health?.audioErrorAutoBypassed);
+    const timeout = health?.unhealthyReason === "process-timeout";
+    const recoverable = timeout ? Boolean(recreate) : Boolean(health?.transportPressureAutoBypassed || health?.renderBudgetAutoBypassed || health?.audioErrorAutoBypassed);
+    button.textContent = timeout ? "Recreate Engine" : "Retry Engine";
     button.disabled = !controlsEnabled() || !getBridge() || !recoverable;
   }
 
@@ -47,6 +49,12 @@ export function createEngineRetryController({ button, getBridge, controlsEnabled
   button.addEventListener("click", () => {
     const bridge = getBridge();
     if (!bridge) return;
+    if (bridge.health.unhealthyReason === "process-timeout" && recreate) {
+      button.disabled = true;
+      setEngineStatus("Recreating", "warn");
+      void recreate().then(() => log("Engine recreate requested.")).catch((error) => log(error?.message ?? String(error)));
+      return;
+    }
     if (bridge.retry()) {
       log("Engine retry requested.");
       updateHealth(bridge.health);
