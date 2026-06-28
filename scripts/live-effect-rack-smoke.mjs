@@ -272,7 +272,7 @@ assert(client.processed.length === 1, "binary live rack still reaches the fake p
 
 client.latencySamples = 48;
 const dynamicLatency = await rack.processBlock({ blockId: 2, channels: inputChannels });
-assert(dynamicLatency.latencySamples === 48, "live rack receives dynamic plugin latency from render responses");
+assert(dynamicLatency.latencySamples === 48 && client.processed.at(-1).transport?.samplePosition === 524, "live rack receives dynamic plugin latency and uses reported transport compensation");
 assert(
   rack.health.pluginLatencySamples === 48 &&
     rack.health.transportLatencySamples === 256 &&

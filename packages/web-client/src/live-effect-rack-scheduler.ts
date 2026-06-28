@@ -242,9 +242,9 @@ export class LiveEffectRackBlockScheduler {
   }
 
   updateFromRackHealth(
-    health: Pick<LiveEffectRackHealth, "transportLatencySamples"> & LiveEffectRackDeadlinePressureHealth
+    health: Pick<LiveEffectRackHealth, "transportLatencySamples"> & Partial<Pick<LiveEffectRackHealth, "reportedLatencySamples">> & LiveEffectRackDeadlinePressureHealth
   ): number {
-    this.updateLatency(health.transportLatencySamples);
+    this.updateLatency(rackLatencySamples(health));
     this.updateDeadlinePressure(health);
     return this.transportLatencySamples;
   }
@@ -425,6 +425,13 @@ function finiteSchedulerNumber(value: unknown, fallback: number): number {
 
 function pressureCounterDelta(current: number, baseline: number): number {
   return current >= baseline ? current - baseline : current;
+}
+
+function rackLatencySamples(health: { transportLatencySamples?: unknown; reportedLatencySamples?: unknown }): number {
+  return Math.max(
+    boundedLatencySamples(health.transportLatencySamples, 0),
+    boundedLatencySamples(health.reportedLatencySamples, 0)
+  );
 }
 
 function frameBatchLatencySamples(health: { latencySamples?: unknown; reportedLatencySamples?: unknown }): number {

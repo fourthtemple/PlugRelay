@@ -56,15 +56,15 @@ assert(second.transport.playing === false && second.transport.tempo === 96, "liv
 assert(second.transport.samplePosition === 1664, "live rack scheduler keeps latency compensation after advancing");
 
 scheduler.updateFromRackHealth({
-  transportLatencySamples: 512,
+  transportLatencySamples: 512, reportedLatencySamples: 768,
   lastResponseDeadlineLeadBlocks: 0.5,
-  responseJitterBlocks: 5,
+  responseJitterBlocks: 8,
   responseDeadlineMisses: 2
 });
 now = 1010;
 const stale = scheduler.schedule([[0.25]], { timestamp: 1000 });
 assert(stale.stale === true && stale.captureAgeMs === 10, "live rack scheduler detects stale captured audio");
-assert(stale.transport.samplePosition === 2048, "live rack scheduler uses updated rack transport latency");
+assert(stale.transport.samplePosition === 2304, "live rack scheduler uses updated rack reported latency");
 assert(
   stale.deadlinePressure.pressure &&
     stale.deadlinePressure.reasons.includes("deadline-miss") &&
@@ -73,7 +73,7 @@ assert(
   "live rack scheduler carries deadline pressure into scheduled blocks"
 );
 scheduler.updateFromRackHealth({
-  transportLatencySamples: 512,
+  transportLatencySamples: 512, reportedLatencySamples: 768,
   lastResponseDeadlineLeadBlocks: 2,
   responseJitterBlocks: 1,
   responseDeadlineMisses: 2

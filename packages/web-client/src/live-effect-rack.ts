@@ -380,7 +380,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
         sampleRate: request.sampleRate ?? this.sampleRate,
         channels: boundedLiveEffectChannels(request.channels, this.inputChannels, this.maxBlockSize),
         inputBuses: boundedLiveEffectBusBlocks(request.inputBuses, this.maxBlockSize),
-        transport: request.transport ?? liveTransportForBlock({ sampleRate: request.sampleRate ?? this.sampleRate, maxBlockSize: this.maxBlockSize, blockId: request.blockId, reportedLatencySamples: this.transportLatencySamples, compensateOutputLatency: true }),
+        transport: request.transport ?? liveTransportForBlock({ sampleRate: request.sampleRate ?? this.sampleRate, maxBlockSize: this.maxBlockSize, blockId: request.blockId, reportedLatencySamples: this.reportedLatencySamples, compensateOutputLatency: true }),
         timestamp: request.timestamp,
         renderTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : undefined
       };

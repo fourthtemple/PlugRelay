@@ -48,7 +48,7 @@ await rack.processBlock({ blockId: 10, channels: [[1, 0]] });
 
 const generated = client.processed.at(-1)?.transport;
 assert(generated?.playing === true, "live rack default transport starts in playing state");
-assert(generated?.samplePosition === 1536, "live rack default transport compensates host output latency");
+assert(generated?.samplePosition === 1548, "live rack default transport compensates full reported output latency");
 
 await rack.processBlock({ blockId: 11, channels: [[1, 0]], transport: { playing: false, samplePosition: 7 } });
 const explicit = client.processed.at(-1)?.transport;

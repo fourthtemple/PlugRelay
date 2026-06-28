@@ -3932,7 +3932,7 @@ export class LiveEffectRackBlockScheduler {
   }
 
   updateFromRackHealth(health) {
-    this.updateLatency(health.transportLatencySamples);
+    this.updateLatency(rackLatencySamples(health));
     this.updateDeadlinePressure(health);
     return this.transportLatencySamples;
   }
@@ -4648,6 +4648,13 @@ function liveEffectFrameBatchLatencySamples(health) {
   );
 }
 
+function rackLatencySamples(health) {
+  return Math.max(
+    boundedLiveEffectLatencySamples(health.transportLatencySamples, 0),
+    boundedLiveEffectLatencySamples(health.reportedLatencySamples, 0)
+  );
+}
+
 function liveEffectFrameBatchCalibrationLatencySamples(health) {
   return Math.max(
     boundedLiveEffectOptionalNumber(health.latencySamples, 0, Number.MAX_SAFE_INTEGER) ?? 0,
@@ -5047,7 +5054,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
         sampleRate: request.sampleRate ?? this.sampleRate,
         channels: boundedLiveEffectChannels(request.channels, this.inputChannels, this.maxBlockSize),
         inputBuses: boundedLiveEffectBusBlocks(request.inputBuses, this.maxBlockSize),
-        transport: request.transport ?? liveTransportForBlock({ sampleRate: request.sampleRate ?? this.sampleRate, maxBlockSize: this.maxBlockSize, blockId: request.blockId, reportedLatencySamples: this.transportLatencySamples, compensateOutputLatency: true }),
+        transport: request.transport ?? liveTransportForBlock({ sampleRate: request.sampleRate ?? this.sampleRate, maxBlockSize: this.maxBlockSize, blockId: request.blockId, reportedLatencySamples: this.reportedLatencySamples, compensateOutputLatency: true }),
         timestamp: request.timestamp,
         renderTimeoutMs: this.processTimeoutMs > 0 ? this.processTimeoutMs : void 0
       };
