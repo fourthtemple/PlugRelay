@@ -150,14 +150,7 @@ export function createNativeWorkerProcesses({
         return Promise.reject(new Error("worker is not writable"));
       }
 
-      const command = [
-        "render",
-        request.frames,
-        request.sampleRate,
-        request.gain,
-        request.tone,
-        request.detune
-      ].join(" ");
+      const command = `render ${request.frames} ${request.sampleRate} ${request.gain} ${request.tone} ${request.detune}`;
 
       return this.request(command, request.renderTimeoutMs).then((parsed) => {
         if (!Array.isArray(parsed.channels)) {
@@ -349,14 +342,9 @@ export function createNativeWorkerProcesses({
         return Promise.reject(new Error("worker is not writable"));
       }
 
-      const command = [
-        "render",
-        request.frames,
-        request.sampleRate,
-        encodeAudioChannels(request.channels, request.frames),
-        encodeAudioBuses(request.inputBuses, request.frames),
-        encodeTransportState(request.transport)
-      ].join(" ");
+      const command = `render ${request.frames} ${request.sampleRate} ` +
+        `${encodeAudioChannels(request.channels, request.frames)} ` +
+        `${encodeAudioBuses(request.inputBuses, request.frames)} ${encodeTransportState(request.transport)}`;
 
       return this.request(command, request.renderTimeoutMs).then((parsed) => {
         if (!Array.isArray(parsed.channels)) {
