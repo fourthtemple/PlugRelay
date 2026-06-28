@@ -697,22 +697,19 @@ std::string audioUnitBusLayoutsToJson(
 
 std::string renderedAudioToJson(const RenderedAudio& rendered) {
   const auto channelsJson = audioChannelsToJson(rendered.channels);
-  std::ostringstream output;
-  output << "{\"channels\":" << channelsJson << ",\"outputBuses\":[";
-  if (rendered.outputBuses.empty()) {
-    output << "{\"index\":0,\"channels\":" << channelsJson << "}";
-  } else {
-    for (std::size_t busIndex = 0; busIndex < rendered.outputBuses.size(); ++busIndex) {
-      if (busIndex > 0) {
-        output << ",";
-      }
-      output << "{\"index\":" << rendered.outputBuses[busIndex].index
-             << ",\"channels\":" << audioChannelsToJson(rendered.outputBuses[busIndex].channels)
-             << "}";
+  std::string output;
+  output.reserve(channelsJson.size() * 2 + rendered.outputBuses.size() * 48 + 64);
+  output.append("{\"channels\":").append(channelsJson).append(",\"outputBuses\":[{\"index\":0,\"channels\":");
+  output.append(channelsJson).push_back('}');
+  for (std::size_t busIndex = 0; busIndex < rendered.outputBuses.size(); ++busIndex) {
+    if (rendered.outputBuses[busIndex].index == 0) {
+      continue;
     }
+    output.append(",{\"index\":").append(std::to_string(rendered.outputBuses[busIndex].index)).append(",\"channels\":");
+    output.append(audioChannelsToJson(rendered.outputBuses[busIndex].channels)).push_back('}');
   }
-  output << "]}";
-  return output.str();
+  output.append("]}");
+  return output;
 }
 
 std::unique_ptr<AudioBufferList, void (*)(AudioBufferList*)> makeAudioBufferList(

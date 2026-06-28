@@ -656,19 +656,19 @@ std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels)
 
 std::string renderedAudioToJson(const RenderedAudio& rendered) {
   const auto channelsJson = audioChannelsToJson(rendered.channels);
-  std::ostringstream output;
-  output << "{\"channels\":" << channelsJson
-         << ",\"outputBuses\":[{\"index\":0,\"channels\":" << channelsJson << "}";
+  std::string output;
+  output.reserve(channelsJson.size() * 2 + rendered.outputBuses.size() * 48 + 64);
+  output.append("{\"channels\":").append(channelsJson).append(",\"outputBuses\":[{\"index\":0,\"channels\":");
+  output.append(channelsJson).push_back('}');
   for (std::size_t index = 0; index < rendered.outputBuses.size(); ++index) {
     if (rendered.outputBuses[index].index == 0) {
       continue;
     }
-    output << ",{\"index\":" << rendered.outputBuses[index].index
-           << ",\"channels\":" << audioChannelsToJson(rendered.outputBuses[index].channels)
-           << "}";
+    output.append(",{\"index\":").append(std::to_string(rendered.outputBuses[index].index)).append(",\"channels\":");
+    output.append(audioChannelsToJson(rendered.outputBuses[index].channels)).push_back('}');
   }
-  output << "]}";
-  return output.str();
+  output.append("]}");
+  return output;
 }
 
 bool parameterIsAutomatable(const Steinberg::Vst::ParameterInfo& info) {
