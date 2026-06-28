@@ -20,6 +20,9 @@ export function bindBridgeMonitorEvents({ bridge, realtimeStats, elements, logEr
     realtimeStats.updateTransportPressure({ reasons: ["deadline-miss"] });
     updateHealth(event.detail?.health);
   });
+  bridge.addEventListener("render-budget-tripped", (event) => {
+    updateHealth(event.detail?.health);
+  });
   bridge.addEventListener("process-timeout", (event) => {
     updateHealth(event.detail?.health);
   });

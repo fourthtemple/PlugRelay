@@ -96,6 +96,9 @@ const deadlineHealth = { responseDeadlineMisses: 2, lastTransportPressureReasons
 monitorBridge.dispatchEvent(new CustomEvent("response-deadline-missed", { detail: { health: deadlineHealth } }));
 assert(monitorHealth === deadlineHealth && latencyHealth === deadlineHealth, "browser demo monitor updates health from response deadline events");
 assert(pressureReasons?.join(",") === "deadline-miss", "browser demo monitor surfaces deadline-miss pressure");
+const renderTripHealth = { unhealthyReason: "render-budget-exceeded", renderBudgetAutoBypassed: true };
+monitorBridge.dispatchEvent(new CustomEvent("render-budget-tripped", { detail: { health: renderTripHealth } }));
+assert(monitorHealth === renderTripHealth && latencyHealth === renderTripHealth, "browser demo monitor updates from render-budget trip events");
 const timeoutTripHealth = { unhealthyReason: "process-timeout", bypassed: true };
 monitorBridge.dispatchEvent(new CustomEvent("process-timeout-tripped", { detail: { health: timeoutTripHealth } }));
 assert(monitorHealth === timeoutTripHealth && latencyHealth === timeoutTripHealth, "browser demo monitor updates from process-timeout trip events");

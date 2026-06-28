@@ -98,6 +98,21 @@ assert(node.health.sharedInputBufferAllocations === Number.MAX_SAFE_INTEGER, "Au
 assert(node.health.sharedPooledInputBuffers === 2048, "AudioNode health bounds pooled shared buffers");
 assert(deadlineMissEvents === 1, "AudioNode does not repeat deadline-miss events for unchanged counters");
 
+let renderBudgetTripEvents = 0;
+let renderBudgetTripDetail;
+node.addEventListener("render-budget-tripped", (event) => {
+  renderBudgetTripEvents += 1;
+  renderBudgetTripDetail = event.detail;
+});
+FakeAudioWorkletNode.last.port.onmessage({
+  data: { type: "process-diagnostics", renderDurationMs: 3.5, renderBudgetMs: 2.667, renderBudgetExceeded: true }
+});
+FakeAudioWorkletNode.last.port.onmessage({
+  data: { type: "process-diagnostics", renderDurationMs: 3.25, renderBudgetMs: 2.667, renderBudgetExceeded: true }
+});
+assert(renderBudgetTripEvents === 1, "AudioNode emits render-budget-tripped when repeated render misses fail dry");
+assert(renderBudgetTripDetail?.health?.unhealthyReason === "render-budget-exceeded", "render-budget trip events include unhealthy health");
+
 console.log("Live AudioNode shared transport health smoke checks passed.");
 
 function assert(condition, message) {

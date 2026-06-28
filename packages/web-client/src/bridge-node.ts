@@ -683,6 +683,7 @@ export class SoundBridgeAudioNode extends EventTarget {
         this.renderBudgetAutoBypassed = true;
         this.unhealthyReason = "render-budget-exceeded";
         this.setBypassed(true);
+        this.dispatchEvent(new CustomEvent("render-budget-tripped", { detail: { diagnostics, health: this.health } }));
         this.dispatchEvent(new CustomEvent("render-budget-auto-bypassed", { detail: { diagnostics, health: this.health } }));
       }
     }
