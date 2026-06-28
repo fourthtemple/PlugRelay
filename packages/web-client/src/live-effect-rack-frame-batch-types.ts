@@ -58,6 +58,7 @@ export interface LiveEffectRackFrameBatchProcessorOptions {
   maxConsecutiveProcessBudgetMisses?: number;
   processBudgetRecoveryBlocks?: number;
   processTimeoutRecoveryBlocks?: number;
+  maxProcessTimeoutRecoveries?: number;
   nowMs?: () => number;
 }
 
@@ -113,6 +114,9 @@ export interface LiveEffectRackFrameBatchResult {
   recoveryDryBlocks: number;
   timeoutRecoveryDryBlocks: number;
   recoveryDryBlocksRemaining: number;
+  processTimeoutRecoveryAttempts: number;
+  processTimeoutRecoveryExhausted: boolean;
+  maxProcessTimeoutRecoveries: number;
   error?: unknown;
 }
 
@@ -143,5 +147,8 @@ export interface LiveEffectRackFrameBatchHealth {
   recoveryDryBlocks: number;
   timeoutRecoveryDryBlocks: number;
   recoveryDryBlocksRemaining: number;
+  processTimeoutRecoveryAttempts: number;
+  processTimeoutRecoveryExhausted: boolean;
+  maxProcessTimeoutRecoveries: number;
   lastError?: unknown;
 }

@@ -40,6 +40,7 @@ export class LiveEffectRackChain extends EventTarget {
   readonly maxConsecutiveProcessBudgetMisses: number;
   readonly processBudgetRecoveryBlocks: number;
   readonly processTimeoutRecoveryBlocks: number;
+  readonly maxProcessTimeoutRecoveries: number;
   transitionFadeSamples: number;
   private readonly outputChannels?: number;
   private readonly nowMs: () => number;
@@ -60,6 +61,8 @@ export class LiveEffectRackChain extends EventTarget {
   private processBudgetMisses = 0;
   private recoveryDryBlocks = 0;
   private timeoutRecoveryDryBlocks = 0;
+  private processTimeoutRecoveryAttempts = 0;
+  private processTimeoutRecoveryExhaustedEmitted = false;
   private lastError?: unknown;
   private unhealthyReason?: LiveEffectRackChainResponse["chainUnhealthyReason"];
   private lastProcessDurationMs?: number;
@@ -87,6 +90,7 @@ export class LiveEffectRackChain extends EventTarget {
     this.maxConsecutiveProcessBudgetMisses = boundedLiveEffectInteger(options.maxConsecutiveProcessBudgetMisses, 0, 0, 1024);
     this.processBudgetRecoveryBlocks = boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, 0, 0, 4096);
     this.processTimeoutRecoveryBlocks = boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, 0, 0, 4096);
+    this.maxProcessTimeoutRecoveries = boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, 32, 0, 32);
     this.transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, 0, 0, 4096);
     this.outputChannels = options.outputChannels === undefined
       ? undefined
@@ -122,6 +126,7 @@ export class LiveEffectRackChain extends EventTarget {
       maxConsecutiveProcessBudgetMisses: this.maxConsecutiveProcessBudgetMisses,
       processBudgetRecoveryBlocks: this.processBudgetRecoveryBlocks,
       processTimeoutRecoveryBlocks: this.processTimeoutRecoveryBlocks,
+      maxProcessTimeoutRecoveries: this.maxProcessTimeoutRecoveries,
       transitionFadeSamples: this.transitionFadeSamples,
       processBudgetMisses: this.processBudgetMisses,
       lastProcessDurationMs: this.lastProcessDurationMs,
@@ -137,13 +142,15 @@ export class LiveEffectRackChain extends EventTarget {
       recoveryDryBlocks: this.recoveryDryBlocks,
       timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
       recoveryDryBlocksRemaining: this.recoveryDryBlocksRemaining(),
+      processTimeoutRecoveryAttempts: this.processTimeoutRecoveryAttempts,
+      processTimeoutRecoveryExhausted: this.processTimeoutRecoveryExhausted(),
       unhealthyReason: this.unhealthyReason,
       lastError: this.lastError
     };
   }
 
   private recoveryDryBlocksRemaining(): number {
-    const timeout = this.unhealthyReason === "process-timeout";
+    const timeout = this.unhealthyReason === "process-timeout" && !this.processTimeoutRecoveryExhausted();
     const target = timeout ? this.processTimeoutRecoveryBlocks : this.unhealthyReason === "process-budget-exceeded" ? this.processBudgetRecoveryBlocks : 0;
     return Math.max(0, target - (timeout ? this.timeoutRecoveryDryBlocks : this.recoveryDryBlocks));
   }
@@ -308,6 +315,8 @@ export class LiveEffectRackChain extends EventTarget {
     this.processBudgetMisses = 0;
     this.recoveryDryBlocks = 0;
     this.timeoutRecoveryDryBlocks = 0;
+    this.processTimeoutRecoveryAttempts = 0;
+    this.processTimeoutRecoveryExhaustedEmitted = false;
     this.lastProcessBudgetExceeded = false;
     this.lastProcessTimedOut = false;
     this.dispatchEvent(new CustomEvent("retry", { detail: { health: this.health } }));
@@ -434,11 +443,13 @@ export class LiveEffectRackChain extends EventTarget {
     this.lastError = error;
     this.unhealthyReason = "process-timeout";
     this.timeoutRecoveryDryBlocks = 0;
+    this.processTimeoutRecoveryExhaustedEmitted = false;
     this.recordResponseDeadlineLead(request.sampleRate);
     const response = this.chainDryResponse(request, "chain-process-timeout", outputChannels, error, false);
     this.recordStageHealth(response);
     this.dispatchEvent(new CustomEvent("chain-process-timeout", { detail: { response, health: this.health } }));
     this.dispatchEvent(new CustomEvent("chain-process-timeout-tripped", { detail: { response, health: this.health } }));
+    this.dispatchProcessTimeoutRecoveryExhaustedIfNeeded(response);
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
     return response;
   }
@@ -601,19 +612,39 @@ export class LiveEffectRackChain extends EventTarget {
   }
 
   private maybeRecoverFromProcessTimeout(): void {
-    if (this.unhealthyReason !== "process-timeout" || this.processTimeoutRecoveryBlocks <= 0) {
+    if (this.unhealthyReason !== "process-timeout") {
+      return;
+    }
+    if (this.processTimeoutRecoveryExhausted()) {
+      this.dispatchProcessTimeoutRecoveryExhaustedIfNeeded();
       return;
     }
     this.timeoutRecoveryDryBlocks = Math.min(4096, this.timeoutRecoveryDryBlocks + 1);
     if (this.timeoutRecoveryDryBlocks < this.processTimeoutRecoveryBlocks) {
       return;
     }
+    this.processTimeoutRecoveryAttempts = Math.min(32, this.processTimeoutRecoveryAttempts + 1);
     this.lastError = undefined;
     this.unhealthyReason = undefined;
     this.timeoutRecoveryDryBlocks = 0;
     this.lastProcessTimedOut = false;
     this.dispatchEvent(new CustomEvent("chain-process-timeout-recovered", { detail: { health: this.health } }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  private processTimeoutRecoveryExhausted(): boolean {
+    return this.unhealthyReason === "process-timeout" &&
+      (this.processTimeoutRecoveryBlocks <= 0 ||
+        this.maxProcessTimeoutRecoveries <= 0 ||
+        this.processTimeoutRecoveryAttempts >= this.maxProcessTimeoutRecoveries);
+  }
+
+  private dispatchProcessTimeoutRecoveryExhaustedIfNeeded(response?: LiveEffectRackChainResponse): void {
+    if (!this.processTimeoutRecoveryExhausted() || this.processTimeoutRecoveryExhaustedEmitted) {
+      return;
+    }
+    this.processTimeoutRecoveryExhaustedEmitted = true;
+    this.dispatchEvent(new CustomEvent("chain-process-timeout-recovery-exhausted", { detail: { response, health: this.health } }));
   }
 }
 
@@ -644,6 +675,7 @@ export function createLivePerformanceRackChainOptions(
     maxConsecutiveProcessBudgetMisses: policy.maxConsecutiveProcessBudgetMisses,
     processBudgetRecoveryBlocks: policy.processBudgetRecoveryBlocks,
     processTimeoutRecoveryBlocks: policy.processTimeoutRecoveryBlocks,
+    maxProcessTimeoutRecoveries: policy.maxProcessTimeoutRecoveries,
     transitionFadeSamples: policy.transitionFadeSamples
   };
 }

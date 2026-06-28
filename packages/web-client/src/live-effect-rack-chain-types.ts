@@ -29,6 +29,7 @@ export interface LiveEffectRackChainOptions {
   maxConsecutiveProcessBudgetMisses?: number;
   processBudgetRecoveryBlocks?: number;
   processTimeoutRecoveryBlocks?: number;
+  maxProcessTimeoutRecoveries?: number;
   transitionFadeSamples?: number;
   nowMs?: () => number;
 }
@@ -94,6 +95,7 @@ export interface LiveEffectRackChainHealth {
   maxConsecutiveProcessBudgetMisses: number;
   processBudgetRecoveryBlocks: number;
   processTimeoutRecoveryBlocks: number;
+  maxProcessTimeoutRecoveries: number;
   transitionFadeSamples: number;
   processBudgetMisses: number;
   lastProcessDurationMs?: number;
@@ -109,6 +111,8 @@ export interface LiveEffectRackChainHealth {
   recoveryDryBlocks: number;
   timeoutRecoveryDryBlocks: number;
   recoveryDryBlocksRemaining: number;
+  processTimeoutRecoveryAttempts: number;
+  processTimeoutRecoveryExhausted: boolean;
   unhealthyReason?: "process-budget-exceeded" | "process-timeout";
   lastError?: unknown;
 }

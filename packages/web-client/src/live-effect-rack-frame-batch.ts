@@ -54,6 +54,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   readonly maxConsecutiveProcessBudgetMisses: number;
   readonly processBudgetRecoveryBlocks: number;
   readonly processTimeoutRecoveryBlocks: number;
+  readonly maxProcessTimeoutRecoveries: number;
   private readonly nowMs: () => number;
   private processBudgetMisses = 0;
   private processBudgetTripped = false;
@@ -61,6 +62,8 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   private processTimeoutTripped = false;
   private recoveryDryBlocks = 0;
   private timeoutRecoveryDryBlocks = 0;
+  private processTimeoutRecoveryAttempts = 0;
+  private processTimeoutRecoveryExhaustedEmitted = false;
   private lastError?: unknown;
   private lastResult?: LiveEffectRackFrameBatchResult;
   private lastHealthKey = "";
@@ -87,6 +90,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     );
     this.processBudgetRecoveryBlocks = boundedLiveEffectInteger(options.processBudgetRecoveryBlocks, 0, 0, 4096);
     this.processTimeoutRecoveryBlocks = boundedLiveEffectInteger(options.processTimeoutRecoveryBlocks, 0, 0, 4096);
+    this.maxProcessTimeoutRecoveries = boundedLiveEffectInteger(options.maxProcessTimeoutRecoveries, 32, 0, 32);
     this.nowMs = typeof options.nowMs === "function" ? options.nowMs : liveEffectNowMs;
   }
 
@@ -137,6 +141,8 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     this.processTimeouts = 0;
     this.recoveryDryBlocks = 0;
     this.timeoutRecoveryDryBlocks = 0;
+    this.processTimeoutRecoveryAttempts = 0;
+    this.processTimeoutRecoveryExhaustedEmitted = false;
     this.lastError = undefined;
     this.lastResult = undefined;
     this.dispatchEvent(new CustomEvent("retry", { detail: { health: this.health } }));
@@ -329,6 +335,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     this.processTimeouts = Math.min(1024, this.processTimeouts + 1);
     this.processTimeoutTripped = true;
     this.timeoutRecoveryDryBlocks = 0;
+    this.processTimeoutRecoveryExhaustedEmitted = false;
     this.lastError = error;
     const boundedDurationMs = Math.max(
       this.processTimeoutMs,
@@ -341,6 +348,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     const result = this.result(frame, results, boundedDurationMs, false, true, error);
     this.dispatchEvent(new CustomEvent("frame-batch-process-timeout", { detail: { result, health: this.health } }));
     this.dispatchEvent(new CustomEvent("frame-batch-process-timeout-tripped", { detail: { result, health: this.health } }));
+    this.dispatchProcessTimeoutRecoveryExhaustedIfNeeded(result);
     return result;
   }
 
@@ -421,13 +429,18 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   }
 
   private maybeRecoverFromProcessTimeout(): void {
-    if (!this.processTimeoutTripped || this.processTimeoutRecoveryBlocks <= 0) {
+    if (!this.processTimeoutTripped) {
+      return;
+    }
+    if (this.processTimeoutRecoveryExhausted()) {
+      this.dispatchProcessTimeoutRecoveryExhaustedIfNeeded();
       return;
     }
     this.timeoutRecoveryDryBlocks = Math.min(4096, this.timeoutRecoveryDryBlocks + 1);
     if (this.timeoutRecoveryDryBlocks < this.processTimeoutRecoveryBlocks) {
       return;
     }
+    this.processTimeoutRecoveryAttempts = Math.min(32, this.processTimeoutRecoveryAttempts + 1);
     this.processTimeoutTripped = false;
     this.processTimeouts = 0;
     this.timeoutRecoveryDryBlocks = 0;
@@ -479,6 +492,9 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       recoveryDryBlocks: this.recoveryDryBlocks,
       timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
       recoveryDryBlocksRemaining: this.recoveryDryBlocksRemaining(),
+      processTimeoutRecoveryAttempts: this.processTimeoutRecoveryAttempts,
+      processTimeoutRecoveryExhausted: this.processTimeoutRecoveryExhausted(),
+      maxProcessTimeoutRecoveries: this.maxProcessTimeoutRecoveries,
       error
     };
     this.lastResult = result;
@@ -516,14 +532,32 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       recoveryDryBlocks: this.recoveryDryBlocks,
       timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
       recoveryDryBlocksRemaining: this.recoveryDryBlocksRemaining(),
+      processTimeoutRecoveryAttempts: this.processTimeoutRecoveryAttempts,
+      processTimeoutRecoveryExhausted: this.processTimeoutRecoveryExhausted(),
+      maxProcessTimeoutRecoveries: this.maxProcessTimeoutRecoveries,
       lastError: this.lastError ?? result?.error
     };
   }
 
   private recoveryDryBlocksRemaining(): number {
-    const timeout = this.processTimeoutTripped;
+    const timeout = this.processTimeoutTripped && !this.processTimeoutRecoveryExhausted();
     const target = timeout ? this.processTimeoutRecoveryBlocks : this.processBudgetTripped ? this.processBudgetRecoveryBlocks : 0;
     return Math.max(0, target - (timeout ? this.timeoutRecoveryDryBlocks : this.recoveryDryBlocks));
+  }
+
+  private processTimeoutRecoveryExhausted(): boolean {
+    return this.processTimeoutTripped &&
+      (this.processTimeoutRecoveryBlocks <= 0 ||
+        this.maxProcessTimeoutRecoveries <= 0 ||
+        this.processTimeoutRecoveryAttempts >= this.maxProcessTimeoutRecoveries);
+  }
+
+  private dispatchProcessTimeoutRecoveryExhaustedIfNeeded(result?: LiveEffectRackFrameBatchResult): void {
+    if (!this.processTimeoutRecoveryExhausted() || this.processTimeoutRecoveryExhaustedEmitted) {
+      return;
+    }
+    this.processTimeoutRecoveryExhaustedEmitted = true;
+    this.dispatchEvent(new CustomEvent("frame-batch-process-timeout-recovery-exhausted", { detail: { result, health: this.health } }));
   }
 
   private dispatchHealthChangeIfNeeded(): void {
@@ -534,6 +568,8 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       health.processBudgetTripped,
       health.processTimeouts,
       health.processTimeoutTripped,
+      health.processTimeoutRecoveryAttempts,
+      health.processTimeoutRecoveryExhausted,
       health.recoveryDryBlocks,
       health.timeoutRecoveryDryBlocks,
       health.recoveryDryBlocksRemaining,
@@ -605,7 +641,8 @@ export function createLivePerformanceFrameBatchProcessorOptions(
     processTimeoutMs: policy.processTimeoutMs,
     maxConsecutiveProcessBudgetMisses: policy.maxConsecutiveProcessBudgetMisses,
     processBudgetRecoveryBlocks: policy.processBudgetRecoveryBlocks,
-    processTimeoutRecoveryBlocks: policy.processTimeoutRecoveryBlocks
+    processTimeoutRecoveryBlocks: policy.processTimeoutRecoveryBlocks,
+    maxProcessTimeoutRecoveries: policy.maxProcessTimeoutRecoveries
   };
 }
 
