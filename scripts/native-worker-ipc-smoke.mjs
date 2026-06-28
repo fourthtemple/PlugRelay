@@ -38,6 +38,7 @@ import {
   exerciseVst3ProgramDataNativeWorker,
   writeVst3ProgramDataNativeWorkerIpcFixtures
 } from "./native-worker-ipc-vst3-program-data-fixtures.mjs";
+import { encodeAudioChannels } from "./native-worker-process-support.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
 const MAX_TEST_STDOUT_LINE_BYTES = 128;
@@ -73,6 +74,11 @@ try {
     isKnownAudioUnitHostProfile(AUDIO_UNIT_HOST_PROFILES.REALTIME_MULTI_OUTPUT_SPLITTER) &&
       !isKnownAudioUnitHostProfile("ambient-filesystem"),
     "daemon Audio Unit host profiles use a known bounded vocabulary"
+  );
+
+  check(
+    encodeAudioChannels([Float32Array.from([2, -2, NaN, 0.25]), {}], 4) === "1,-1,0,0.25|0,0,0,0",
+    "native worker audio command encoding accepts typed buffers and clamps samples"
   );
 
   const cappedParameterResponse = parameterSnapshotResponse({ parameters: [{ id: "a" }, { id: "b" }] }, 2);

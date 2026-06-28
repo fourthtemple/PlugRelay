@@ -17,15 +17,27 @@ export function encodeAudioChannels(channels, frames) {
     return "-";
   }
 
-  return channels
-    .map((channel) => {
-      const samples = Array.from({ length: frames }, (_, frame) => {
-        const value = Number(Array.isArray(channel) ? channel[frame] : 0);
-        return Number.isFinite(value) ? String(Math.max(-1, Math.min(1, value))) : "0";
-      });
-      return samples.join(",");
-    })
-    .join("|");
+  const frameCount = finiteFrameCount(frames);
+  const encodedChannels = new Array(channels.length);
+  for (let channelIndex = 0; channelIndex < channels.length; channelIndex += 1) {
+    const channel = audioChannelSource(channels[channelIndex]) ? channels[channelIndex] : undefined;
+    const samples = new Array(frameCount);
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      const value = Number(channel?.[frame] ?? 0);
+      samples[frame] = Number.isFinite(value) ? String(Math.max(-1, Math.min(1, value))) : "0";
+    }
+    encodedChannels[channelIndex] = samples.join(",");
+  }
+  return encodedChannels.join("|");
+}
+
+function audioChannelSource(channel) {
+  return Array.isArray(channel) || (ArrayBuffer.isView(channel) && typeof channel.length === "number");
+}
+
+function finiteFrameCount(value) {
+  const count = Math.floor(Number(value));
+  return Number.isFinite(count) && count > 0 ? count : 0;
 }
 
 export function encodeWorkerText(value) {

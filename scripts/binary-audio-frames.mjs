@@ -127,9 +127,9 @@ function readBusBlocks(buffer, offset, specs, label) {
 function readPlanarFloat32(buffer, offset, channelCount, frames) {
   const channels = [];
   for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-    const channel = [];
+    const channel = new Float32Array(frames);
     for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) {
-      channel.push(buffer.readFloatLE(offset));
+      channel[frameIndex] = buffer.readFloatLE(offset);
       offset += FLOAT_BYTES;
     }
     channels.push(channel);

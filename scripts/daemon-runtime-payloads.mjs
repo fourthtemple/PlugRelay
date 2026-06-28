@@ -66,12 +66,12 @@ export function createDaemonRuntimePayloads({
     if (payload.frames != null) {
       return payload.frames;
     }
-    if (Array.isArray(payload.channels) && Array.isArray(payload.channels[0])) {
+    if (Array.isArray(payload.channels) && audioChannelSource(payload.channels[0])) {
       return payload.channels[0].length;
     }
     if (Array.isArray(payload.inputBuses)) {
       for (const bus of payload.inputBuses) {
-        if (Array.isArray(bus?.channels) && Array.isArray(bus.channels[0])) {
+        if (Array.isArray(bus?.channels) && audioChannelSource(bus.channels[0])) {
           return bus.channels[0].length;
         }
       }
@@ -83,12 +83,47 @@ export function createDaemonRuntimePayloads({
     if (!Array.isArray(channels) || maxChannels <= 0) {
       return [];
     }
-    return channels.slice(0, Math.min(maxAudioChannels, maxChannels)).map((channel) =>
-      Array.from({ length: frames }, (_, frame) => {
-        const value = Number(Array.isArray(channel) ? channel[frame] : 0);
-        return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
-      })
-    );
+    const channelLimit = Math.min(maxAudioChannels, maxChannels, channels.length);
+    const channelCount = Number.isFinite(channelLimit) && channelLimit > 0 ? Math.floor(channelLimit) : 0;
+    const normalized = new Array(channelCount);
+    for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+      normalized[channelIndex] = normalizeAudioChannel(channels[channelIndex], frames);
+    }
+    return normalized;
+  }
+
+  function normalizeAudioChannel(channel, frames) {
+    if (reuseTypedAudioChannel(channel, frames)) {
+      return channel;
+    }
+    const source = audioChannelSource(channel) ? channel : undefined;
+    const samples = ArrayBuffer.isView(source) ? new Float32Array(frames) : new Array(frames);
+    for (let frame = 0; frame < frames; frame += 1) {
+      samples[frame] = boundedAudioSample(source?.[frame]);
+    }
+    return samples;
+  }
+
+  function reuseTypedAudioChannel(channel, frames) {
+    if (!(ArrayBuffer.isView(channel) && typeof channel.length === "number") || channel.length !== frames) {
+      return false;
+    }
+    for (let frame = 0; frame < frames; frame += 1) {
+      const value = Number(channel[frame]);
+      if (!Number.isFinite(value) || value < -1 || value > 1) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function boundedAudioSample(value) {
+    const sample = Number(value ?? 0);
+    return Number.isFinite(sample) ? Math.max(-1, Math.min(1, sample)) : 0;
+  }
+
+  function audioChannelSource(channel) {
+    return Array.isArray(channel) || (ArrayBuffer.isView(channel) && typeof channel.length === "number");
   }
 
   function normalizeAudioBusBlocks(value, mainChannels, busLayouts = [], frames, options = {}) {
