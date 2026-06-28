@@ -69,24 +69,9 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.maxInFlightBlocks = this.boundedInteger(processorOptions.maxInFlightBlocks, 8, 1, 64);
     this.maxRecycledInputBuffers = this.outputChannels * Math.max(2, this.maxInFlightBlocks);
     this.maxQueuedOutputBlocks = this.boundedInteger(processorOptions.maxQueuedOutputBlocks, 16, 1, 64);
-    this.outputLatencyBlocks = this.boundedInteger(
-      processorOptions.outputLatencyBlocks,
-      Math.min(2, this.maxQueuedOutputBlocks),
-      1,
-      this.maxQueuedOutputBlocks
-    );
-    this.minOutputLatencyBlocks = this.boundedInteger(
-      processorOptions.minOutputLatencyBlocks,
-      1,
-      1,
-      this.outputLatencyBlocks
-    );
-    this.maxOutputLatencyBlocks = this.boundedInteger(
-      processorOptions.maxOutputLatencyBlocks,
-      Math.min(this.maxQueuedOutputBlocks, Math.max(this.outputLatencyBlocks + 2, 4)),
-      this.outputLatencyBlocks,
-      this.maxQueuedOutputBlocks
-    );
+    this.outputLatencyBlocks = this.boundedInteger(processorOptions.outputLatencyBlocks, Math.min(2, this.maxQueuedOutputBlocks), 1, this.maxQueuedOutputBlocks);
+    this.minOutputLatencyBlocks = this.boundedInteger(processorOptions.minOutputLatencyBlocks, 1, 1, this.outputLatencyBlocks);
+    this.maxOutputLatencyBlocks = this.boundedInteger(processorOptions.maxOutputLatencyBlocks, Math.min(this.maxQueuedOutputBlocks, Math.max(this.outputLatencyBlocks + 2, 4)), this.outputLatencyBlocks, this.maxQueuedOutputBlocks);
     this.adaptiveOutputLatency = processorOptions.adaptiveOutputLatency !== false;
     this.latencyMissThresholdBlocks = this.boundedInteger(processorOptions.latencyMissThresholdBlocks, 2, 1, 32);
     this.latencyRecoveryBlocks = this.boundedInteger(processorOptions.latencyRecoveryBlocks, 512, 32, 8192);
@@ -191,9 +176,7 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   }
 
   private handleMessage(message: unknown): void {
-    if (!message || typeof message !== "object") {
-      return;
-    }
+    if (!message || typeof message !== "object") return;
 
     const typed = message as {
       type?: string;
@@ -208,7 +191,7 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       renderBudgetMs?: number;
       renderBudgetExceeded?: boolean;
       renderEngine?: string;
-      bypassed?: boolean;
+      bypassed?: boolean; outputLatencyBlocks?: unknown;
       error?: unknown;
     };
     if (typed.type === "destroy") {
@@ -235,6 +218,8 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       if (this.bypassed) { this.outputBlocks.clear(); this.inFlightBlocks = 0; this.bypassResponseBlockFloor = this.blockId; this.latencySafetyBlocks = 0; this.resetResponseDeadlineState(); }
       return;
     }
+
+    if (typed.type === "set-output-latency") { this.setOutputLatencyBlocks(typed.outputLatencyBlocks); return; }
 
     if (typed.type === "shared-audio-status") {
       if (typed.wakeMode === "atomics" || typed.wakeMode === "timer") this.sharedAudioWakeMode = typed.wakeMode;
@@ -596,6 +581,14 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.consecutiveLatencyMisses = 0;
     this.consecutiveLowDeadlineLeadBlocks = 0;
     this.consecutiveOnTimeBlocks = 0;
+  }
+
+  private setOutputLatencyBlocks(value: unknown): void {
+    const previous = this.outputLatencyBlocks; const next = this.boundedInteger(value, previous, this.minOutputLatencyBlocks, this.maxOutputLatencyBlocks);
+    if (next === previous) return;
+    this.outputLatencyBlocks = next;
+    if (next > previous) { this.latencyIncreases += next - previous; this.latencySafetyBlocks += next - previous; } else { this.latencyDecreases += previous - next; this.latencySafetyBlocks = 0; this.dropStaleOutputBlocks(this.blockId - next); }
+    this.consecutiveLatencyMisses = this.consecutiveLowDeadlineLeadBlocks = this.consecutiveOnTimeBlocks = 0;
   }
 
   private resetResponseDeadlineWindow(): void {

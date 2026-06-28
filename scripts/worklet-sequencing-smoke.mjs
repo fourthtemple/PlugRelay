@@ -386,6 +386,15 @@ for (let blockIndex = 1; blockIndex < 8; blockIndex += 1) {
 assert(jitterProcessor.outputLatencyBlocks === 2, "worklet raises latency when response jitter crosses the bounded threshold");
 assert(jitterProcessor.latencyIncreases === 1, "worklet counts jitter-driven adaptive latency raises");
 
+const retargetProcessor = new processorCtor({
+  processorOptions: { outputChannels: 1, maxQueuedOutputBlocks: 6, outputLatencyBlocks: 1, maxOutputLatencyBlocks: 4 }
+});
+const retargetPort = lastPort;
+retargetPort.onmessage({ data: { type: "set-output-latency", outputLatencyBlocks: 3 } });
+assert(retargetProcessor.outputLatencyBlocks === 3 && retargetProcessor.latencySafetyBlocks === 2, "worklet applies host output latency retargets with safety blocks");
+retargetPort.onmessage({ data: { type: "set-output-latency", outputLatencyBlocks: 1 } });
+assert(retargetProcessor.outputLatencyBlocks === 1 && retargetProcessor.latencyDecreases === 2, "worklet applies bounded host output latency recovery");
+
 const statsProcessor = new processorCtor({
   processorOptions: {
     outputChannels: 1,

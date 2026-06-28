@@ -176,9 +176,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   }
 
   handleMessage(message) {
-    if (!message || typeof message !== "object") {
-      return;
-    }
+    if (!message || typeof message !== "object") return;
 
     if (message.type === "destroy") {
       this.destroyed = true;
@@ -205,6 +203,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       if (this.bypassed) { this.outputBlocks.clear(); this.inFlightBlocks = 0; this.bypassResponseBlockFloor = this.blockId; this.latencySafetyBlocks = 0; this.resetResponseDeadlineState(); }
       return;
     }
+
+    if (message.type === "set-output-latency") { this.setOutputLatencyBlocks(message.outputLatencyBlocks); return; }
 
     if (message.type === "shared-audio-status") {
       if (message.wakeMode === "atomics" || message.wakeMode === "timer") this.sharedAudioWakeMode = message.wakeMode;
@@ -558,6 +558,14 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.consecutiveLatencyMisses = 0;
     this.consecutiveLowDeadlineLeadBlocks = 0;
     this.consecutiveOnTimeBlocks = 0;
+  }
+
+  setOutputLatencyBlocks(value) {
+    const previous = this.outputLatencyBlocks; const next = this.boundedInteger(value, previous, this.minOutputLatencyBlocks, this.maxOutputLatencyBlocks);
+    if (next === previous) return;
+    this.outputLatencyBlocks = next;
+    if (next > previous) { this.latencyIncreases += next - previous; this.latencySafetyBlocks += next - previous; } else { this.latencyDecreases += previous - next; this.latencySafetyBlocks = 0; this.dropStaleOutputBlocks(this.blockId - next); }
+    this.consecutiveLatencyMisses = this.consecutiveLowDeadlineLeadBlocks = this.consecutiveOnTimeBlocks = 0;
   }
 
   resetResponseDeadlineWindow() {

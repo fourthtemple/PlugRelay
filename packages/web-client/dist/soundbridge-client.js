@@ -806,8 +806,10 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.instanceId = options.instanceId;
     this.sampleRate = context.sampleRate;
     this.maxInFlightBlocks = options.maxInFlightBlocks;
+    this.minOutputLatencyBlocks = options.minOutputLatencyBlocks;
     this.maxOutputLatencyBlocks = options.maxOutputLatencyBlocks;
     this.sharedBufferBlocks = options.sharedBufferBlocks;
+    this.maxBlockFrames = options.maxBlockFrames;
     this.audioTransport = options.audioTransport;
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.inFlightBlocks = 0;
@@ -993,15 +995,14 @@ export class SoundBridgeAudioNode extends EventTarget {
   }
 
   async refreshLatency(transportLatencySamples = this.transportLatencySamples) {
-    if (this.destroyed) {
-      return this.health;
-    }
-    const previous = {
-      pluginLatencySamples: this.pluginLatencySamples,
-      transportLatencySamples: this.transportLatencySamples,
-      reportedLatencySamples: this.reportedLatencySamples
-    };
+    if (this.destroyed) return this.health;
+    const previous = { pluginLatencySamples: this.pluginLatencySamples, transportLatencySamples: this.transportLatencySamples, reportedLatencySamples: this.reportedLatencySamples };
     const requestedTransportLatencySamples = boundedAudioNodeInteger(transportLatencySamples, this.transportLatencySamples, 0, 1048576);
+    if (requestedTransportLatencySamples > 0) {
+      const blockFrames = this.outputLatencyBlocks > 0 && this.transportLatencySamples > 0 ? Math.max(1, Math.round(this.transportLatencySamples / this.outputLatencyBlocks)) : this.maxBlockFrames;
+      const outputLatencyBlocks = boundedAudioNodeInteger(Math.ceil(requestedTransportLatencySamples / blockFrames), this.outputLatencyBlocks || this.minOutputLatencyBlocks, this.minOutputLatencyBlocks, this.maxOutputLatencyBlocks);
+      if (outputLatencyBlocks !== this.outputLatencyBlocks) { this.outputLatencyBlocks = outputLatencyBlocks; this.node.port.postMessage({ type: "set-output-latency", outputLatencyBlocks }); }
+    }
     const latency = await this.client.getLatency(this.instanceId, requestedTransportLatencySamples);
     this.pluginLatencySamples = boundedAudioNodeInteger(latency.pluginLatencySamples, this.pluginLatencySamples, 0, 1048576);
     this.transportLatencySamples = boundedAudioNodeInteger(latency.transportLatencySamples, requestedTransportLatencySamples, 0, 1048576);

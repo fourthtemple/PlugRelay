@@ -369,24 +369,24 @@ assert(latencyDetail?.direction === "decreased", "latencychange reports adaptive
 assert(liveNode.health.latencyDecreases === 1, "SoundBridgeAudioNode health tracks latency recovery decreases");
 assert(liveNode.health.lastLatencyChangeDirection === "decreased", "SoundBridgeAudioNode health tracks recovery direction");
 assert(transportPressureEvents === 1, "latency recovery without new pressure counters does not emit transport-pressure");
-const refreshedLatency = await liveNode.refreshLatency();
+const refreshedLatency = await liveNode.refreshLatency(384);
 const latencyRequest = FakeWorker.last.messages.at(-1);
 assert(latencyRequest.envelope.command === "getLatency", "SoundBridgeAudioNode refreshLatency requests daemon latency");
-assert(latencyRequest.envelope.payload.transportLatencySamples === 128, "refreshLatency uses the latest worklet transport latency");
+assert(latencyRequest.envelope.payload.transportLatencySamples === 384 && FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "set-output-latency" && message.outputLatencyBlocks === 3), "refreshLatency retargets worklet output latency and daemon latency");
 assert(refreshedLatency.pluginLatencySamples === 96, "refreshLatency stores plugin latency in health");
-assert(refreshedLatency.reportedLatencySamples === 224, "refreshLatency stores plugin plus transport latency in health");
-assert(refreshedLatency.reportedLatencyMs === 4.667, "refreshLatency stores reported latency milliseconds in health");
+assert(refreshedLatency.reportedLatencySamples === 480, "refreshLatency stores plugin plus transport latency in health");
+assert(refreshedLatency.reportedLatencyMs === 10, "refreshLatency stores reported latency milliseconds in health");
 assert(refreshedLatency.latencyRefreshes === 1, "refreshLatency counts latency refreshes");
 assert(latencyEvents === 3 && latencyDetail?.direction === "changed", "refreshLatency emits latencychange when reported latency changes");
-assert(healthChangeEvents === 3 && healthChangeDetail?.reportedLatencySamples === 224, "refreshLatency emits healthchange with reported latency");
+assert(healthChangeEvents === 3 && healthChangeDetail?.reportedLatencySamples === 480, "refreshLatency emits healthchange with reported latency");
 FakeAudioWorkletNode.last.port.onmessage({
   data: { type: "process-diagnostics", blockId: 87, latencySamples: 144, renderEngine: "native-vst3", renderDurationMs: 1.25, renderBudgetMs: 2.667, renderBudgetExceeded: false }
 });
 assert(liveNode.health.pluginLatencySamples === 144, "SoundBridgeAudioNode updates plugin latency from render diagnostics");
-assert(liveNode.health.reportedLatencySamples === 272, "SoundBridgeAudioNode combines render latency with transport latency");
-assert(liveNode.health.reportedLatencyMs === 5.667, "render diagnostics update reported latency milliseconds");
+assert(liveNode.health.reportedLatencySamples === 528, "SoundBridgeAudioNode combines render latency with transport latency");
+assert(liveNode.health.reportedLatencyMs === 11, "render diagnostics update reported latency milliseconds");
 assert(latencyEvents === 4 && latencyDetail?.health?.pluginLatencySamples === 144, "render latency changes emit latencychange");
-assert(healthChangeEvents === 4 && healthChangeDetail?.reportedLatencySamples === 272, "render latency changes emit healthchange");
+assert(healthChangeEvents === 4 && healthChangeDetail?.reportedLatencySamples === 528, "render latency changes emit healthchange");
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
     ...pressureStats,

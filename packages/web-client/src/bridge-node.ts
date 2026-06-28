@@ -31,7 +31,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private readonly responseJitterThresholdBlocks: number;
   private inFlightBlocks = 0;
   private destroyed = false;
-  private readonly maxInFlightBlocks: number; private readonly maxOutputLatencyBlocks: number; private readonly sharedBufferBlocks: number;
+  private readonly maxInFlightBlocks: number; private readonly minOutputLatencyBlocks: number; private readonly maxOutputLatencyBlocks: number; private readonly sharedBufferBlocks: number; private readonly maxBlockFrames: number;
   private readonly audioTransport: "binary" | "json";
   private readonly audioRequestTimeoutMs: number;
   private bypassed = false;
@@ -88,7 +88,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.instanceId = options.instanceId;
     this.sampleRate = context.sampleRate;
     this.responseJitterThresholdBlocks = options.responseJitterThresholdBlocks;
-    this.maxInFlightBlocks = options.maxInFlightBlocks; this.maxOutputLatencyBlocks = options.maxOutputLatencyBlocks; this.sharedBufferBlocks = options.sharedBufferBlocks;
+    this.maxInFlightBlocks = options.maxInFlightBlocks; this.minOutputLatencyBlocks = options.minOutputLatencyBlocks; this.maxOutputLatencyBlocks = options.maxOutputLatencyBlocks; this.sharedBufferBlocks = options.sharedBufferBlocks; this.maxBlockFrames = options.maxBlockFrames;
     this.audioTransport = options.audioTransport;
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.maxConsecutiveRenderBudgetMisses = options.maxConsecutiveRenderBudgetMisses;
@@ -234,15 +234,14 @@ export class SoundBridgeAudioNode extends EventTarget {
   }
 
   async refreshLatency(transportLatencySamples = this.transportLatencySamples): Promise<SoundBridgeAudioNodeHealth> {
-    if (this.destroyed) {
-      return this.health;
-    }
-    const previous = {
-      pluginLatencySamples: this.pluginLatencySamples,
-      transportLatencySamples: this.transportLatencySamples,
-      reportedLatencySamples: this.reportedLatencySamples
-    };
+    if (this.destroyed) return this.health;
+    const previous = { pluginLatencySamples: this.pluginLatencySamples, transportLatencySamples: this.transportLatencySamples, reportedLatencySamples: this.reportedLatencySamples };
     const requestedTransportLatencySamples = boundedInteger(transportLatencySamples, this.transportLatencySamples, 0, 1_048_576);
+    if (requestedTransportLatencySamples > 0) {
+      const blockFrames = this.outputLatencyBlocks > 0 && this.transportLatencySamples > 0 ? Math.max(1, Math.round(this.transportLatencySamples / this.outputLatencyBlocks)) : this.maxBlockFrames;
+      const outputLatencyBlocks = boundedInteger(Math.ceil(requestedTransportLatencySamples / blockFrames), this.outputLatencyBlocks || this.minOutputLatencyBlocks, this.minOutputLatencyBlocks, this.maxOutputLatencyBlocks);
+      if (outputLatencyBlocks !== this.outputLatencyBlocks) { this.outputLatencyBlocks = outputLatencyBlocks; this.node.port.postMessage({ type: "set-output-latency", outputLatencyBlocks }); }
+    }
     const latency = await this.client.getLatency(this.instanceId, requestedTransportLatencySamples);
     this.pluginLatencySamples = boundedInteger(latency.pluginLatencySamples, this.pluginLatencySamples, 0, 1_048_576);
     this.transportLatencySamples = boundedInteger(latency.transportLatencySamples, requestedTransportLatencySamples, 0, 1_048_576);
