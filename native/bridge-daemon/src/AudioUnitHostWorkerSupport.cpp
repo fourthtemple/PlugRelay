@@ -204,6 +204,22 @@ float sanitizeSampleSlice(const char* begin, const char* end) {
   return sanitizeSample(std::string(begin, static_cast<std::size_t>(end - begin)));
 }
 
+void appendJsonSample(std::string& output, float sample) {
+  const float value = std::isfinite(sample) ? sample : 0.0F;
+  char buffer[64] {};
+  const auto converted = std::to_chars(
+      buffer,
+      buffer + sizeof(buffer),
+      value,
+      std::chars_format::general,
+      6);
+  if (converted.ec != std::errc{}) {
+    output.push_back('0');
+    return;
+  }
+  output.append(buffer, static_cast<std::size_t>(converted.ptr - buffer));
+}
+
 } // namespace
 
 bool parseUint32Arg(const char* text, std::uint32_t minValue, std::uint32_t maxValue, std::uint32_t& out) {
@@ -611,24 +627,29 @@ const std::vector<std::vector<float>>* findBusChannels(const std::vector<Indexed
 }
 
 std::string audioChannelsToJson(const std::vector<std::vector<float>>& channels) {
-  std::ostringstream output;
-  output << "[";
+  std::size_t sampleCount = 0;
+  for (const auto& channel : channels) {
+    sampleCount += channel.size();
+  }
+
+  std::string output;
+  output.reserve(2 + channels.size() * 2 + sampleCount * 12);
+  output.push_back('[');
   for (std::size_t channelIndex = 0; channelIndex < channels.size(); ++channelIndex) {
     if (channelIndex > 0) {
-      output << ",";
+      output.push_back(',');
     }
-    output << "[";
+    output.push_back('[');
     for (std::size_t frame = 0; frame < channels[channelIndex].size(); ++frame) {
       if (frame > 0) {
-        output << ",";
+        output.push_back(',');
       }
-      const float sample = channels[channelIndex][frame];
-      output << (std::isfinite(sample) ? sample : 0.0F);
+      appendJsonSample(output, channels[channelIndex][frame]);
     }
-    output << "]";
+    output.push_back(']');
   }
-  output << "]";
-  return output.str();
+  output.push_back(']');
+  return output;
 }
 
 std::string audioUnitBusLayoutsToJson(
