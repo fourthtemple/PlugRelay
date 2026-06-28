@@ -680,21 +680,25 @@ export function createNativeWorkerProcesses({
     if (!Array.isArray(buses) || buses.length === 0) {
       return "-";
     }
-    const byIndex = new Map();
-    for (const bus of buses.slice(0, limits.maxPluginBuses)) {
+    const encodedByIndex = new Array(limits.maxPluginBuses);
+    const busCount = Math.min(buses.length, limits.maxPluginBuses);
+    for (let busPosition = 0; busPosition < busCount; busPosition += 1) {
+      const bus = buses[busPosition];
       if (!bus || typeof bus !== "object" || Array.isArray(bus)) {
         continue;
       }
       const index = normalizeBusIndex(bus.index);
       if (index === undefined) continue;
-      if (!byIndex.has(index)) {
-        byIndex.set(index, encodeAudioChannels(bus.channels, frames));
+      if (encodedByIndex[index] === undefined) {
+        encodedByIndex[index] = encodeAudioChannels(bus.channels, frames);
       }
     }
-    const encoded = Array.from(byIndex, ([index, channels]) => ({ index, channels }))
-      .sort((left, right) => left.index - right.index)
-      .map((bus) => `${bus.index}=${bus.channels}`)
-      .join(";");
+    let encoded = "";
+    for (let index = 0; index < encodedByIndex.length; index += 1) {
+      const channels = encodedByIndex[index];
+      if (channels === undefined) continue;
+      encoded += `${encoded ? ";" : ""}${index}=${channels}`;
+    }
     return encoded || "-";
   }
 
@@ -702,25 +706,31 @@ export function createNativeWorkerProcesses({
     if (!Array.isArray(value)) {
       return [{ index: 0, channels: mainChannels }];
     }
-    const byIndex = new Map();
-    for (const bus of value.slice(0, limits.maxPluginBuses)) {
+    const byIndex = new Array(limits.maxPluginBuses);
+    const busCount = Math.min(value.length, limits.maxPluginBuses);
+    for (let busPosition = 0; busPosition < busCount; busPosition += 1) {
+      const bus = value[busPosition];
       if (!bus || typeof bus !== "object" || Array.isArray(bus)) {
         continue;
       }
       const index = normalizeBusIndex(bus.index);
       if (index === undefined) continue;
-      if (byIndex.has(index)) {
+      if (byIndex[index] !== undefined) {
         continue;
       }
       const layoutChannels = layout?.outputBusLayouts?.find((candidate) => candidate.index === index)?.channels ??
         limits.maxAudioChannels;
-      byIndex.set(index, {
+      byIndex[index] = {
         index,
         channels: normalizeWorkerRenderChannels(bus.channels, layoutChannels, frames, limits.maxAudioChannels, preferTypedOutput)
-      });
+      };
     }
-    byIndex.set(0, { index: 0, channels: mainChannels });
-    return Array.from(byIndex.values()).sort((left, right) => left.index - right.index);
+    byIndex[0] = { index: 0, channels: mainChannels };
+    const outputBuses = [];
+    for (const bus of byIndex) {
+      if (bus !== undefined) outputBuses.push(bus);
+    }
+    return outputBuses;
   }
 
   function normalizeBusIndex(value) {
