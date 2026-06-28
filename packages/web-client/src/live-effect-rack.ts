@@ -553,7 +553,10 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.responseDeadlineLeadMinBlocks = Math.min(this.responseDeadlineLeadMinBlocks ?? this.lastResponseDeadlineLeadBlocks ?? 0, this.lastResponseDeadlineLeadBlocks ?? 0);
     this.responseDeadlineLeadMaxBlocks = Math.max(this.responseDeadlineLeadMaxBlocks ?? this.lastResponseDeadlineLeadBlocks ?? 0, this.lastResponseDeadlineLeadBlocks ?? 0);
     this.responseJitterBlocks = Number(((this.responseDeadlineLeadMaxBlocks ?? 0) - (this.responseDeadlineLeadMinBlocks ?? 0)).toFixed(3));
-    if ((this.lastResponseDeadlineLeadMs ?? 0) < 0) this.responseDeadlineMisses = Math.min(1024, this.responseDeadlineMisses + 1);
+    if ((this.lastResponseDeadlineLeadMs ?? 0) < 0) {
+      this.responseDeadlineMisses = Math.min(1024, this.responseDeadlineMisses + 1);
+      this.dispatchEvent(new CustomEvent("response-deadline-missed", { detail: { durationMs: this.lastProcessDurationMs, budgetMs: this.lastProcessBudgetMs, leadMs: this.lastResponseDeadlineLeadMs, leadBlocks: this.lastResponseDeadlineLeadBlocks, health: this.health } }));
+    }
   }
 
   private recordResponseLatency(response: AudioBlockResponse): void {
