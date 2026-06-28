@@ -116,6 +116,7 @@ private:
   std::vector<std::vector<std::vector<float>>> outputStorage_;
   std::vector<AudioBufferList*> outputBufferLists_;
   std::vector<IndexedAudioBus> currentInputBuses_;
+  std::vector<const std::vector<std::vector<float>>*> currentInputBusChannels_;
   std::uint32_t currentInputFrames_ = 0;
   HostTransportContext currentTransport_;
   double sampleTime_ = 0.0;

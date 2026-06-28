@@ -308,10 +308,10 @@ RenderedAudio HostedAudioUnit::render(
   }
   currentInputBuses_ = std::move(inputBuses);
   currentInputFrames_ = frames;
+  currentInputBusChannels_.assign(inputBusCount_, nullptr);
   for (auto& bus : currentInputBuses_) {
-    for (auto& channel : bus.channels) {
-      channel.resize(frames, 0.0F);
-    }
+    if (bus.index < currentInputBusChannels_.size()) currentInputBusChannels_[bus.index] = &bus.channels;
+    for (auto& channel : bus.channels) channel.resize(frames, 0.0F);
   }
 
   AudioTimeStamp timeStamp {};
@@ -454,7 +454,7 @@ OSStatus HostedAudioUnit::inputCallback(
     UInt32 frameCount,
     AudioBufferList* ioData) {
   auto* host = static_cast<HostedAudioUnit*>(refCon);
-  const auto* sourceBus = findBusChannels(host->currentInputBuses_, busNumber);
+  const auto* sourceBus = busNumber < host->currentInputBusChannels_.size() ? host->currentInputBusChannels_[busNumber] : nullptr;
   for (UInt32 bufferIndex = 0; bufferIndex < ioData->mNumberBuffers; ++bufferIndex) {
     auto* output = static_cast<Float32*>(ioData->mBuffers[bufferIndex].mData);
     const auto bytes = frameCount * sizeof(Float32);
