@@ -74,6 +74,7 @@ assert(decodedResponse.payload.latencySamples === 3, "binary response preserves 
 assert(decodedResponse.payload.renderDurationMs === 1.5, "binary response preserves render timing metadata");
 assert(decodedResponse.payload.renderBudgetMs === 2.667, "binary response preserves render budget metadata");
 assert(decodedResponse.payload.renderBudgetExceeded === false, "binary response preserves render budget verdict");
+assert(decodedResponse.payload.channels[0] instanceof Float32Array, "binary response restores typed channel buffers");
 assert(decodedResponse.payload.outputBuses[0].channels[0][0] === 999, "binary response restores output bus samples");
 assert(!("outputBuses" in readBinaryHeader(encodeBinaryAudioEnvelope(responseEnvelope)).payload), "binary response keeps output bus samples out of JSON header");
 assert(decodedResponse.payload.channels[0][2] < 0, "binary response restores output samples");

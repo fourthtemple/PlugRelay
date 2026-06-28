@@ -171,12 +171,12 @@ function normalizeChannelBlock(channels) {
 }
 
 function normalizeChannel(channel, frames) {
-  if (channel?.length === frames) {
+  if (channel instanceof Float32Array && channel.length === frames) {
     let reusable = true;
     for (let index = 0; reusable && index < frames; index += 1) reusable = Number.isFinite(channel[index]);
     if (reusable) return channel;
   }
-  const normalized = ArrayBuffer.isView(channel) ? new Float32Array(frames) : new Array(frames);
+  const normalized = new Float32Array(frames);
   for (let index = 0; index < frames; index += 1) {
     const value = Number(channel?.[index] ?? 0);
     normalized[index] = Number.isFinite(value) ? value : 0;
