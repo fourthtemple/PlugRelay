@@ -5659,12 +5659,17 @@ function wetMixedLiveEffectChannels(wetChannels, dryInput, outputChannels, wetMi
     return wetOutput;
   }
   const dry = dryLiveEffectChannels(dryInput ?? [], outputChannels, maxFrames);
-  return Array.from({ length: outputChannels }, (_, channelIndex) => {
+  const mixed = new Array(outputChannels);
+  const dryMix = 1 - wetMix;
+  for (let channelIndex = 0; channelIndex < outputChannels; channelIndex += 1) {
     const wet = wetOutput.length > 0 ? wetOutput[channelIndex % wetOutput.length] : [];
     const dryChannel = dry[channelIndex];
     const frames = Math.max(wet.length, dryChannel.length);
-    return Array.from({ length: frames }, (_unused, frame) => Number(dryChannel[frame] ?? 0) * (1 - wetMix) + Number(wet[frame] ?? 0) * wetMix);
-  });
+    const output = new Array(frames);
+    for (let frame = 0; frame < frames; frame += 1) output[frame] = Number(dryChannel[frame] ?? 0) * dryMix + Number(wet[frame] ?? 0) * wetMix;
+    mixed[channelIndex] = output;
+  }
+  return mixed;
 }
 
 function boundedLiveEffectChannels(channels, channelCount, maxFrames) {

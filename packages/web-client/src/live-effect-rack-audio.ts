@@ -38,15 +38,17 @@ export function wetMixedChannels(
     return wetOutput;
   }
   const dry = dryChannels(dryInput ?? [], outputChannels, maxFrames);
-  return Array.from({ length: outputChannels }, (_, channelIndex) => {
+  const mixed = new Array<number[]>(outputChannels);
+  const dryMix = 1 - wetMix;
+  for (let channelIndex = 0; channelIndex < outputChannels; channelIndex += 1) {
     const wet = wetOutput.length > 0 ? wetOutput[channelIndex % wetOutput.length] : [];
     const dryChannel = dry[channelIndex];
     const frames = Math.max(wet.length, dryChannel.length);
-    return Array.from(
-      { length: frames },
-      (_unused, frame) => Number(dryChannel[frame] ?? 0) * (1 - wetMix) + Number(wet[frame] ?? 0) * wetMix
-    );
-  });
+    const output = new Array<number>(frames);
+    for (let frame = 0; frame < frames; frame += 1) output[frame] = Number(dryChannel[frame] ?? 0) * dryMix + Number(wet[frame] ?? 0) * wetMix;
+    mixed[channelIndex] = output;
+  }
+  return mixed;
 }
 
 export function boundedLiveEffectChannels(
