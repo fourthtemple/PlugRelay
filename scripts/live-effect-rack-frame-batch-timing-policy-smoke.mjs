@@ -87,4 +87,39 @@ const bounded = processor.setTimingPolicy({ processBudgetMs: -1, processTimeoutM
 assert(bounded.processBudgetMs === undefined, "live frame batch timing policy clamps negative process budgets to disabled");
 assert(bounded.processTimeoutMs === 60000, "live frame batch timing policy clamps process timeouts");
 
+let timeoutNow = 0;
+let timeoutBlockId = 0;
+const timeoutScheduler = {
+  captureFrame() {
+    return { blockId: ++timeoutBlockId, samplePosition: timeoutBlockId * 128, timestamp: timeoutNow, stale: false };
+  },
+  scheduleFromFrame(frame, channels) {
+    return {
+      blockId: frame.blockId,
+      stale: false,
+      request: { blockId: frame.blockId, channels, sampleRate: 48000 }
+    };
+  }
+};
+const timeoutTarget = {
+  health: { healthy: true },
+  async processScheduledBlock() {
+    return new Promise(() => undefined);
+  }
+};
+const timeoutProcessor = createLiveEffectRackFrameBatchProcessor({
+  scheduler: timeoutScheduler,
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  processTimeoutMs: 1,
+  processTimeoutRecoveryBlocks: 2,
+  nowMs: () => timeoutNow
+});
+const timeoutTrip = await timeoutProcessor.process([{ id: "deck-timeout", target: timeoutTarget, channels: [[1, 0]] }]);
+assert(timeoutTrip.processTimeoutTripped === true && timeoutTrip.recoveryDryBlocksRemaining === 2, "live frame batch reports full timeout recovery cooldown after trip");
+await timeoutProcessor.process([{ id: "deck-timeout", target: timeoutTarget, channels: [[0, 1]] }]);
+assert(timeoutProcessor.health.timeoutRecoveryDryBlocks === 1 && timeoutProcessor.health.recoveryDryBlocksRemaining === 1, "live frame batch reports remaining timeout recovery cooldown");
+await timeoutProcessor.process([{ id: "deck-timeout", target: timeoutTarget, channels: [[0.25, 0.5]] }]);
+assert(timeoutProcessor.health.processTimeoutTripped === false && timeoutProcessor.health.recoveryDryBlocksRemaining === 0, "live frame batch clears timeout recovery cooldown");
+
 console.log("Live effect rack frame batch timing policy smoke checks passed.");

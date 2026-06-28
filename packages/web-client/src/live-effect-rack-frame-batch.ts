@@ -1,4 +1,3 @@
-import type { LiveEffectBlockResponse } from "./live-effect-rack-types";
 import {
   boundedLatencySamples,
   boundedLiveEffectInteger,
@@ -10,154 +9,40 @@ import {
   withLiveEffectTimeout
 } from "./live-effect-rack-metrics";
 import type { LiveEffectRackTiming } from "./live-effect-rack-metrics";
+import type { LiveEffectBlockResponse } from "./live-effect-rack-types";
 import type {
-  LiveEffectRackDeadlinePressure,
-  LiveEffectRackDeadlinePressureSkipOptions,
   LiveEffectRackScheduledBlock,
-  LiveEffectRackScheduledFrame,
-  LiveEffectRackScheduleOptions
+  LiveEffectRackScheduledFrame
 } from "./live-effect-rack-scheduler";
 import { shouldSkipLiveEffectDeadlinePressure } from "./live-effect-rack-scheduler";
 import { createLiveEffectRackPolicy } from "./live-effect-rack-policy";
+import type {
+  LiveEffectRackFrameBatchHealth,
+  LiveEffectRackFrameBatchOptions,
+  LiveEffectRackFrameBatchProcessorOptions,
+  LiveEffectRackFrameBatchResult,
+  LiveEffectRackFrameBatchScheduler,
+  LiveEffectRackFrameBatchTargetRequest,
+  LiveEffectRackFrameBatchTargetResult,
+  LiveEffectRackFrameBatchProcessOptions,
+  LivePerformanceFrameBatchProcessorOptions
+} from "./live-effect-rack-frame-batch-types";
+
+export type {
+  LiveEffectRackFrameBatchHealth,
+  LiveEffectRackFrameBatchOptions,
+  LiveEffectRackFrameBatchProcessorOptions,
+  LiveEffectRackFrameBatchProcessOptions,
+  LiveEffectRackFrameBatchResult,
+  LiveEffectRackFrameBatchScheduler,
+  LiveEffectRackFrameBatchTarget,
+  LiveEffectRackFrameBatchTargetHealth,
+  LiveEffectRackFrameBatchTargetRequest,
+  LiveEffectRackFrameBatchTargetResult,
+  LivePerformanceFrameBatchProcessorOptions
+} from "./live-effect-rack-frame-batch-types";
 
 const LIVE_EFFECT_FRAME_BATCH_TARGETS = 16;
-
-export interface LiveEffectRackFrameBatchScheduler {
-  captureFrame(options?: LiveEffectRackScheduleOptions): LiveEffectRackScheduledFrame;
-  scheduleFromFrame(
-    frame: LiveEffectRackScheduledFrame,
-    channels: ArrayLike<number>[],
-    options?: LiveEffectRackScheduleOptions
-  ): LiveEffectRackScheduledBlock;
-}
-
-export interface LiveEffectRackFrameBatchTargetHealth {
-  healthy?: boolean;
-  latencySamples?: unknown;
-  reportedLatencySamples?: unknown;
-}
-
-export interface LiveEffectRackFrameBatchProcessOptions extends LiveEffectRackDeadlinePressureSkipOptions {
-  wetMix?: number;
-  stageWetMixes?: ArrayLike<number>;
-}
-
-export interface LiveEffectRackFrameBatchTarget {
-  readonly health?: LiveEffectRackFrameBatchTargetHealth;
-  processScheduledBlock(
-    scheduled: LiveEffectRackScheduledBlock,
-    options?: LiveEffectRackFrameBatchProcessOptions
-  ): Promise<LiveEffectBlockResponse>;
-}
-
-export interface LiveEffectRackFrameBatchTargetRequest {
-  id?: string;
-  target: LiveEffectRackFrameBatchTarget;
-  channels: ArrayLike<number>[];
-  scheduleOptions?: LiveEffectRackScheduleOptions;
-  processOptions?: LiveEffectRackFrameBatchProcessOptions;
-}
-
-export interface LiveEffectRackFrameBatchOptions extends LiveEffectRackDeadlinePressureSkipOptions {
-  frame?: LiveEffectRackScheduledFrame;
-  frameOptions?: LiveEffectRackScheduleOptions;
-}
-
-export interface LiveEffectRackFrameBatchProcessorOptions {
-  scheduler: LiveEffectRackFrameBatchScheduler;
-  sampleRate?: number;
-  maxBlockSize?: number;
-  maxTargets?: number;
-  processBudgetMs?: number;
-  processTimeoutMs?: number;
-  maxConsecutiveProcessBudgetMisses?: number;
-  processBudgetRecoveryBlocks?: number;
-  processTimeoutRecoveryBlocks?: number;
-  nowMs?: () => number;
-}
-
-export interface LivePerformanceFrameBatchProcessorOptions extends LiveEffectRackFrameBatchProcessorOptions {
-  sampleRate: number;
-  maxBlockSize: number;
-  processBudgetBlocks?: number;
-  processTimeoutBlocks?: number;
-}
-
-export interface LiveEffectRackFrameBatchTargetResult {
-  id?: string;
-  index: number;
-  scheduled: LiveEffectRackScheduledBlock;
-  response?: LiveEffectBlockResponse;
-  error?: unknown;
-  bypassed: boolean;
-  dry: boolean;
-  skipped: boolean;
-  healthy: boolean;
-  latencySamples: number;
-  reportedLatencySamples: number;
-  durationMs: number;
-}
-
-export interface LiveEffectRackFrameBatchResult {
-  frame: LiveEffectRackScheduledFrame;
-  deadlinePressure?: LiveEffectRackDeadlinePressure;
-  results: LiveEffectRackFrameBatchTargetResult[];
-  targetCount: number;
-  processedTargets: number;
-  skippedTargets: number;
-  failedTargets: number;
-  dryTargets: number;
-  bypassedTargets: number;
-  healthy: boolean;
-  latencySamples: number;
-  reportedLatencySamples: number;
-  maxDurationMs: number;
-  totalDurationMs: number;
-  lastResponseDeadlineLeadMs?: number;
-  lastResponseDeadlineLeadBlocks?: number;
-  responseJitterBlocks: number;
-  responseDeadlineMisses: number;
-  processBudgetMs?: number;
-  processTimeoutMs?: number;
-  processBudgetExceeded: boolean;
-  processTimedOut: boolean;
-  processBudgetMisses: number;
-  processBudgetTripped: boolean;
-  processTimeouts: number;
-  processTimeoutTripped: boolean;
-  recoveryDryBlocks: number;
-  timeoutRecoveryDryBlocks: number;
-  error?: unknown;
-}
-
-export interface LiveEffectRackFrameBatchHealth {
-  healthy: boolean;
-  targetCount: number;
-  processedTargets: number;
-  skippedTargets: number;
-  failedTargets: number;
-  dryTargets: number;
-  bypassedTargets: number;
-  latencySamples: number;
-  reportedLatencySamples: number;
-  maxDurationMs: number;
-  totalDurationMs: number;
-  lastResponseDeadlineLeadMs?: number;
-  lastResponseDeadlineLeadBlocks?: number;
-  responseJitterBlocks: number;
-  responseDeadlineMisses: number;
-  processBudgetMs?: number;
-  processTimeoutMs?: number;
-  processBudgetExceeded: boolean;
-  processTimedOut: boolean;
-  processBudgetMisses: number;
-  processBudgetTripped: boolean;
-  processTimeouts: number;
-  processTimeoutTripped: boolean;
-  recoveryDryBlocks: number;
-  timeoutRecoveryDryBlocks: number;
-  lastError?: unknown;
-}
 
 export class LiveEffectRackFrameBatchProcessor extends EventTarget {
   readonly scheduler: LiveEffectRackFrameBatchScheduler;
@@ -593,6 +478,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       processTimeoutTripped: this.processTimeoutTripped,
       recoveryDryBlocks: this.recoveryDryBlocks,
       timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
+      recoveryDryBlocksRemaining: this.recoveryDryBlocksRemaining(),
       error
     };
     this.lastResult = result;
@@ -629,8 +515,15 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       processTimeoutTripped: this.processTimeoutTripped,
       recoveryDryBlocks: this.recoveryDryBlocks,
       timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
+      recoveryDryBlocksRemaining: this.recoveryDryBlocksRemaining(),
       lastError: this.lastError ?? result?.error
     };
+  }
+
+  private recoveryDryBlocksRemaining(): number {
+    const timeout = this.processTimeoutTripped;
+    const target = timeout ? this.processTimeoutRecoveryBlocks : this.processBudgetTripped ? this.processBudgetRecoveryBlocks : 0;
+    return Math.max(0, target - (timeout ? this.timeoutRecoveryDryBlocks : this.recoveryDryBlocks));
   }
 
   private dispatchHealthChangeIfNeeded(): void {
@@ -643,6 +536,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       health.processTimeoutTripped,
       health.recoveryDryBlocks,
       health.timeoutRecoveryDryBlocks,
+      health.recoveryDryBlocksRemaining,
       health.failedTargets,
       health.dryTargets,
       health.bypassedTargets,

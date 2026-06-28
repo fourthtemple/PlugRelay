@@ -4340,6 +4340,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       processTimeoutTripped: this.processTimeoutTripped,
       recoveryDryBlocks: this.recoveryDryBlocks,
       timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
+      recoveryDryBlocksRemaining: this.recoveryDryBlocksRemaining(),
       error
     };
     this.lastResult = result;
@@ -4376,8 +4377,15 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       processTimeoutTripped: this.processTimeoutTripped,
       recoveryDryBlocks: this.recoveryDryBlocks,
       timeoutRecoveryDryBlocks: this.timeoutRecoveryDryBlocks,
+      recoveryDryBlocksRemaining: this.recoveryDryBlocksRemaining(),
       lastError: this.lastError ?? result?.error
     };
+  }
+
+  recoveryDryBlocksRemaining() {
+    const timeout = this.processTimeoutTripped;
+    const target = timeout ? this.processTimeoutRecoveryBlocks : this.processBudgetTripped ? this.processBudgetRecoveryBlocks : 0;
+    return Math.max(0, target - (timeout ? this.timeoutRecoveryDryBlocks : this.recoveryDryBlocks));
   }
 
   dispatchHealthChangeIfNeeded() {
@@ -4390,6 +4398,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       health.processTimeoutTripped,
       health.recoveryDryBlocks,
       health.timeoutRecoveryDryBlocks,
+      health.recoveryDryBlocksRemaining,
       health.failedTargets,
       health.dryTargets,
       health.bypassedTargets,
