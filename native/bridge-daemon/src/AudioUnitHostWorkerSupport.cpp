@@ -7,7 +7,6 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include <algorithm>
-#include <cerrno>
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
@@ -15,32 +14,28 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <system_error>
 
 namespace soundbridge::audio_unit_worker {
 namespace {
 
-bool parseTransportBool(const std::string& text, bool& out) {
-  if (text == "1") {
-    out = true;
-    return true;
-  }
-  if (text == "0") {
-    out = false;
-    return true;
-  }
-  return false;
+bool parseTransportBool(std::string_view text, bool& out) {
+  if (text != "0" && text != "1") return false;
+  out = text == "1";
+  return true;
 }
 
-bool parseTransportSamplePosition(const std::string& text, Float64& out) {
+bool parseTransportSamplePosition(std::string_view text, Float64& out) {
   if (text.empty()) {
     return false;
   }
-  errno = 0;
-  char* end = nullptr;
-  const long long value = std::strtoll(text.c_str(), &end, 10);
-  if (end == text.c_str() || *end != '\0' || errno == ERANGE ||
-      value < 0 || value > kMaxWorkerTransportSamplePosition) {
+  long long value = 0;
+  const char* const begin = text.data();
+  const char* const end = begin + text.size();
+  const auto parsed = std::from_chars(begin, end, value);
+  if (parsed.ec != std::errc{} || parsed.ptr != end || value < 0 ||
+      value > kMaxWorkerTransportSamplePosition) {
     return false;
   }
   out = static_cast<Float64>(value);
@@ -268,37 +263,42 @@ bool parseTransportContext(
   bool sawCycleStart = false;
   bool sawCycleEnd = false;
 
-  std::stringstream stream(encoded);
-  std::string token;
-  while (std::getline(stream, token, ',')) {
-    if (token.empty()) {
+  const char* cursor = encoded.data();
+  const char* const end = cursor + encoded.size();
+  while (cursor < end) {
+    const char* const tokenEnd = std::find(cursor, end, ',');
+    if (cursor == tokenEnd) {
+      cursor = tokenEnd == end ? end : tokenEnd + 1;
       continue;
     }
-    const auto separator = token.find('=');
-    if (separator == std::string::npos) {
+    const char* const separator = std::find(cursor, tokenEnd, '=');
+    if (separator == tokenEnd) {
       return false;
     }
-    const auto key = token.substr(0, separator);
-    const auto value = token.substr(separator + 1);
+    const std::string_view key(cursor, static_cast<std::size_t>(separator - cursor));
+    const std::string_view valueText(separator + 1, static_cast<std::size_t>(tokenEnd - separator - 1));
+    const auto valueString = [&]() { return std::string(valueText.data(), valueText.size()); };
 
     if (key == "playing") {
-      if (!parseTransportBool(value, out.playing)) {
+      if (!parseTransportBool(valueText, out.playing)) {
         return false;
       }
     } else if (key == "recording") {
-      if (!parseTransportBool(value, out.recording)) {
+      if (!parseTransportBool(valueText, out.recording)) {
         return false;
       }
     } else if (key == "loop") {
-      if (!parseTransportBool(value, out.loopActive)) {
+      if (!parseTransportBool(valueText, out.loopActive)) {
         return false;
       }
     } else if (key == "tempo") {
+      const auto value = valueString();
       if (!parseDoubleArg(value.c_str(), 1.0, kMaxWorkerTransportTempoBpm, out.tempo)) {
         return false;
       }
       out.hasTempo = true;
     } else if (key == "num") {
+      const auto value = valueString();
       std::uint32_t parsed = 4;
       if (!parseUint32Arg(value.c_str(), 1, 64, parsed)) {
         return false;
@@ -306,6 +306,7 @@ bool parseTransportContext(
       out.timeSignatureNumerator = static_cast<Float32>(parsed);
       sawNumerator = true;
     } else if (key == "den") {
+      const auto value = valueString();
       std::uint32_t parsed = 4;
       if (!parseUint32Arg(value.c_str(), 1, 64, parsed) || !isPowerOfTwo(parsed)) {
         return false;
@@ -313,32 +314,37 @@ bool parseTransportContext(
       out.timeSignatureDenominator = static_cast<UInt32>(parsed);
       sawDenominator = true;
     } else if (key == "ppq") {
+      const auto value = valueString();
       if (!parseDoubleArg(value.c_str(), 0.0, kMaxWorkerTransportPositionMusic, out.projectTimeMusic)) {
         return false;
       }
       out.hasProjectTimeMusic = true;
     } else if (key == "bar") {
+      const auto value = valueString();
       if (!parseDoubleArg(value.c_str(), 0.0, kMaxWorkerTransportPositionMusic, out.barPositionMusic)) {
         return false;
       }
       out.hasBarPositionMusic = true;
     } else if (key == "cycleStart") {
+      const auto value = valueString();
       if (!parseDoubleArg(value.c_str(), 0.0, kMaxWorkerTransportPositionMusic, out.cycleStartMusic)) {
         return false;
       }
       sawCycleStart = true;
     } else if (key == "cycleEnd") {
+      const auto value = valueString();
       if (!parseDoubleArg(value.c_str(), 0.0, kMaxWorkerTransportPositionMusic, out.cycleEndMusic)) {
         return false;
       }
       sawCycleEnd = true;
     } else if (key == "sample") {
-      if (!parseTransportSamplePosition(value, out.samplePosition)) {
+      if (!parseTransportSamplePosition(valueText, out.samplePosition)) {
         return false;
       }
     } else {
       return false;
     }
+    cursor = tokenEnd == end ? end : tokenEnd + 1;
   }
 
   if (sawNumerator != sawDenominator) {
