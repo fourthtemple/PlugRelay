@@ -18,6 +18,7 @@ export function createRealtimeStats({ onTransportLatencySamples } = {}) {
     responseJitterSamples: document.querySelector("#responseJitterSamples"),
     sharedAudioEnabled: document.querySelector("#sharedAudioEnabled"),
     sharedQueuedBlocks: document.querySelector("#sharedQueuedBlocks"),
+    sharedWorkerBlocks: document.querySelector("#sharedWorkerBlocks"),
     sharedDroppedBlocks: document.querySelector("#sharedDroppedBlocks"),
     transportPressureReasons: document.querySelector("#transportPressureReasons"),
     inputBufferAllocations: document.querySelector("#inputBufferAllocations"),
@@ -110,6 +111,9 @@ function setSharedAudio(elements, stats) {
   }
   if (elements.sharedDroppedBlocks) {
     elements.sharedDroppedBlocks.textContent = `${stats.sharedInputDroppedBlocks ?? 0}/${stats.sharedOutputDroppedBlocks ?? 0}`;
+  }
+  if (elements.sharedWorkerBlocks) {
+    elements.sharedWorkerBlocks.textContent = formatLimit(stats.sharedTransportInFlightBlocks, stats.maxInFlightBlocks);
   }
 }
 

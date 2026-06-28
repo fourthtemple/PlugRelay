@@ -1,4 +1,5 @@
 import { bindBridgeMonitorEvents, createEngineRetryController } from "../examples/browser-demo/src/bridge-monitor-events.js";
+import { createRealtimeStats } from "../examples/browser-demo/src/realtime-stats.js";
 
 class FakeButton extends EventTarget {
   disabled = false;
@@ -102,6 +103,12 @@ assert(monitorHealth === renderTripHealth && latencyHealth === renderTripHealth,
 const timeoutTripHealth = { unhealthyReason: "process-timeout", bypassed: true };
 monitorBridge.dispatchEvent(new CustomEvent("process-timeout-tripped", { detail: { health: timeoutTripHealth } }));
 assert(monitorHealth === timeoutTripHealth && latencyHealth === timeoutTripHealth, "browser demo monitor updates from process-timeout trip events");
+
+const elements = new Map();
+globalThis.document = { querySelector(selector) { const element = { textContent: "" }; elements.set(selector, element); return element; } };
+const realtimeStats = createRealtimeStats();
+realtimeStats.update({ sharedTransportInFlightBlocks: 2, maxInFlightBlocks: 4 });
+assert(elements.get("#sharedWorkerBlocks")?.textContent === "2/4", "browser demo realtime stats show shared worker saturation");
 
 console.log("Browser demo engine control smoke checks passed.");
 
