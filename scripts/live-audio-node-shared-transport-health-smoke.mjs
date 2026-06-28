@@ -1,0 +1,95 @@
+class FakeAudioWorkletNode {
+  static last;
+
+  constructor(context, name, options) {
+    this.context = context;
+    this.name = name;
+    this.options = options;
+    this.port = new FakePort();
+    FakeAudioWorkletNode.last = this;
+  }
+
+  connect(destination) {
+    return destination;
+  }
+
+  disconnect() {}
+}
+
+class FakePort {
+  onmessage = undefined;
+  messages = [];
+
+  postMessage(message) {
+    this.messages.push(message);
+  }
+}
+
+globalThis.AudioWorkletNode = FakeAudioWorkletNode;
+
+const { SoundBridgeAudioNode } = await import("../packages/web-client/dist/soundbridge-client.js");
+const fakeContext = {
+  sampleRate: 48000,
+  audioWorklet: {
+    async addModule() {}
+  }
+};
+const fakeClient = {
+  createAudioWorkletTransportConnection() {
+    return undefined;
+  },
+  async destroyInstance() {
+    return { destroyed: true };
+  }
+};
+
+const node = await SoundBridgeAudioNode.createLivePerformance(fakeContext, fakeClient, {
+  instanceId: "inst-shared-health",
+  inputChannels: 2,
+  outputChannels: 2,
+  workletUrl: "/soundbridge-worklet.js"
+});
+
+let statsDetail;
+node.addEventListener("stats", (event) => {
+  statsDetail = event.detail;
+});
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    type: "stats",
+    sharedAudioEnabled: true,
+    sharedTransportInFlightBlocks: 3,
+    sharedInputBufferAllocations: 5,
+    sharedInputBufferReuses: 4,
+    sharedPooledInputBuffers: 2
+  }
+});
+
+assert(statsDetail.sharedInputBufferAllocations === 5, "AudioNode stats events preserve shared transport allocation counters");
+assert(node.health.sharedAudioEnabled === true, "AudioNode health tracks shared-audio enablement");
+assert(node.health.sharedTransportInFlightBlocks === 3, "AudioNode health tracks shared transport in-flight blocks");
+assert(node.health.sharedInputBufferAllocations === 5, "AudioNode health tracks shared input buffer allocations");
+assert(node.health.sharedInputBufferReuses === 4, "AudioNode health tracks shared input buffer reuse");
+assert(node.health.sharedPooledInputBuffers === 2, "AudioNode health tracks pooled shared input buffers");
+
+FakeAudioWorkletNode.last.port.onmessage({
+  data: {
+    type: "stats",
+    sharedTransportInFlightBlocks: 999,
+    sharedInputBufferAllocations: Number.MAX_SAFE_INTEGER + 1000,
+    sharedInputBufferReuses: Number.MAX_SAFE_INTEGER + 1000,
+    sharedPooledInputBuffers: 9999
+  }
+});
+
+assert(node.health.sharedTransportInFlightBlocks === 64, "AudioNode health bounds shared transport in-flight blocks");
+assert(node.health.sharedInputBufferAllocations === Number.MAX_SAFE_INTEGER, "AudioNode health bounds shared allocation counters");
+assert(node.health.sharedPooledInputBuffers === 2048, "AudioNode health bounds pooled shared buffers");
+
+console.log("Live AudioNode shared transport health smoke checks passed.");
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}

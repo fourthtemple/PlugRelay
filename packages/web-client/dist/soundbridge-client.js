@@ -723,6 +723,7 @@ export function calibrateLivePerformanceAudioNodePolicy(options) {
   const observedResponseJitterP95Blocks = audioNodePercentileSample(options.responseJitterBlocks, 0, 64);
   const observedDeadlineLeadMinBlocks = audioNodeMinimumSample(options.deadlineLeadBlocks, -64, 64);
   const observedSharedQueueMaxBlocks = audioNodeSharedQueueMaxBlocks(options);
+  const observedSharedInputBufferAllocations = boundedAudioNodeInteger(options.sharedInputBufferAllocations, 0, 0, Number.MAX_SAFE_INTEGER);
   const currentLatencyBlocks = audioNodeLatencyBlocks(policy.transportLatencySamples, policy.maxBlockFrames);
   const hasDropPressure = audioNodeDropPressure(options);
   const hasResponseDeadlineMisses = boundedAudioNodeInteger(options.responseDeadlineMisses, 0, 0, Number.MAX_SAFE_INTEGER) > 0;
@@ -766,6 +767,7 @@ export function calibrateLivePerformanceAudioNodePolicy(options) {
     observedResponseJitterP95Blocks,
     observedDeadlineLeadMinBlocks,
     observedSharedQueueMaxBlocks,
+    observedSharedInputBufferAllocations,
     recommendedOutputLatencyBlocks,
     recommendedMaxOutputLatencyBlocks,
     recommendedSharedBufferBlocks,
@@ -780,6 +782,7 @@ export function calibrateLivePerformanceAudioNodePolicy(options) {
     observedResponseJitterP95Blocks,
     observedDeadlineLeadMinBlocks,
     observedSharedQueueMaxBlocks,
+    observedSharedInputBufferAllocations,
     recommendedOutputLatencyBlocks,
     recommendedTransportLatencySamples,
     recommendedMaxOutputLatencyBlocks,
@@ -831,6 +834,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.sharedOutputQueuedBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.sharedTransportStats = { inFlightBlocks: 0, inputBufferAllocations: 0, inputBufferReuses: 0, pooledInputBuffers: 0 };
     this.transportPressureEvents = 0;
     this.consecutiveTransportPressureEvents = 0;
     this.maxConsecutiveTransportPressureEvents = options.maxConsecutiveTransportPressureEvents;
@@ -1056,6 +1060,10 @@ export class SoundBridgeAudioNode extends EventTarget {
       sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
       sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
+      sharedTransportInFlightBlocks: this.sharedTransportStats.inFlightBlocks,
+      sharedInputBufferAllocations: this.sharedTransportStats.inputBufferAllocations,
+      sharedInputBufferReuses: this.sharedTransportStats.inputBufferReuses,
+      sharedPooledInputBuffers: this.sharedTransportStats.pooledInputBuffers,
       transportPressureEvents: this.transportPressureEvents,
       consecutiveTransportPressureEvents: this.consecutiveTransportPressureEvents,
       maxConsecutiveTransportPressureEvents: this.maxConsecutiveTransportPressureEvents,
@@ -1246,6 +1254,12 @@ export class SoundBridgeAudioNode extends EventTarget {
       0,
       Number.MAX_SAFE_INTEGER
     );
+    this.sharedTransportStats = {
+      inFlightBlocks: boundedAudioNodeInteger(stats.sharedTransportInFlightBlocks, this.sharedTransportStats.inFlightBlocks, 0, 64),
+      inputBufferAllocations: boundedAudioNodeInteger(stats.sharedInputBufferAllocations, this.sharedTransportStats.inputBufferAllocations, 0, Number.MAX_SAFE_INTEGER),
+      inputBufferReuses: boundedAudioNodeInteger(stats.sharedInputBufferReuses, this.sharedTransportStats.inputBufferReuses, 0, Number.MAX_SAFE_INTEGER),
+      pooledInputBuffers: boundedAudioNodeInteger(stats.sharedPooledInputBuffers, this.sharedTransportStats.pooledInputBuffers, 0, 2048)
+    };
     if (typeof stats.sharedAudioEnabled === "boolean") {
       this.sharedAudioEnabled = stats.sharedAudioEnabled;
     }
@@ -1497,6 +1511,7 @@ function audioNodeCalibrationWarnings(calibration) {
   if ((calibration.observedDeadlineLeadMinBlocks ?? 0) < 0 || calibration.hasResponseDeadlineMisses) warnings.push("deadline-miss");
   if ((calibration.observedResponseJitterP95Blocks ?? 0) > calibration.policy.responseJitterThresholdBlocks) warnings.push("response-jitter");
   if ((calibration.observedSharedQueueMaxBlocks ?? 0) >= Math.max(1, calibration.policy.sharedBufferBlocks - 1)) warnings.push("shared-ring-pressure");
+  if ((calibration.observedSharedInputBufferAllocations ?? 0) > 0) warnings.push("shared-buffer-allocation");
   if (exceedsAudioNodePolicy(calibration.observedRenderP95Ms ?? 0, calibration.policy.blockDurationMs)) warnings.push("render-over-block-budget");
   if (calibration.recommendedOutputLatencyBlocks > calibration.currentLatencyBlocks) warnings.push("increase-output-latency");
   if (calibration.recommendedMaxOutputLatencyBlocks > calibration.policy.maxOutputLatencyBlocks) warnings.push("increase-max-output-latency");
@@ -1524,6 +1539,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.sharedInputBufferAllocations = 0;
     this.responseDeadlineMisses = 0;
     this.sharedInputQueuedBlocks = 0;
     this.sharedOutputQueuedBlocks = 0;
@@ -1557,6 +1573,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = 0;
     this.sharedInputDroppedBlocks = 0;
     this.sharedOutputDroppedBlocks = 0;
+    this.sharedInputBufferAllocations = 0;
     this.responseDeadlineMisses = 0;
     this.sharedInputQueuedBlocks = 0;
     this.sharedOutputQueuedBlocks = 0;
@@ -1586,6 +1603,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       staleOutputBlocks: this.staleOutputBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
       sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
+      sharedInputBufferAllocations: this.sharedInputBufferAllocations,
       responseDeadlineMisses: this.responseDeadlineMisses,
       sharedInputQueuedBlocks: this.sharedInputQueuedBlocks,
       sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks
@@ -1621,6 +1639,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     this.staleOutputBlocks = Math.max(this.staleOutputBlocks, audioNodePressureCounterDelta(counters.staleOutputBlocks, this.pressureBaseline.staleOutputBlocks));
     this.sharedInputDroppedBlocks = Math.max(this.sharedInputDroppedBlocks, audioNodePressureCounterDelta(counters.sharedInputDroppedBlocks, this.pressureBaseline.sharedInputDroppedBlocks));
     this.sharedOutputDroppedBlocks = Math.max(this.sharedOutputDroppedBlocks, audioNodePressureCounterDelta(counters.sharedOutputDroppedBlocks, this.pressureBaseline.sharedOutputDroppedBlocks));
+    this.sharedInputBufferAllocations = Math.max(this.sharedInputBufferAllocations, audioNodePressureCounterDelta(counters.sharedInputBufferAllocations, this.pressureBaseline.sharedInputBufferAllocations));
     this.responseDeadlineMisses = Math.max(this.responseDeadlineMisses, audioNodePressureCounterDelta(counters.responseDeadlineMisses, this.pressureBaseline.responseDeadlineMisses));
   }
 
@@ -1632,6 +1651,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
       staleOutputBlocks: boundedAudioNodeInteger(health.staleOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       sharedInputDroppedBlocks: boundedAudioNodeInteger(health.sharedInputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
       sharedOutputDroppedBlocks: boundedAudioNodeInteger(health.sharedOutputDroppedBlocks, 0, 0, Number.MAX_SAFE_INTEGER),
+      sharedInputBufferAllocations: boundedAudioNodeInteger(health.sharedInputBufferAllocations, 0, 0, Number.MAX_SAFE_INTEGER),
       responseDeadlineMisses: boundedAudioNodeInteger(health.responseDeadlineMisses, 0, 0, Number.MAX_SAFE_INTEGER)
     };
   }

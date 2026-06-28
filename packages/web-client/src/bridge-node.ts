@@ -62,6 +62,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private sharedOutputQueuedBlocks = 0;
   private sharedInputDroppedBlocks = 0;
   private sharedOutputDroppedBlocks = 0;
+  private sharedTransportStats = { inFlightBlocks: 0, inputBufferAllocations: 0, inputBufferReuses: 0, pooledInputBuffers: 0 };
   private transportPressureEvents = 0;
   private consecutiveTransportPressureEvents = 0;
   private maxConsecutiveTransportPressureEvents: number;
@@ -309,6 +310,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
       sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
+      sharedTransportInFlightBlocks: this.sharedTransportStats.inFlightBlocks, sharedInputBufferAllocations: this.sharedTransportStats.inputBufferAllocations, sharedInputBufferReuses: this.sharedTransportStats.inputBufferReuses, sharedPooledInputBuffers: this.sharedTransportStats.pooledInputBuffers,
       transportPressureEvents: this.transportPressureEvents,
       consecutiveTransportPressureEvents: this.consecutiveTransportPressureEvents,
       maxConsecutiveTransportPressureEvents: this.maxConsecutiveTransportPressureEvents,
@@ -370,6 +372,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       sharedOutputQueuedBlocks?: number;
       sharedInputDroppedBlocks?: number;
       sharedOutputDroppedBlocks?: number;
+      sharedTransportInFlightBlocks?: number; sharedInputBufferAllocations?: number; sharedInputBufferReuses?: number; sharedPooledInputBuffers?: number;
       staleOutputBlocks?: number;
       droppedInputBlocks?: number;
       inputBufferAllocations?: number;
@@ -520,6 +523,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     sharedOutputQueuedBlocks?: number;
     sharedInputDroppedBlocks?: number;
     sharedOutputDroppedBlocks?: number;
+    sharedTransportInFlightBlocks?: number; sharedInputBufferAllocations?: number; sharedInputBufferReuses?: number; sharedPooledInputBuffers?: number;
   }): void {
     const previous = {
       outputLatencyBlocks: this.outputLatencyBlocks,
@@ -572,6 +576,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       0,
       Number.MAX_SAFE_INTEGER
     );
+    this.sharedTransportStats = { inFlightBlocks: boundedInteger(stats.sharedTransportInFlightBlocks, this.sharedTransportStats.inFlightBlocks, 0, 64), inputBufferAllocations: boundedInteger(stats.sharedInputBufferAllocations, this.sharedTransportStats.inputBufferAllocations, 0, Number.MAX_SAFE_INTEGER), inputBufferReuses: boundedInteger(stats.sharedInputBufferReuses, this.sharedTransportStats.inputBufferReuses, 0, Number.MAX_SAFE_INTEGER), pooledInputBuffers: boundedInteger(stats.sharedPooledInputBuffers, this.sharedTransportStats.pooledInputBuffers, 0, 2048) };
     if (typeof stats.sharedAudioEnabled === "boolean") {
       this.sharedAudioEnabled = stats.sharedAudioEnabled;
     }

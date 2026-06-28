@@ -169,6 +169,17 @@ const sharedQueueSnapshot = sharedQueueWindow.record({
 assert(sharedQueueSnapshot.calibration.observedSharedQueueMaxBlocks === 7, "live AudioNode calibration window keeps shared queue gauges");
 assert(sharedQueueSnapshot.recommendedOptions.sharedBufferBlocks === 9, "live AudioNode calibration window recommends shared ring headroom");
 
+const sharedAllocationCalibration = calibrateLivePerformanceAudioNodePolicy({
+  instanceId: "inst-shared-allocation",
+  sharedInputBufferAllocations: 2
+});
+assert(sharedAllocationCalibration.observedSharedInputBufferAllocations === 2, "live AudioNode calibration reports shared input buffer allocations");
+assert(sharedAllocationCalibration.warnings.includes("shared-buffer-allocation"), "live AudioNode calibration warns on shared buffer allocation churn");
+const sharedAllocationWindow = createLivePerformanceAudioNodeCalibrationWindow({ instanceId: "inst-shared-allocation-window" });
+sharedAllocationWindow.record({ sharedInputBufferAllocations: 5 });
+const sharedAllocationSnapshot = sharedAllocationWindow.record({ sharedInputBufferAllocations: 6 });
+assert(sharedAllocationSnapshot.calibration.warnings.includes("shared-buffer-allocation"), "live AudioNode calibration window warns on post-baseline shared allocations");
+
 const deadlineCounterCalibration = calibrateLivePerformanceAudioNodePolicy({
   instanceId: "inst-deadline-counter",
   sampleRate: 48000,
