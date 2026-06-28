@@ -5684,7 +5684,7 @@ function boundedLiveEffectChannels(channels, channelCount, maxFrames) {
     const source = channels.length > 0 ? channels[index % channels.length] : void 0;
     let output;
     if (liveEffectChannelLength(source) <= 0) {
-      output = Array.from({ length: frames }, () => 0);
+      output = zeroLiveEffectChannel(frames);
     } else {
       output = normalizedLiveEffectChannel(source, frames) ?? source;
     }
@@ -5725,11 +5725,21 @@ function liveEffectOutputTail(channels, outputChannels) {
 }
 
 function cloneLiveEffectChannels(channels, maxFrames = Number.MAX_SAFE_INTEGER) {
-  return boundedLiveEffectChannels(channels, channels.length, maxFrames).map((channel) => Array.from(channel));
+  const bounded = boundedLiveEffectChannels(channels, channels.length, maxFrames);
+  const cloned = new Array(bounded.length);
+  for (let index = 0; index < bounded.length; index += 1) cloned[index] = copyLiveEffectChannel(bounded[index]);
+  return cloned;
 }
 
 function cloneLiveEffectBusBlocks(buses, maxFrames = Number.MAX_SAFE_INTEGER) {
-  return boundedLiveEffectBusBlocks(buses, maxFrames)?.map((bus) => ({ index: bus.index, channels: cloneLiveEffectChannels(bus.channels, maxFrames) }));
+  const bounded = boundedLiveEffectBusBlocks(buses, maxFrames);
+  if (!bounded) return void 0;
+  const cloned = new Array(bounded.length);
+  for (let index = 0; index < bounded.length; index += 1) {
+    const bus = bounded[index];
+    cloned[index] = { index: bus.index, channels: cloneLiveEffectChannels(bus.channels, maxFrames) };
+  }
+  return cloned;
 }
 
 function dryLiveEffectChannels(channels, outputChannels, maxFrames = Number.MAX_SAFE_INTEGER) {
@@ -5762,15 +5772,33 @@ function boundedLiveEffectAudioFrames(channels, channelCount, maxFrames) {
 }
 
 function normalizedLiveEffectChannel(channel, frames) {
-  if (liveEffectChannelLength(channel) !== frames) return Array.from({ length: frames }, (_unused, index) => finiteLiveEffectSample(channel[index]));
+  if (liveEffectChannelLength(channel) !== frames) return normalizedLiveEffectChannelCopy(channel, frames);
   if (channel instanceof Float32Array) {
-    for (let index = 0; index < frames; index += 1) if (!Number.isFinite(channel[index])) return Array.from({ length: frames }, (_unused, frame) => finiteLiveEffectSample(channel[frame]));
+    for (let index = 0; index < frames; index += 1) if (!Number.isFinite(channel[index])) return normalizedLiveEffectChannelCopy(channel, frames);
     return void 0;
   }
   for (let index = 0; index < frames; index += 1) {
-    if (!Number.isFinite(Number(channel[index] ?? 0))) return Array.from({ length: frames }, (_unused, frame) => finiteLiveEffectSample(channel[frame]));
+    if (!Number.isFinite(Number(channel[index] ?? 0))) return normalizedLiveEffectChannelCopy(channel, frames);
   }
   return void 0;
+}
+
+function normalizedLiveEffectChannelCopy(channel, frames) {
+  const output = new Array(frames);
+  for (let index = 0; index < frames; index += 1) output[index] = finiteLiveEffectSample(channel[index]);
+  return output;
+}
+
+function copyLiveEffectChannel(channel) {
+  const output = new Array(channel.length);
+  for (let index = 0; index < channel.length; index += 1) output[index] = channel[index];
+  return output;
+}
+
+function zeroLiveEffectChannel(frames) {
+  const output = new Array(frames);
+  for (let index = 0; index < frames; index += 1) output[index] = 0;
+  return output;
 }
 
 function liveEffectChannelLength(channel) {

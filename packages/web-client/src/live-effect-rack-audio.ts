@@ -67,7 +67,7 @@ export function boundedLiveEffectChannels(
     const source = channels.length > 0 ? channels[index % channels.length] : undefined;
     let output: ArrayLike<number>;
     if (channelLength(source) <= 0) {
-      output = Array.from({ length: frames }, () => 0);
+      output = zeroChannel(frames);
     } else {
       output = normalizedChannel(source, frames) ?? source;
     }
@@ -108,11 +108,21 @@ export function outputTail(channels: ArrayLike<number>[], outputChannels: number
 }
 
 export function cloneChannels(channels: ArrayLike<number>[], maxFrames = Number.MAX_SAFE_INTEGER): number[][] {
-  return boundedLiveEffectChannels(channels, channels.length, maxFrames).map((channel) => Array.from(channel));
+  const bounded = boundedLiveEffectChannels(channels, channels.length, maxFrames);
+  const cloned = new Array<number[]>(bounded.length);
+  for (let index = 0; index < bounded.length; index += 1) cloned[index] = copyChannel(bounded[index]);
+  return cloned;
 }
 
 export function cloneBusBlocks(buses?: BinaryAudioBusBlock[], maxFrames = Number.MAX_SAFE_INTEGER): AudioBlockRequest["inputBuses"] {
-  return boundedLiveEffectBusBlocks(buses, maxFrames)?.map((bus) => ({ index: bus.index, channels: cloneChannels(bus.channels, maxFrames) }));
+  const bounded = boundedLiveEffectBusBlocks(buses, maxFrames);
+  if (!bounded) return undefined;
+  const cloned = new Array<{ index: number; channels: number[][] }>(bounded.length);
+  for (let index = 0; index < bounded.length; index += 1) {
+    const bus = bounded[index];
+    cloned[index] = { index: bus.index, channels: cloneChannels(bus.channels, maxFrames) };
+  }
+  return cloned;
 }
 
 export function dryChannels(channels: ArrayLike<number>[], outputChannels: number, maxFrames = Number.MAX_SAFE_INTEGER): number[][] {
@@ -145,15 +155,33 @@ function boundedAudioFrames(channels: ArrayLike<number>[], channelCount: number,
 }
 
 function normalizedChannel(channel: ArrayLike<number>, frames: number): ArrayLike<number> | undefined {
-  if (channelLength(channel) !== frames) return Array.from({ length: frames }, (_unused, index) => finiteSample(channel[index]));
+  if (channelLength(channel) !== frames) return normalizedChannelCopy(channel, frames);
   if (channel instanceof Float32Array) {
-    for (let index = 0; index < frames; index += 1) if (!Number.isFinite(channel[index])) return Array.from({ length: frames }, (_unused, frame) => finiteSample(channel[frame]));
+    for (let index = 0; index < frames; index += 1) if (!Number.isFinite(channel[index])) return normalizedChannelCopy(channel, frames);
     return undefined;
   }
   for (let index = 0; index < frames; index += 1) {
-    if (!Number.isFinite(Number(channel[index] ?? 0))) return Array.from({ length: frames }, (_unused, frame) => finiteSample(channel[frame]));
+    if (!Number.isFinite(Number(channel[index] ?? 0))) return normalizedChannelCopy(channel, frames);
   }
   return undefined;
+}
+
+function normalizedChannelCopy(channel: ArrayLike<number>, frames: number): number[] {
+  const output = new Array<number>(frames);
+  for (let index = 0; index < frames; index += 1) output[index] = finiteSample(channel[index]);
+  return output;
+}
+
+function copyChannel(channel: ArrayLike<number>): number[] {
+  const output = new Array<number>(channel.length);
+  for (let index = 0; index < channel.length; index += 1) output[index] = channel[index];
+  return output;
+}
+
+function zeroChannel(frames: number): number[] {
+  const output = new Array<number>(frames);
+  for (let index = 0; index < frames; index += 1) output[index] = 0;
+  return output;
 }
 
 function channelLength(channel: ArrayLike<number> | undefined): number {
