@@ -5670,21 +5670,24 @@ function wetMixedLiveEffectChannels(wetChannels, dryInput, outputChannels, wetMi
 function boundedLiveEffectChannels(channels, channelCount, maxFrames) {
   const count = boundedLiveEffectAudioCount(channelCount);
   const frames = boundedLiveEffectAudioFrames(channels, count, maxFrames);
-  let changed = channels.length !== count;
-  const bounded = Array.from({ length: count }, (_, index) => {
+  let bounded = channels.length !== count ? new Array(count) : void 0;
+  for (let index = 0; index < count; index += 1) {
     const source = channels.length > 0 ? channels[index % channels.length] : void 0;
+    let output;
     if (liveEffectChannelLength(source) <= 0) {
-      changed = true;
-      return Array.from({ length: frames }, () => 0);
+      output = Array.from({ length: frames }, () => 0);
+    } else {
+      output = normalizedLiveEffectChannel(source, frames) ?? source;
     }
-    const normalized = normalizedLiveEffectChannel(source, frames);
-    if (normalized) {
-      changed = true;
-      return normalized;
+    if (bounded) {
+      bounded[index] = output;
+    } else if (output !== source) {
+      bounded = new Array(count);
+      for (let previousIndex = 0; previousIndex < index; previousIndex += 1) bounded[previousIndex] = channels[previousIndex];
+      bounded[index] = output;
     }
-    return source;
-  });
-  return changed ? bounded : channels;
+  }
+  return bounded ?? channels;
 }
 
 function boundedLiveEffectBusBlocks(buses, maxFrames) {

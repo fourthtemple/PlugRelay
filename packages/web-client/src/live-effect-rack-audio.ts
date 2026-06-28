@@ -56,21 +56,24 @@ export function boundedLiveEffectChannels(
 ): ArrayLike<number>[] {
   const count = boundedAudioCount(channelCount);
   const frames = boundedAudioFrames(channels, count, maxFrames);
-  let changed = channels.length !== count;
-  const bounded = Array.from({ length: count }, (_, index) => {
+  let bounded: ArrayLike<number>[] | undefined = channels.length !== count ? new Array<ArrayLike<number>>(count) : undefined;
+  for (let index = 0; index < count; index += 1) {
     const source = channels.length > 0 ? channels[index % channels.length] : undefined;
+    let output: ArrayLike<number>;
     if (channelLength(source) <= 0) {
-      changed = true;
-      return Array.from({ length: frames }, () => 0);
+      output = Array.from({ length: frames }, () => 0);
+    } else {
+      output = normalizedChannel(source, frames) ?? source;
     }
-    const normalized = normalizedChannel(source, frames);
-    if (normalized) {
-      changed = true;
-      return normalized;
+    if (bounded) {
+      bounded[index] = output;
+    } else if (output !== source) {
+      bounded = new Array<ArrayLike<number>>(count);
+      for (let previousIndex = 0; previousIndex < index; previousIndex += 1) bounded[previousIndex] = channels[previousIndex];
+      bounded[index] = output;
     }
-    return source;
-  });
-  return changed ? bounded : channels;
+  }
+  return bounded ?? channels;
 }
 
 export function boundedLiveEffectBusBlocks(buses: BinaryAudioBusBlock[] | undefined, maxFrames: number): BinaryAudioBusBlock[] | undefined {
