@@ -149,26 +149,26 @@ RenderedAudio HostedVst3Effect::render(
   auto processContext = processContextForTransport(transport, sampleRate_);
   processData.processContext = &processContext;
 
-  auto midiEvents = std::move(pendingMidiEvents_);
-  pendingMidiEvents_.clear();
-  std::stable_sort(midiEvents.begin(), midiEvents.end(), [](const auto& left, const auto& right) {
+  renderMidiEvents_.clear();
+  renderMidiEvents_.swap(pendingMidiEvents_);
+  std::stable_sort(renderMidiEvents_.begin(), renderMidiEvents_.end(), [](const auto& left, const auto& right) {
     return left.sampleOffset < right.sampleOffset;
   });
 
-  auto parameterEvents = std::move(pendingParameterChanges_);
-  pendingParameterChanges_.clear();
-  for (const auto& midiEvent : midiEvents) {
+  renderParameterChanges_.clear();
+  renderParameterChanges_.swap(pendingParameterChanges_);
+  for (const auto& midiEvent : renderMidiEvents_) {
     PendingParameterChange mappedChange {};
     if (midiEventToParameterChange(midiEvent, mappedChange) &&
-        parameterEvents.size() < kMaxWorkerParameterChanges) {
-      parameterEvents.push_back(mappedChange);
+        renderParameterChanges_.size() < kMaxWorkerParameterChanges) {
+      renderParameterChanges_.push_back(mappedChange);
     }
   }
-  std::stable_sort(parameterEvents.begin(), parameterEvents.end(), [](const auto& left, const auto& right) {
+  std::stable_sort(renderParameterChanges_.begin(), renderParameterChanges_.end(), [](const auto& left, const auto& right) {
     return left.sampleOffset < right.sampleOffset;
   });
-  Steinberg::Vst::ParameterChanges inputParameterChanges(static_cast<Steinberg::int32>(parameterEvents.size()));
-  for (const auto& parameterEvent : parameterEvents) {
+  Steinberg::Vst::ParameterChanges inputParameterChanges(static_cast<Steinberg::int32>(renderParameterChanges_.size()));
+  for (const auto& parameterEvent : renderParameterChanges_) {
     Steinberg::int32 queueIndex = 0;
     auto* queue = inputParameterChanges.addParameterData(parameterEvent.id, queueIndex);
     if (queue == nullptr) {
@@ -184,8 +184,8 @@ RenderedAudio HostedVst3Effect::render(
   processData.inputParameterChanges = inputParameterChanges.getParameterCount() > 0 ? &inputParameterChanges : nullptr;
   processData.outputParameterChanges = nullptr;
 
-  Steinberg::Vst::EventList inputEvents(static_cast<Steinberg::int32>(midiEvents.size()));
-  for (const auto& midiEvent : midiEvents) {
+  Steinberg::Vst::EventList inputEvents(static_cast<Steinberg::int32>(renderMidiEvents_.size()));
+  for (const auto& midiEvent : renderMidiEvents_) {
     Steinberg::Vst::Event vstEvent {};
     if (makeVst3Event(midiEvent, frames, vstEvent)) {
       inputEvents.addEvent(vstEvent);

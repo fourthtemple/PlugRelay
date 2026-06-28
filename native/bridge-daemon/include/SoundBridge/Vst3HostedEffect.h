@@ -99,6 +99,8 @@ private:
   std::vector<Steinberg::Vst::AudioBusBuffers> outputBusBuffers_;
   std::vector<PendingMidiEvent> pendingMidiEvents_;
   std::vector<PendingParameterChange> pendingParameterChanges_;
+  std::vector<PendingMidiEvent> renderMidiEvents_;
+  std::vector<PendingParameterChange> renderParameterChanges_;
   double sampleTime_ = 0.0;
   bool initialized_ = false;
   bool controllerInitialized_ = false;
