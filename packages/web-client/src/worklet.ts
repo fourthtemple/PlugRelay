@@ -718,13 +718,10 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       return 0;
     }
     let dropped = 0;
-    for (const blockId of Array.from(this.outputBlocks.keys())) {
+    for (const [blockId, block] of this.outputBlocks) {
       if (blockId < targetBlockId) {
-        const block = this.outputBlocks.get(blockId);
         this.outputBlocks.delete(blockId);
-        if (block) {
-          this.recycleOutputBlock(block, block[0]?.length);
-        }
+        this.recycleOutputBlock(block, block[0]?.length);
         this.staleOutputBlocks += 1;
         dropped += 1;
       }
