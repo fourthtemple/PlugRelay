@@ -130,12 +130,12 @@ export interface LiveEffectRackChainDryOutputEventDetail {
 export class LiveEffectRackChain extends EventTarget {
   readonly stages: LiveEffectRackChainStage[];
   readonly maxBlockSize: number;
-  readonly processBudgetMs: number;
-  readonly processTimeoutMs: number;
+  processBudgetMs: number;
+  processTimeoutMs: number;
   readonly maxConsecutiveProcessBudgetMisses: number;
   readonly processBudgetRecoveryBlocks: number;
   readonly processTimeoutRecoveryBlocks: number;
-  readonly transitionFadeSamples: number;
+  transitionFadeSamples: number;
   private readonly outputChannels?: number;
   private readonly nowMs: () => number;
   private bypassed: boolean;
@@ -371,6 +371,20 @@ export class LiveEffectRackChain extends EventTarget {
     this.wetMix = bounded;
     this.dispatchEvent(new CustomEvent("wetmixchange", { detail: this.health }));
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
+  }
+
+  setTimingPolicy(options: Partial<LiveEffectRackChainOptions>): LiveEffectRackChainHealth {
+    const previous = { processBudgetMs: this.processBudgetMs, processTimeoutMs: this.processTimeoutMs, transitionFadeSamples: this.transitionFadeSamples };
+    this.processBudgetMs = boundedLiveEffectNumber(options.processBudgetMs, this.processBudgetMs, 0, 60000);
+    this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, this.processTimeoutMs, 0, 60000);
+    this.transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, this.transitionFadeSamples, 0, 4096);
+    const changed = this.processBudgetMs !== previous.processBudgetMs || this.processTimeoutMs !== previous.processTimeoutMs || this.transitionFadeSamples !== previous.transitionFadeSamples;
+    if (changed) {
+      const health = this.health;
+      this.dispatchEvent(new CustomEvent("timingpolicychange", { detail: { previous, health } }));
+      this.dispatchEvent(new CustomEvent("healthchange", { detail: health }));
+    }
+    return this.health;
   }
 
   retry(): boolean {

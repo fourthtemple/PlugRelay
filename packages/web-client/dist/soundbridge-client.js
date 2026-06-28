@@ -3284,6 +3284,20 @@ export class LiveEffectRackChain extends EventTarget {
     this.dispatchEvent(new CustomEvent("healthchange", { detail: this.health }));
   }
 
+  setTimingPolicy(options) {
+    const previous = { processBudgetMs: this.processBudgetMs, processTimeoutMs: this.processTimeoutMs, transitionFadeSamples: this.transitionFadeSamples };
+    this.processBudgetMs = boundedLiveEffectNumber(options.processBudgetMs, this.processBudgetMs, 0, 60000);
+    this.processTimeoutMs = boundedLiveEffectNumber(options.processTimeoutMs, this.processTimeoutMs, 0, 60000);
+    this.transitionFadeSamples = boundedLiveEffectInteger(options.transitionFadeSamples, this.transitionFadeSamples, 0, 4096);
+    const changed = this.processBudgetMs !== previous.processBudgetMs || this.processTimeoutMs !== previous.processTimeoutMs || this.transitionFadeSamples !== previous.transitionFadeSamples;
+    if (changed) {
+      const health = this.health;
+      this.dispatchEvent(new CustomEvent("timingpolicychange", { detail: { previous, health } }));
+      this.dispatchEvent(new CustomEvent("healthchange", { detail: health }));
+    }
+    return this.health;
+  }
+
   retry() {
     if (this.unhealthyReason === void 0) {
       return false;
