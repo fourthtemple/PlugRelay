@@ -19,6 +19,9 @@ export function bindBridgeMonitorEvents({ bridge, realtimeStats, elements, logEr
   bridge.addEventListener("process-timeout", (event) => {
     updateHealth(event.detail?.health);
   });
+  bridge.addEventListener("process-timeout-tripped", (event) => {
+    updateHealth(event.detail?.health);
+  });
   bridge.addEventListener("process-timeout-auto-bypassed", (event) => {
     updateHealth(event.detail?.health);
   });

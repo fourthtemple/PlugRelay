@@ -1365,6 +1365,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     if (processTimedOut) {
       const detail = { error, autoBypassed, health: this.health };
       this.dispatchEvent(new CustomEvent("process-timeout", { detail }));
+      this.dispatchEvent(new CustomEvent("process-timeout-tripped", { detail }));
       if (autoBypassed) this.dispatchEvent(new CustomEvent("process-timeout-auto-bypassed", { detail }));
     }
   }

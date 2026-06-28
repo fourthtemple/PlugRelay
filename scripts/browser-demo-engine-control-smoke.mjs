@@ -1,4 +1,4 @@
-import { createEngineRetryController } from "../examples/browser-demo/src/bridge-monitor-events.js";
+import { bindBridgeMonitorEvents, createEngineRetryController } from "../examples/browser-demo/src/bridge-monitor-events.js";
 
 class FakeButton extends EventTarget {
   disabled = false;
@@ -68,6 +68,30 @@ const disabledController = createEngineRetryController({
 });
 disabledController.update(health);
 assert(disabledButton.textContent === "Recreate Engine" && disabledButton.disabled === true, "process-timeout stays disabled without recreate callback");
+
+const monitorBridge = new EventTarget();
+let monitorHealth;
+let latencyHealth;
+bindBridgeMonitorEvents({
+  bridge: monitorBridge,
+  realtimeStats: {
+    update() {},
+    updateLatencyHealth(health) {
+      latencyHealth = health;
+    },
+    updateTransportPressure() {},
+    updateRenderDiagnostics() {}
+  },
+  elements: { renderEngine: { textContent: "" } },
+  logError() {},
+  formatRenderEngine: (engine) => engine ?? "",
+  onHealth(health) {
+    monitorHealth = health;
+  }
+});
+const timeoutTripHealth = { unhealthyReason: "process-timeout", bypassed: true };
+monitorBridge.dispatchEvent(new CustomEvent("process-timeout-tripped", { detail: { health: timeoutTripHealth } }));
+assert(monitorHealth === timeoutTripHealth && latencyHealth === timeoutTripHealth, "browser demo monitor updates from process-timeout trip events");
 
 console.log("Browser demo engine control smoke checks passed.");
 

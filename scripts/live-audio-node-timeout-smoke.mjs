@@ -52,11 +52,17 @@ const timeoutNode = await SoundBridgeAudioNode.createLivePerformance(fakeContext
 });
 let timeoutEvents = 0;
 let timeoutDetail;
+let timeoutTripEvents = 0;
+let timeoutTripDetail;
 let timeoutAutoBypassEvents = 0;
 let timeoutAutoBypassDetail;
 timeoutNode.addEventListener("process-timeout", (event) => {
   timeoutEvents += 1;
   timeoutDetail = event.detail;
+});
+timeoutNode.addEventListener("process-timeout-tripped", (event) => {
+  timeoutTripEvents += 1;
+  timeoutTripDetail = event.detail;
 });
 timeoutNode.addEventListener("process-timeout-auto-bypassed", (event) => {
   timeoutAutoBypassEvents += 1;
@@ -66,6 +72,7 @@ FakeAudioWorkletNode.last.port.onmessage({
   data: { type: "audio-error", error: { code: "render_timeout", message: "deadline missed" } }
 });
 assert(timeoutEvents === 1 && timeoutDetail?.error?.code === "render_timeout", "AudioNode emits process-timeout for render deadlines");
+assert(timeoutTripEvents === 1 && timeoutTripDetail?.error?.code === "render_timeout", "AudioNode emits process-timeout trip events for render deadlines");
 assert(timeoutDetail?.autoBypassed === true && timeoutDetail?.health?.unhealthyReason === "process-timeout", "process-timeout detail includes fail-dry health");
 assert(timeoutAutoBypassEvents === 1 && timeoutAutoBypassDetail?.health?.bypassed === true, "AudioNode emits process-timeout auto-bypass");
 assert(timeoutNode.retry() === false, "AudioNode retry refuses quarantined render timeouts");
@@ -79,11 +86,15 @@ const genericNode = await SoundBridgeAudioNode.createLivePerformance(fakeContext
   workletUrl: "/soundbridge-worklet.js"
 });
 let genericTimeoutEvents = 0;
+let genericTimeoutTripEvents = 0;
 genericNode.addEventListener("process-timeout", () => {
   genericTimeoutEvents += 1;
 });
+genericNode.addEventListener("process-timeout-tripped", () => {
+  genericTimeoutTripEvents += 1;
+});
 FakeAudioWorkletNode.last.port.onmessage({ data: { type: "audio-error", error: "plugin failed" } });
-assert(genericTimeoutEvents === 0, "ordinary audio errors do not emit process-timeout");
+assert(genericTimeoutEvents === 0 && genericTimeoutTripEvents === 0, "ordinary audio errors do not emit timeout events");
 assert(genericNode.health.unhealthyReason === "audio-error", "ordinary audio errors keep generic audio-error health");
 
 console.log("Live AudioNode timeout smoke checks passed.");
