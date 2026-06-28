@@ -462,12 +462,11 @@ OSStatus HostedAudioUnit::inputCallback(
     if (output == nullptr) {
       continue;
     }
-
     if (sourceBus != nullptr && bufferIndex < sourceBus->size()) {
       const auto& source = (*sourceBus)[bufferIndex];
-      for (UInt32 frame = 0; frame < frameCount; ++frame) {
-        output[frame] = frame < source.size() ? source[frame] : 0.0F;
-      }
+      const auto copyFrames = std::min<std::size_t>(frameCount, source.size());
+      if (copyFrames > 0) std::memcpy(output, source.data(), copyFrames * sizeof(Float32));
+      if (copyFrames < frameCount) std::memset(output + copyFrames, 0, bytes - copyFrames * sizeof(Float32));
     } else {
       std::memset(output, 0, bytes);
     }
