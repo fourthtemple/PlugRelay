@@ -452,14 +452,15 @@ const batchReady = batchController.record({
   lastResponseDeadlineLeadBlocks: 1,
   responseDeadlineMisses: 0,
   latencySamples: 128,
+  reportedLatencySamples: 384,
   dryTargets: 0,
   skippedTargets: 0,
   failedTargets: 0
 });
 assert(batchReady.applied === false, "adaptive frame batch scheduler latency waits for enough batch samples");
-assert(batchReady.batchLatencySamples === 128, "adaptive frame batch scheduler latency reports aggregate batch latency");
+assert(batchReady.batchLatencySamples === 384, "adaptive frame batch scheduler latency reports the larger aggregate reported latency");
 assert(batchReady.currentTransportLatencySamples === 128, "adaptive frame batch scheduler latency reads the scheduler latency");
-assert(batchReady.targetTransportLatencySamples === 128, "adaptive frame batch scheduler latency keeps stable batch latency unchanged");
+assert(batchReady.targetTransportLatencySamples === 384, "adaptive frame batch scheduler latency carries reported batch latency into the target");
 
 const batchRaise = batchController.record({
   totalDurationMs: 1,

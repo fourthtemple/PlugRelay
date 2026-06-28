@@ -311,7 +311,7 @@ export class LiveEffectRackFrameBatchCalibrationWindow {
       lastRenderDurationMs: health.maxDurationMs,
       responseJitterBlocks: health.responseJitterBlocks,
       lastResponseDeadlineLeadBlocks: health.lastResponseDeadlineLeadBlocks,
-      latencySamples: health.latencySamples ?? health.reportedLatencySamples,
+      latencySamples: frameBatchLatencySamples(health),
       dryOutputBlocks: this.dryOutputBlocks,
       responseDeadlineMisses: health.responseDeadlineMisses,
       renderTimeouts: this.processTimeouts
@@ -378,6 +378,13 @@ export function createLiveEffectRackFrameBatchCalibrationWindow(
   options: LiveEffectRackCalibrationWindowOptions
 ): LiveEffectRackFrameBatchCalibrationWindow {
   return new LiveEffectRackFrameBatchCalibrationWindow(options);
+}
+
+function frameBatchLatencySamples(health: { latencySamples?: unknown; reportedLatencySamples?: unknown }): number {
+  return Math.max(
+    boundedOptionalNumber(health.latencySamples, 0, Number.MAX_SAFE_INTEGER) ?? 0,
+    boundedOptionalNumber(health.reportedLatencySamples, 0, Number.MAX_SAFE_INTEGER) ?? 0
+  );
 }
 
 export function liveEffectRackPolicyOptionsFromCalibration(

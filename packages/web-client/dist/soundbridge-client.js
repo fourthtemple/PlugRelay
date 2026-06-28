@@ -2459,7 +2459,7 @@ export class LiveEffectRackFrameBatchCalibrationWindow {
       lastRenderDurationMs: health.maxDurationMs,
       responseJitterBlocks: health.responseJitterBlocks,
       lastResponseDeadlineLeadBlocks: health.lastResponseDeadlineLeadBlocks,
-      latencySamples: health.latencySamples ?? health.reportedLatencySamples,
+      latencySamples: liveEffectFrameBatchCalibrationLatencySamples(health),
       dryOutputBlocks: this.dryOutputBlocks,
       responseDeadlineMisses: health.responseDeadlineMisses,
       renderTimeouts: this.processTimeouts
@@ -3001,7 +3001,7 @@ export class LiveEffectRackFrameBatchSchedulerAdaptiveLatencyController {
       this.scheduler.snapshot().transportLatencySamples,
       snapshot.calibration.policy.transportLatencySamples
     );
-    const batchLatencySamples = boundedLiveEffectLatencySamples(health.latencySamples ?? health.reportedLatencySamples, 0);
+    const batchLatencySamples = liveEffectFrameBatchLatencySamples(health);
     const maxBlockSize = snapshot.calibration.policy.maxBlockSize;
     const recommendedTotalLatencySamples = combinedLiveEffectLatencySamples(
       batchLatencySamples,
@@ -4642,7 +4642,17 @@ function liveEffectFrameBatchBlockDurationMs(results) {
 }
 
 function liveEffectFrameBatchLatencySamples(health) {
-  return boundedLiveEffectLatencySamples(health.latencySamples ?? health.reportedLatencySamples, 0);
+  return Math.max(
+    boundedLiveEffectLatencySamples(health.latencySamples, 0),
+    boundedLiveEffectLatencySamples(health.reportedLatencySamples, 0)
+  );
+}
+
+function liveEffectFrameBatchCalibrationLatencySamples(health) {
+  return Math.max(
+    boundedLiveEffectOptionalNumber(health.latencySamples, 0, Number.MAX_SAFE_INTEGER) ?? 0,
+    boundedLiveEffectOptionalNumber(health.reportedLatencySamples, 0, Number.MAX_SAFE_INTEGER) ?? 0
+  );
 }
 
 export function shouldSkipLiveEffectDeadlinePressure(pressure, options = {}) {

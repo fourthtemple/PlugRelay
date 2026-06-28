@@ -536,7 +536,7 @@ export class LiveEffectRackFrameBatchSchedulerAdaptiveLatencyController {
       this.scheduler.snapshot().transportLatencySamples,
       snapshot.calibration.policy.transportLatencySamples
     );
-    const batchLatencySamples = boundedLatencySamples(health.latencySamples ?? health.reportedLatencySamples, 0);
+    const batchLatencySamples = frameBatchLatencySamples(health);
     const maxBlockSize = snapshot.calibration.policy.maxBlockSize;
     const recommendedTotalLatencySamples = combinedLatencySamples(
       batchLatencySamples,
@@ -660,4 +660,11 @@ export function createLiveEffectRackFrameBatchSchedulerAdaptiveLatencyController
   options: LiveEffectRackFrameBatchSchedulerAdaptiveLatencyOptions
 ): LiveEffectRackFrameBatchSchedulerAdaptiveLatencyController {
   return new LiveEffectRackFrameBatchSchedulerAdaptiveLatencyController(options);
+}
+
+function frameBatchLatencySamples(health: { latencySamples?: unknown; reportedLatencySamples?: unknown }): number {
+  return Math.max(
+    boundedLatencySamples(health.latencySamples, 0),
+    boundedLatencySamples(health.reportedLatencySamples, 0)
+  );
 }

@@ -298,7 +298,7 @@ const batchReady = batchWindow.record({
   failedTargets: 0
 });
 assert(batchReady.samples === 1, "live frame batch calibration window records aggregate batch health");
-assert(batchReady.calibration.policy.pluginLatencySamples === 256, "live frame batch calibration uses batch latency as plugin latency");
+assert(batchReady.calibration.policy.pluginLatencySamples === 384, "live frame batch calibration uses the larger reported batch latency as plugin latency");
 assert(batchReady.calibration.realtimeReady === true, "live frame batch calibration accepts a ready aggregate batch");
 
 const batchPressure = batchWindow.record({

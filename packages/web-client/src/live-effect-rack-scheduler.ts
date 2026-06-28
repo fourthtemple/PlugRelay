@@ -428,5 +428,8 @@ function pressureCounterDelta(current: number, baseline: number): number {
 }
 
 function frameBatchLatencySamples(health: { latencySamples?: unknown; reportedLatencySamples?: unknown }): number {
-  return boundedLatencySamples(health.latencySamples ?? health.reportedLatencySamples, 0);
+  return Math.max(
+    boundedLatencySamples(health.latencySamples, 0),
+    boundedLatencySamples(health.reportedLatencySamples, 0)
+  );
 }

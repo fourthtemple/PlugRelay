@@ -408,19 +408,19 @@ const batchLatencyScheduler = createLiveEffectRackBlockScheduler({
   startSamplePosition: 32000,
   nowMs: () => now
 });
-assert(batchLatencyScheduler.updateFromFrameBatchHealth({ reportedLatencySamples: 96 }) === 96, "live scheduler accepts frame-batch reported latency");
+assert(batchLatencyScheduler.updateFromFrameBatchHealth({ latencySamples: 32, reportedLatencySamples: 96 }) === 96, "live scheduler prefers larger frame-batch reported latency");
 const batchLatencyBlock = batchLatencyScheduler.schedule([[1]]);
 assert(batchLatencyBlock.transport.samplePosition === 32096, "live scheduler compensates transport from frame-batch health");
 assert(
   batchLatencyScheduler.updateFromFrameBatchCalibration(batch, {
     recommendedTransportLatencySamples: 128,
     warnings: ["increase-transport-latency"]
-  }) === 192,
+  }) === 768,
   "live scheduler combines frame-batch latency and calibrated headroom"
 );
 const calibratedBatchBlock = batchLatencyScheduler.schedule([[1]]);
 assert(
-  calibratedBatchBlock.transport.samplePosition === 32320 &&
+  calibratedBatchBlock.transport.samplePosition === 32896 &&
     calibratedBatchBlock.deadlinePressure.reasons.includes("increase-transport-latency"),
   "live scheduler applies frame-batch calibration to shared-frame pressure"
 );
