@@ -70,6 +70,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.maxRecycledInputBuffers = this.outputChannels * Math.max(2, this.maxInFlightBlocks);
     this.maxRecycledOutputBuffers = this.outputChannels * Math.max(2, this.maxQueuedOutputBlocks + this.maxOutputLatencyBlocks);
     this.sharedAudio = void 0;
+    this.sharedTransportStats = {};
     this.sharedAudioWakeMode = "none";
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
@@ -160,7 +161,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         responseJitterBlocks: jitterBlocks,
         responseJitterSamples: jitterBlocks * this.lastFrames,
         responseDeadlineMisses: this.responseDeadlineMisses,
-        responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats
+        responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats,
+        ...this.sharedTransportStats
       });
       this.resetResponseDeadlineWindow();
     }
@@ -201,6 +203,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     if (message.type === "shared-audio-status") {
       if (message.wakeMode === "atomics" || message.wakeMode === "timer") this.sharedAudioWakeMode = message.wakeMode;
+      this.sharedTransportStats = this.boundedSharedTransportStats(message);
       return;
     }
 
@@ -218,6 +221,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
 
     if (message.type === "process-diagnostics" && (typeof message.renderEngine === "string" || typeof message.latencySamples === "number")) {
+      this.sharedTransportStats = this.boundedSharedTransportStats(message);
       this.port.postMessage({ type: "process-diagnostics", blockId: message.blockId, latencySamples: message.latencySamples, renderEngine: message.renderEngine, renderDurationMs: message.renderDurationMs, renderBudgetMs: message.renderBudgetMs, renderBudgetExceeded: message.renderBudgetExceeded });
       return;
     }
@@ -457,6 +461,15 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   sharedSlotMetadataOffset(slotIndex) { return SoundBridgeAudioProcessor.sharedHeaderInts + slotIndex * SoundBridgeAudioProcessor.sharedSlotInts; }
 
   sharedAudioOffset(shared, slotIndex) { return slotIndex * shared.channels * shared.frames; }
+
+  boundedSharedTransportStats(value) {
+    return {
+      sharedTransportInFlightBlocks: this.boundedInteger(value.sharedTransportInFlightBlocks, 0, 0, 64),
+      sharedInputBufferAllocations: this.boundedInteger(value.sharedInputBufferAllocations, 0, 0, Number.MAX_SAFE_INTEGER),
+      sharedInputBufferReuses: this.boundedInteger(value.sharedInputBufferReuses, 0, 0, Number.MAX_SAFE_INTEGER),
+      sharedPooledInputBuffers: this.boundedInteger(value.sharedPooledInputBuffers, 0, 0, 2048)
+    };
+  }
 
   recordOutputTiming(onTime, targetBlockId) {
     if (!this.canAdaptLatency() || targetBlockId < 0) {

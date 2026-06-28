@@ -126,7 +126,7 @@ function connectAudioPort(port, config, sharedAudioDescriptor) {
   if (sharedAudio) {
     sharedAudio.wakeMode = sharedAudioWakeMode();
     sharedAudioPorts.set(sharedAudio, config);
-    port.postMessage({ type: "shared-audio-status", wakeMode: sharedAudio.wakeMode });
+    port.postMessage({ type: "shared-audio-status", wakeMode: sharedAudio.wakeMode, ...sharedAudioStatusFields(sharedAudio) });
     pumpSharedAudio(config, sharedAudio);
   }
 }
@@ -252,6 +252,7 @@ function routeAudioResponse(envelope) {
   const pendingShared = envelope.id ? pendingSharedAudio.get(envelope.id) : void 0;
   if (pendingShared) {
     const { shared, config } = pendingShared;
+    const sharedStatus = sharedAudioStatusFields(shared);
     clearAudioRequestTimeout(pendingShared.timeout);
     pendingSharedAudio.delete(envelope.id ?? "");
     shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
@@ -259,7 +260,7 @@ function routeAudioResponse(envelope) {
       const payload = envelope.payload;
       writeSharedOutputBlock(shared, Math.floor(Number(payload.blockId ?? 0)), Array.isArray(payload.channels) ? payload.channels : []);
       if (typeof payload.renderEngine === "string" || typeof payload.latencySamples === "number") {
-        shared.port.postMessage({ type: "process-diagnostics", blockId: payload.blockId, latencySamples: payload.latencySamples, renderEngine: payload.renderEngine, renderDurationMs: payload.renderDurationMs, renderBudgetMs: payload.renderBudgetMs, renderBudgetExceeded: payload.renderBudgetExceeded });
+        shared.port.postMessage({ type: "process-diagnostics", blockId: payload.blockId, latencySamples: payload.latencySamples, renderEngine: payload.renderEngine, renderDurationMs: payload.renderDurationMs, renderBudgetMs: payload.renderBudgetMs, renderBudgetExceeded: payload.renderBudgetExceeded, ...sharedStatus });
       }
     } else {
       shared.port.postMessage({ type: "audio-error", error: envelope.error });
@@ -543,6 +544,15 @@ function writeSharedOutputBlock(shared, blockId, channels) {
     Atomics.add(shared.outputControl, SHARED_AVAILABLE, 1);
   }
   Atomics.notify(shared.outputControl, SHARED_AVAILABLE, 1);
+}
+
+function sharedAudioStatusFields(shared) {
+  return {
+    sharedTransportInFlightBlocks: boundedSharedInteger(shared.inFlightBlocks, 0, 0, 64),
+    sharedInputBufferAllocations: boundedSharedInteger(shared.inputBufferAllocations, 0, 0, Number.MAX_SAFE_INTEGER),
+    sharedInputBufferReuses: boundedSharedInteger(shared.inputBufferReuses, 0, 0, Number.MAX_SAFE_INTEGER),
+    sharedPooledInputBuffers: boundedSharedInteger(shared.pooledInputBuffers, 0, 0, 2048)
+  };
 }
 
 function normalizeSharedAudioPort(port, value) {

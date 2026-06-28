@@ -1,4 +1,4 @@
-class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
+export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   private static readonly sharedHeaderInts = 8;
   private static readonly sharedSlotInts = 4;
   private static readonly sharedWriteIndex = 0;
@@ -58,6 +58,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   private readonly maxRecycledOutputBuffers: number;
   private transportPort?: MessagePort;
   private sharedAudio?: NormalizedSharedAudio;
+  private sharedTransportStats: Record<string, number> = {};
   private destroyed = false;
   private bypassed = false;
   private bypassResponseBlockFloor = 0;
@@ -181,7 +182,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         responseDeadlineLeadMaxBlocks: this.responseBlocksSinceLastStats > 0 ? leadMaxBlocks : 0,
         responseDeadlineLeadSamples: this.responseDeadlineLeadBlocks * this.lastFrames,
         responseJitterBlocks: jitterBlocks, responseJitterSamples: jitterBlocks * this.lastFrames,
-        responseDeadlineMisses: this.responseDeadlineMisses, responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats
+        responseDeadlineMisses: this.responseDeadlineMisses, responseDeadlineMissesSinceLastStats: this.responseDeadlineMissesSinceLastStats,
+        ...this.sharedTransportStats
       });
       this.resetResponseDeadlineWindow();
     }
@@ -237,6 +239,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     if (typed.type === "shared-audio-status") {
       if (typed.wakeMode === "atomics" || typed.wakeMode === "timer") this.sharedAudioWakeMode = typed.wakeMode;
+      this.sharedTransportStats = this.boundedSharedTransportStats(typed);
       return;
     }
 
@@ -254,6 +257,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
 
     if (typed.type === "process-diagnostics" && (typeof typed.renderEngine === "string" || typeof typed.latencySamples === "number")) {
+      this.sharedTransportStats = this.boundedSharedTransportStats(typed);
       this.port.postMessage({ type: "process-diagnostics", blockId: typed.blockId, latencySamples: typed.latencySamples, renderEngine: typed.renderEngine, renderDurationMs: typed.renderDurationMs, renderBudgetMs: typed.renderBudgetMs, renderBudgetExceeded: typed.renderBudgetExceeded });
       return;
     }
@@ -507,6 +511,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   }
   private sharedSlotMetadataOffset(slotIndex: number): number { return SoundBridgeAudioProcessor.sharedHeaderInts + slotIndex * SoundBridgeAudioProcessor.sharedSlotInts; }
   private sharedAudioOffset(shared: NormalizedSharedAudio, slotIndex: number): number { return slotIndex * shared.channels * shared.frames; }
+  private boundedSharedTransportStats(value: { sharedTransportInFlightBlocks?: unknown; sharedInputBufferAllocations?: unknown; sharedInputBufferReuses?: unknown; sharedPooledInputBuffers?: unknown }): Record<string, number> {
+    return { sharedTransportInFlightBlocks: this.boundedInteger(value.sharedTransportInFlightBlocks, 0, 0, 64), sharedInputBufferAllocations: this.boundedInteger(value.sharedInputBufferAllocations, 0, 0, Number.MAX_SAFE_INTEGER), sharedInputBufferReuses: this.boundedInteger(value.sharedInputBufferReuses, 0, 0, Number.MAX_SAFE_INTEGER), sharedPooledInputBuffers: this.boundedInteger(value.sharedPooledInputBuffers, 0, 0, 2048) };
+  }
 
   private recordOutputTiming(onTime: boolean, targetBlockId: number): void {
     if (!this.canAdaptLatency() || targetBlockId < 0) {
@@ -735,13 +742,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 }
 
 interface NormalizedSharedAudio {
-  slots: number;
-  channels: number;
-  frames: number;
-  inputControl: Int32Array;
-  inputAudio: Float32Array;
-  outputControl: Int32Array;
-  outputAudio: Float32Array;
+  slots: number; channels: number; frames: number;
+  inputControl: Int32Array; inputAudio: Float32Array; outputControl: Int32Array; outputAudio: Float32Array;
 }
 
 registerProcessor("soundbridge-audio-processor", SoundBridgeAudioProcessor);

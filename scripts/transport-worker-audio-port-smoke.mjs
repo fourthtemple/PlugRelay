@@ -211,8 +211,8 @@ self.onmessage({
   }
 });
 assert(
-  sharedPort.messages.some((message) => message.type === "shared-audio-status" && message.wakeMode === "atomics"),
-  "transport worker reports atomic shared-audio wakeups"
+  sharedPort.messages.some((message) => message.type === "shared-audio-status" && message.wakeMode === "atomics" && message.sharedTransportInFlightBlocks === 0),
+  "transport worker reports atomic shared-audio wakeups and bounded shared status"
 );
 assert(socket.sent.length === 2, "transport worker drains shared input up to its in-flight limit");
 assert(encodedBinaryEnvelopes[1]?.payload.transport?.samplePosition === 32, "transport worker compensates shared-ring transport sample positions");
@@ -256,9 +256,11 @@ assert(
     message.latencySamples === 32 &&
     message.renderDurationMs === 2.5 &&
     message.renderBudgetMs === 1.333 &&
-    message.renderBudgetExceeded === true
+    message.renderBudgetExceeded === true &&
+    message.sharedTransportInFlightBlocks === 1 &&
+    message.sharedInputBufferAllocations === 1
   ),
-  "transport worker forwards shared path render timing diagnostics"
+  "transport worker forwards shared path render timing and shared-ring diagnostics"
 );
 
 const outputPressureAudio = createSharedAudio(2, 1, 2);

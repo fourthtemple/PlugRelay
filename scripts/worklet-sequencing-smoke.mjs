@@ -240,8 +240,9 @@ const sharedMainPort = lastPort;
 const sharedTransportPort = new TestPort();
 const sharedAudio = createSharedAudio(4, 1, 2);
 sharedMainPort.onmessage({ data: { type: "connect-transport", port: sharedTransportPort, sharedAudio } });
-sharedTransportPort.onmessage({ data: { type: "shared-audio-status", wakeMode: "atomics" } });
+sharedTransportPort.onmessage({ data: { type: "shared-audio-status", wakeMode: "atomics", sharedTransportInFlightBlocks: 2 } });
 assert(sharedProcessor.sharedAudioWakeMode === "atomics", "shared worklet transport records the worker wake mode");
+assert(sharedProcessor.sharedTransportStats.sharedTransportInFlightBlocks === 2, "shared worklet transport records bounded worker status");
 const sharedWarmup = [new Float32Array(2)];
 sharedProcessor.process([[Float32Array.from([7, 7])]], [sharedWarmup]);
 assert(sharedTransportPort.messages.length === 0, "shared worklet transport avoids per-block port messages");
@@ -430,6 +431,17 @@ assert(typeof statsMessage?.responseJitterBlocks === "number", "worklet stats re
 assert(typeof statsMessage?.responseJitterSamples === "number", "worklet stats report response jitter samples");
 assert(typeof statsMessage?.responseDeadlineMisses === "number", "worklet stats report response deadline misses");
 assert(typeof statsMessage?.responseDeadlineMissesSinceLastStats === "number", "worklet stats report windowed deadline misses");
+
+const sharedStatsProcessor = new processorCtor({ processorOptions: { outputChannels: 1, statsIntervalBlocks: 8 } });
+const sharedStatsPort = lastPort;
+const sharedStatsTransportPort = new TestPort();
+sharedStatsPort.onmessage({ data: { type: "connect-transport", port: sharedStatsTransportPort, sharedAudio: createSharedAudio(4, 1, 1) } });
+sharedStatsTransportPort.onmessage({ data: { type: "shared-audio-status", wakeMode: "timer", sharedTransportInFlightBlocks: 3, sharedInputBufferAllocations: 5, sharedInputBufferReuses: 4, sharedPooledInputBuffers: 2 } });
+for (let index = 0; index < 8; index += 1) {
+  sharedStatsProcessor.process([[Float32Array.from([index])]], [[new Float32Array(1)]]);
+}
+const sharedStatsMessage = sharedStatsPort.messages.find((message) => message.type === "stats");
+assert(sharedStatsMessage?.sharedTransportInFlightBlocks === 3 && sharedStatsMessage.sharedInputBufferAllocations === 5, "worklet stats include shared transport worker status");
 
 const fastStatsProcessor = new processorCtor({ processorOptions: { outputChannels: 1, statsIntervalBlocks: 8 } });
 const fastStatsPort = lastPort;
