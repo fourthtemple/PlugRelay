@@ -1737,7 +1737,7 @@ export class LivePerformanceAudioNodeAdaptiveLatencyController {
   async record(health = this.node.health) {
     if (this.cooldownBlocksRemaining > 0) this.cooldownBlocksRemaining -= 1;
     const snapshot = this.window.record(health);
-    const recreateReasons = this.recreateReasons(snapshot);
+    const recreateRecommendations = this.recreateRecommendations(snapshot);
     const currentTransportLatencySamples = boundedAudioNodeInteger(
       this.node.health.transportLatencySamples,
       snapshot.calibration.policy.transportLatencySamples,
@@ -1775,8 +1775,9 @@ export class LivePerformanceAudioNodeAdaptiveLatencyController {
       ...snapshot,
       applied,
       appliedDirection,
-      recreateRecommended: recreateReasons.length > 0,
-      recreateReasons,
+      recreateRecommended: recreateRecommendations.length > 0,
+      recreateReasons: recreateRecommendations.map((recommendation) => recommendation.reason),
+      recreateRecommendations,
       currentTransportLatencySamples,
       targetTransportLatencySamples,
       cooldownBlocksRemaining: this.cooldownBlocksRemaining,
@@ -1801,14 +1802,15 @@ export class LivePerformanceAudioNodeAdaptiveLatencyController {
     );
   }
 
-  recreateReasons(snapshot) {
+  recreateRecommendations(snapshot) {
     if (snapshot.samples < this.minSamples) return [];
-    const warnings = snapshot.calibration.warnings;
-    const reasons = [];
-    if (warnings.includes("increase-max-output-latency")) reasons.push("increase-max-output-latency");
-    if (warnings.includes("increase-shared-buffer")) reasons.push("increase-shared-buffer");
-    if (warnings.includes("increase-audio-timeout")) reasons.push("increase-audio-timeout");
-    return reasons;
+    const { calibration } = snapshot;
+    const warnings = calibration.warnings;
+    const recommendations = [];
+    if (warnings.includes("increase-max-output-latency")) recommendations.push({ reason: "increase-max-output-latency", current: calibration.policy.maxOutputLatencyBlocks, recommended: calibration.recommendedMaxOutputLatencyBlocks });
+    if (warnings.includes("increase-shared-buffer")) recommendations.push({ reason: "increase-shared-buffer", current: calibration.policy.sharedBufferBlocks, recommended: calibration.recommendedSharedBufferBlocks });
+    if (warnings.includes("increase-audio-timeout")) recommendations.push({ reason: "increase-audio-timeout", current: calibration.policy.audioRequestTimeoutMs, recommended: calibration.recommendedAudioRequestTimeoutMs });
+    return recommendations;
   }
 
   shouldRecover(snapshot, targetTransportLatencySamples, currentTransportLatencySamples) {

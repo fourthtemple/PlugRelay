@@ -407,6 +407,10 @@ assert(
   pressureApplied.recreateRecommended === true && pressureApplied.recreateReasons.includes("increase-max-output-latency"),
   "live AudioNode adaptive latency can report fixed-option advice alongside an in-place latency refresh"
 );
+assert(
+  pressureApplied.recreateRecommendations.some((recommendation) => recommendation.reason === "increase-max-output-latency" && recommendation.recommended > recommendation.current),
+  "live AudioNode adaptive latency reports bounded current/recommended max-latency advice"
+);
 assert(adaptiveNode.refreshes[0] === 384, "live AudioNode adaptive latency caps increase steps");
 assert(pressureApplied.refreshResult.transportLatencySamples === 384, "live AudioNode adaptive latency returns refresh results");
 adaptiveNode.health = {
@@ -458,6 +462,10 @@ assert(sharedPressureAdvice.applied === false && sharedPressureNode.refreshes.le
 assert(
   sharedPressureAdvice.recreateRecommended === true && sharedPressureAdvice.recreateReasons.join(",") === "increase-shared-buffer",
   "live AudioNode adaptive latency recommends recreate for fixed shared-ring pressure"
+);
+assert(
+  sharedPressureAdvice.recreateRecommendations[0]?.current === 8 && sharedPressureAdvice.recreateRecommendations[0]?.recommended === 9,
+  "live AudioNode adaptive latency reports current and recommended shared-ring capacity"
 );
 assert(sharedPressureAdvice.recommendedOptions.sharedBufferBlocks === 9, "live AudioNode adaptive latency includes next-node shared-ring sizing advice");
 
