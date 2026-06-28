@@ -131,7 +131,7 @@ function readPlanarFloat32(buffer, offset, channelCount, frames) {
   for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
     const channel = new Float32Array(frames);
     if (LITTLE_ENDIAN_FLOATS) {
-      buffer.copy(Buffer.from(channel.buffer, channel.byteOffset, channel.byteLength), 0, offset, offset + bytes);
+      new Uint8Array(channel.buffer, channel.byteOffset, channel.byteLength).set(buffer.subarray(offset, offset + bytes));
       offset += bytes;
     } else {
       for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) {
@@ -148,7 +148,7 @@ function writeChannelBlocks(buffer, offset, blocks) {
   for (const block of blocks) {
     for (const channel of block.channels) {
       if (LITTLE_ENDIAN_FLOATS && channel instanceof Float32Array) {
-        Buffer.from(channel.buffer, channel.byteOffset, channel.byteLength).copy(buffer, offset);
+        buffer.set(new Uint8Array(channel.buffer, channel.byteOffset, channel.byteLength), offset);
         offset += channel.byteLength;
         continue;
       }
