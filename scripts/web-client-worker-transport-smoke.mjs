@@ -534,12 +534,11 @@ liveNode.addEventListener("audio-error-auto-bypassed", (event) => {
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
     type: "audio-error",
-    blockId: 91,
-    error: "native render timeout"
+    blockId: 91, error: "native render timeout", sharedTransportInFlightBlocks: 2
   }
 });
 assert(audioErrorEvents === 1 && audioErrorDetail === "native render timeout", "SoundBridgeAudioNode emits audio errors");
-assert(liveNode.health.healthy === false, "SoundBridgeAudioNode health marks audio errors unhealthy");
+assert(liveNode.health.healthy === false && liveNode.health.sharedTransportInFlightBlocks === 2, "SoundBridgeAudioNode health marks audio errors unhealthy and records shared status");
 assert(liveNode.health.audioErrors === 1, "SoundBridgeAudioNode health counts audio errors");
 assert(liveNode.health.consecutiveAudioErrors === 1, "SoundBridgeAudioNode health counts consecutive audio errors");
 assert(liveNode.health.lastAudioError === "native render timeout", "SoundBridgeAudioNode health tracks the latest audio error");

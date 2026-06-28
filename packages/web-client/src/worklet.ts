@@ -191,7 +191,7 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       renderBudgetMs?: number;
       renderBudgetExceeded?: boolean;
       renderEngine?: string;
-      bypassed?: boolean; outputLatencyBlocks?: unknown;
+      bypassed?: boolean; outputLatencyBlocks?: unknown; sharedTransportInFlightBlocks?: unknown; sharedInputBufferAllocations?: unknown; sharedInputBufferReuses?: unknown; sharedPooledInputBuffers?: unknown;
       error?: unknown;
     };
     if (typed.type === "destroy") {
@@ -236,7 +236,9 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     if (typed.type === "audio-error") {
       this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
-      this.port.postMessage({ type: "audio-error", error: typed.error });
+      const sharedStatus = typed.sharedTransportInFlightBlocks === undefined ? undefined : this.boundedSharedTransportStats(typed);
+      if (sharedStatus) this.sharedTransportStats = sharedStatus;
+      this.port.postMessage({ type: "audio-error", error: typed.error, ...(sharedStatus ?? {}) });
       return;
     }
 

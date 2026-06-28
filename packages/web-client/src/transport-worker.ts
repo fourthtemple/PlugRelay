@@ -294,10 +294,10 @@ function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unk
   const pendingShared = envelope.id ? pendingSharedAudio.get(envelope.id) : undefined;
   if (pendingShared) {
     const { shared, config } = pendingShared;
-    const sharedStatus = sharedAudioStatusFields(shared);
     clearAudioRequestTimeout(pendingShared.timeout);
     pendingSharedAudio.delete(envelope.id ?? "");
     shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
+    const sharedStatus = sharedAudioStatusFields(shared);
     if (envelope.ok && envelope.payload && typeof envelope.payload === "object") {
       const payload = envelope.payload as { blockId?: number; channels?: ArrayLike<number>[]; latencySamples?: number; renderDurationMs?: number; renderBudgetMs?: number; renderBudgetExceeded?: boolean; renderEngine?: string };
       writeSharedOutputBlock(shared, Math.floor(Number(payload.blockId ?? 0)), Array.isArray(payload.channels) ? payload.channels : []);
@@ -305,7 +305,7 @@ function routeAudioResponse(envelope: { id?: string; ok?: boolean; payload?: unk
         shared.port.postMessage({ type: "process-diagnostics", blockId: payload.blockId, latencySamples: payload.latencySamples, renderEngine: payload.renderEngine, renderDurationMs: payload.renderDurationMs, renderBudgetMs: payload.renderBudgetMs, renderBudgetExceeded: payload.renderBudgetExceeded, ...sharedStatus });
       }
     } else {
-      shared.port.postMessage({ type: "audio-error", error: envelope.error });
+      shared.port.postMessage({ type: "audio-error", blockId: pendingShared.blockId, error: envelope.error, ...sharedStatus });
     }
     pumpSharedAudio(config, shared);
     return true;
@@ -409,7 +409,7 @@ function sendSharedAudioProcess(
 ): void {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     recycleSharedInputBlock(shared, block.channels, block.frames);
-    shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: "SoundBridge worker transport is not connected." });
+    shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: "SoundBridge worker transport is not connected.", ...sharedAudioStatusFields(shared) });
     return;
   }
   const transport = audioBlockTransport(config, block.blockId, block.frames, block.transportLatencySamples);
@@ -444,7 +444,7 @@ function sendSharedAudioProcess(
         pendingSharedAudio.delete(envelope.id);
         rememberStaleRequestId(envelope.id);
         shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
-        shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: audioTimeoutMessage(config.audioRequestTimeoutMs) });
+        shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: audioTimeoutMessage(config.audioRequestTimeoutMs), ...sharedAudioStatusFields(shared) });
         pumpSharedAudio(config, shared);
       })
     });
@@ -456,7 +456,7 @@ function sendSharedAudioProcess(
     pendingSharedAudio.delete(envelope.id);
     shared.inFlightBlocks = Math.max(0, shared.inFlightBlocks - 1);
     recycleSharedInputBlock(shared, block.channels, block.frames);
-    shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: String(error instanceof Error ? error.message : error) });
+    shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: String(error instanceof Error ? error.message : error), ...sharedAudioStatusFields(shared) });
   }
 }
 
@@ -483,7 +483,7 @@ function rejectPendingAudioRequests(error: string): void {
   for (const [id, pending] of pendingSharedAudio) {
     clearAudioRequestTimeout(pending.timeout);
     pending.shared.inFlightBlocks = Math.max(0, pending.shared.inFlightBlocks - 1);
-    pending.shared.port.postMessage({ type: "audio-error", blockId: pending.blockId, error });
+    pending.shared.port.postMessage({ type: "audio-error", blockId: pending.blockId, error, ...sharedAudioStatusFields(pending.shared) });
     pendingSharedAudio.delete(id);
   }
 }

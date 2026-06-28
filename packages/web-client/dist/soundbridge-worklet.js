@@ -221,7 +221,9 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
 
     if (message.type === "audio-error") {
       this.inFlightBlocks = Math.max(0, this.inFlightBlocks - 1);
-      this.port.postMessage({ type: "audio-error", error: message.error });
+      const sharedStatus = message.sharedTransportInFlightBlocks === void 0 ? void 0 : this.boundedSharedTransportStats(message);
+      if (sharedStatus) this.sharedTransportStats = sharedStatus;
+      this.port.postMessage({ type: "audio-error", error: message.error, ...(sharedStatus ?? {}) });
       return;
     }
 

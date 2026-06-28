@@ -243,6 +243,8 @@ sharedMainPort.onmessage({ data: { type: "connect-transport", port: sharedTransp
 sharedTransportPort.onmessage({ data: { type: "shared-audio-status", wakeMode: "atomics", sharedTransportInFlightBlocks: 2 } });
 assert(sharedProcessor.sharedAudioWakeMode === "atomics", "shared worklet transport records the worker wake mode");
 assert(sharedProcessor.sharedTransportStats.sharedTransportInFlightBlocks === 2, "shared worklet transport records bounded worker status");
+sharedTransportPort.onmessage({ data: { type: "audio-error", error: "shared timeout", sharedTransportInFlightBlocks: 0 } });
+assert(sharedProcessor.sharedTransportStats.sharedTransportInFlightBlocks === 0 && sharedMainPort.messages.some((message) => message.type === "audio-error" && message.sharedTransportInFlightBlocks === 0), "shared worklet transport forwards fresh worker error status");
 const sharedWarmup = [new Float32Array(2)];
 sharedProcessor.process([[Float32Array.from([7, 7])]], [sharedWarmup]);
 assert(sharedTransportPort.messages.length === 0, "shared worklet transport avoids per-block port messages");

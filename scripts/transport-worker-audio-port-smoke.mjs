@@ -257,7 +257,7 @@ assert(
     message.renderDurationMs === 2.5 &&
     message.renderBudgetMs === 1.333 &&
     message.renderBudgetExceeded === true &&
-    message.sharedTransportInFlightBlocks === 1 &&
+    message.sharedTransportInFlightBlocks === 0 &&
     message.sharedInputBufferAllocations === 1
   ),
   "transport worker forwards shared path render timing and shared-ring diagnostics"
@@ -376,7 +376,7 @@ assert(encodedBinaryEnvelopes.at(-1)?.payload.renderTimeoutMs === 30, "transport
 const timedOutSharedId = encodedBinaryEnvelopes.at(-1)?.id;
 runTimerWithDelay(30);
 assert(
-  sharedTimeoutPort.messages.some((message) => message.type === "audio-error" && message.blockId === 50 && /timed out/.test(message.error)),
+  sharedTimeoutPort.messages.some((message) => message.type === "audio-error" && message.blockId === 50 && /timed out/.test(message.error) && message.sharedTransportInFlightBlocks === 0),
   "transport worker times out shared audio requests"
 );
 assert(socket.sent.length === sentBeforeSharedTimeout + 2, "shared timeout releases capacity and drains the next queued block");

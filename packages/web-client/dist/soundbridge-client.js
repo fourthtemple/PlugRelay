@@ -1124,6 +1124,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     }
 
     if (message.type === "audio-error") {
+      if (message.sharedTransportInFlightBlocks !== void 0) this.recordStats(message);
       this.recordAudioError(message.error ?? message);
       this.dispatchEvent(new CustomEvent("audio-error", { detail: message.error ?? message }));
       return;
