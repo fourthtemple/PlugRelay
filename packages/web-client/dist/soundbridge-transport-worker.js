@@ -171,7 +171,7 @@ function sendAudioProcess(port, config, message) {
   const frames = boundedFrames(message.frames ?? channels[0]?.length ?? 128);
   const recyclableInput = recyclableInputChannels(channels, frames);
   const blockId = Math.floor(Number(message.blockId ?? 0));
-  const transport = audioBlockTransport(config, blockId, frames, message.transportLatencySamples);
+  const transport = audioBlockTransport(config, blockId, frames, message.reportedLatencySamples ?? message.transportLatencySamples);
   const binary = config.audioTransport === "binary";
   const payload = {
     instanceId: config.instanceId,
@@ -459,12 +459,12 @@ function readSharedInputBlock(shared, slotIndex) {
   return { blockId, frames, channels, transportLatencySamples };
 }
 
-function audioBlockTransport(config, blockId, frames, transportLatencySamples) {
+function audioBlockTransport(config, blockId, frames, reportedLatencySamples) {
   return liveTransportForBlock({
     sampleRate: config.sampleRate,
     maxBlockSize: frames,
     blockId,
-    reportedLatencySamples: transportLatencySamples,
+    reportedLatencySamples,
     compensateOutputLatency: true
   });
 }

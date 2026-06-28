@@ -123,9 +123,10 @@ const directProcessor = new processorCtor({
 const directMainPort = lastPort;
 const directTransportPort = new TestPort();
 directMainPort.onmessage({ data: { type: "connect-transport", port: directTransportPort } });
+directMainPort.onmessage({ data: { type: "set-plugin-latency", pluginLatencySamples: 32 } });
 directProcessor.process([[Float32Array.from([5, 5])]], [[new Float32Array(2)]]);
 assert(directTransportPort.messages[0]?.type === "process", "direct worklet transport posts process blocks to the transport port");
-assert(directTransportPort.messages[0]?.transportLatencySamples === 2, "direct worklet transport posts current output latency samples");
+assert(directTransportPort.messages[0]?.transportLatencySamples === 2 && directTransportPort.messages[0]?.reportedLatencySamples === 34, "direct worklet transport posts output and reported latency samples");
 assert(!directMainPort.messages.some((message) => message.type === "process"), "direct worklet transport avoids page-thread process messages");
 const recycledInput = directTransportPort.messages[0].channels[0];
 directTransportPort.onmessage({

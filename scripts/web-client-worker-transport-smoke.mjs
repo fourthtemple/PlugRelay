@@ -374,7 +374,7 @@ const refreshedLatency = await liveNode.refreshLatency(384);
 const latencyRequest = FakeWorker.last.messages.at(-1);
 assert(latencyRequest.envelope.command === "getLatency", "SoundBridgeAudioNode refreshLatency requests daemon latency");
 assert(latencyRequest.envelope.payload.transportLatencySamples === 384 && FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "set-output-latency" && message.outputLatencyBlocks === 3), "refreshLatency retargets worklet output latency and daemon latency");
-assert(refreshedLatency.pluginLatencySamples === 96, "refreshLatency stores plugin latency in health");
+assert(refreshedLatency.pluginLatencySamples === 96 && FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "set-plugin-latency" && message.pluginLatencySamples === 96), "refreshLatency stores plugin latency in health and updates worklet compensation");
 assert(refreshedLatency.reportedLatencySamples === 480, "refreshLatency stores plugin plus transport latency in health");
 assert(refreshedLatency.reportedLatencyMs === 10, "refreshLatency stores reported latency milliseconds in health");
 assert(refreshedLatency.latencyRefreshes === 1, "refreshLatency counts latency refreshes");
@@ -383,7 +383,7 @@ assert(healthChangeEvents === 3 && healthChangeDetail?.reportedLatencySamples ==
 FakeAudioWorkletNode.last.port.onmessage({
   data: { type: "process-diagnostics", blockId: 87, latencySamples: 144, renderEngine: "native-vst3", renderDurationMs: 1.25, renderBudgetMs: 2.667, renderBudgetExceeded: false }
 });
-assert(liveNode.health.pluginLatencySamples === 144, "SoundBridgeAudioNode updates plugin latency from render diagnostics");
+assert(liveNode.health.pluginLatencySamples === 144 && FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "set-plugin-latency" && message.pluginLatencySamples === 144), "SoundBridgeAudioNode updates plugin latency from render diagnostics and worklet compensation");
 assert(liveNode.health.reportedLatencySamples === 528, "SoundBridgeAudioNode combines render latency with transport latency");
 assert(liveNode.health.reportedLatencyMs === 11, "render diagnostics update reported latency milliseconds");
 assert(latencyEvents === 4 && latencyDetail?.health?.pluginLatencySamples === 144, "render latency changes emit latencychange");

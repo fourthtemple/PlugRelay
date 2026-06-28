@@ -29,6 +29,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.latencyPressureThresholdBlocks = this.boundedInteger(processorOptions.latencyPressureThresholdBlocks, 4, 1, 64);
     this.responseJitterThresholdBlocks = this.boundedInteger(processorOptions.responseJitterThresholdBlocks, 4, 0, 64);
     this.statsIntervalBlocks = this.boundedInteger(processorOptions.statsIntervalBlocks, 128, 8, 1024);
+    this.pluginLatencySamples = 0;
     this.blockId = 0;
     this.lastFrames = 128;
     this.underruns = 0;
@@ -205,6 +206,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     }
 
     if (message.type === "set-output-latency") { this.setOutputLatencyBlocks(message.outputLatencyBlocks); return; }
+    if (message.type === "set-plugin-latency") { this.pluginLatencySamples = this.boundedInteger(message.pluginLatencySamples, this.pluginLatencySamples, 0, 1048576); return; }
 
     if (message.type === "shared-audio-status") {
       if (message.wakeMode === "atomics" || message.wakeMode === "timer") this.sharedAudioWakeMode = message.wakeMode;
@@ -313,7 +315,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       blockId,
       frames,
       channels,
-      transportLatencySamples: this.transportLatencySamples()
+      transportLatencySamples: this.transportLatencySamples(),
+      reportedLatencySamples: this.reportedLatencySamples()
     };
     const transfer = channels.map((channel) => channel.buffer);
     if (this.inFlightBlocks >= this.maxInFlightBlocks) {
@@ -412,7 +415,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     Atomics.store(control, metadataOffset + SoundBridgeAudioProcessor.sharedBlockIdOffset, blockId);
     Atomics.store(control, metadataOffset + SoundBridgeAudioProcessor.sharedBlockFramesOffset, frames);
     Atomics.store(control, metadataOffset + SoundBridgeAudioProcessor.sharedBlockChannelsOffset, Math.min(channels.length, shared.channels));
-    Atomics.store(control, metadataOffset + 3, this.transportLatencySamples());
+    Atomics.store(control, metadataOffset + 3, this.reportedLatencySamples());
     const base = this.sharedAudioOffset(shared, slotIndex);
     for (let channelIndex = 0; channelIndex < shared.channels; channelIndex += 1) {
       const offset = base + channelIndex * shared.frames;
@@ -592,6 +595,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
   }
 
   transportLatencySamples() { return this.outputLatencyBlocks * this.lastFrames; }
+  reportedLatencySamples() { return this.boundedInteger(this.transportLatencySamples() + this.pluginLatencySamples, this.transportLatencySamples(), 0, 1048576); }
 
   takeInputBuffer(frames) {
     const pool = this.inputBufferPool.get(frames);

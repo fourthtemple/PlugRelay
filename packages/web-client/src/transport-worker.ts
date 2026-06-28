@@ -207,12 +207,12 @@ function clearPendingSharedAudioRequests(shared: SharedAudioPort): void {
   }
 }
 
-function sendAudioProcess(port: MessagePort, config: AudioPortConfig, message: { blockId?: number; frames?: number; channels?: ArrayLike<number>[]; transportLatencySamples?: number }): void {
+function sendAudioProcess(port: MessagePort, config: AudioPortConfig, message: { blockId?: number; frames?: number; channels?: ArrayLike<number>[]; transportLatencySamples?: number; reportedLatencySamples?: number }): void {
   const channels = Array.isArray(message.channels) ? message.channels : [];
   const frames = boundedFrames(message.frames ?? channels[0]?.length ?? 128);
   const recyclableInput = recyclableInputChannels(channels, frames);
   const blockId = Math.floor(Number(message.blockId ?? 0));
-  const transport = audioBlockTransport(config, blockId, frames, message.transportLatencySamples);
+  const transport = audioBlockTransport(config, blockId, frames, message.reportedLatencySamples ?? message.transportLatencySamples);
   const binary = config.audioTransport === "binary";
   const payload = {
     instanceId: config.instanceId,
@@ -505,12 +505,12 @@ function readSharedInputBlock(shared: SharedAudioPort, slotIndex: number): { blo
   return { blockId, frames, channels, transportLatencySamples };
 }
 
-function audioBlockTransport(config: AudioPortConfig, blockId: number, frames: number, transportLatencySamples: unknown) {
+function audioBlockTransport(config: AudioPortConfig, blockId: number, frames: number, reportedLatencySamples: unknown) {
   return liveTransportForBlock({
     sampleRate: config.sampleRate,
     maxBlockSize: frames,
     blockId,
-    reportedLatencySamples: transportLatencySamples,
+    reportedLatencySamples,
     compensateOutputLatency: true
   });
 }

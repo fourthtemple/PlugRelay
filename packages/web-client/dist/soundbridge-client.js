@@ -814,8 +814,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.maxOutputLatencyBlocks = options.maxOutputLatencyBlocks;
     this.sharedBufferBlocks = options.sharedBufferBlocks;
     this.maxBlockFrames = options.maxBlockFrames;
-    this.audioTransport = options.audioTransport;
-    this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
+    this.audioTransport = options.audioTransport; this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.inFlightBlocks = 0;
     this.destroyed = false;
     this.bypassed = options.bypassed;
@@ -1016,6 +1015,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       0,
       1048576
     );
+    this.node.port.postMessage({ type: "set-plugin-latency", pluginLatencySamples: this.pluginLatencySamples });
     this.latencyRefreshes = Math.min(1024, this.latencyRefreshes + 1);
     if (
       this.pluginLatencySamples !== previous.pluginLatencySamples ||
@@ -1156,7 +1156,7 @@ export class SoundBridgeAudioNode extends EventTarget {
         sampleRate: this.sampleRate,
         maxBlockSize: frames,
         blockId: message.blockId,
-        reportedLatencySamples: message.transportLatencySamples,
+        reportedLatencySamples: message.reportedLatencySamples ?? combinedAudioNodeLatencySamples(this.pluginLatencySamples, boundedAudioNodeInteger(message.transportLatencySamples, this.transportLatencySamples, 0, 1048576)),
         compensateOutputLatency: true
       }),
       timestamp: performance.now(),
@@ -1417,6 +1417,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     const previous = { pluginLatencySamples: this.pluginLatencySamples, transportLatencySamples: this.transportLatencySamples, reportedLatencySamples: this.reportedLatencySamples };
     this.pluginLatencySamples = pluginLatencySamples;
     this.reportedLatencySamples = combinedAudioNodeLatencySamples(this.pluginLatencySamples, this.transportLatencySamples);
+    this.node.port.postMessage({ type: "set-plugin-latency", pluginLatencySamples: this.pluginLatencySamples });
     this.latencyChangeEvents = Math.min(1024, this.latencyChangeEvents + 1);
     this.lastLatencyChangeDirection = "changed";
     this.dispatchEvent(new CustomEvent("latencychange", { detail: { direction: "changed", previous, diagnostics, health: this.health } }));

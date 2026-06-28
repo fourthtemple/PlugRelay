@@ -89,10 +89,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.sampleRate = context.sampleRate;
     this.responseJitterThresholdBlocks = options.responseJitterThresholdBlocks;
     this.maxInFlightBlocks = options.maxInFlightBlocks; this.minOutputLatencyBlocks = options.minOutputLatencyBlocks; this.maxOutputLatencyBlocks = options.maxOutputLatencyBlocks; this.sharedBufferBlocks = options.sharedBufferBlocks; this.maxBlockFrames = options.maxBlockFrames;
-    this.audioTransport = options.audioTransport;
-    this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
-    this.maxConsecutiveRenderBudgetMisses = options.maxConsecutiveRenderBudgetMisses;
-    this.maxConsecutiveAudioErrors = options.maxConsecutiveAudioErrors;
+    this.audioTransport = options.audioTransport; this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
+    this.maxConsecutiveRenderBudgetMisses = options.maxConsecutiveRenderBudgetMisses; this.maxConsecutiveAudioErrors = options.maxConsecutiveAudioErrors;
     this.maxConsecutiveTransportPressureEvents = options.maxConsecutiveTransportPressureEvents;
     this.transportPressureAutoBypassReasons = options.transportPressureAutoBypassReasons;
     this.bypassed = options.bypassed;
@@ -251,6 +249,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       0,
       1_048_576
     );
+    this.node.port.postMessage({ type: "set-plugin-latency", pluginLatencySamples: this.pluginLatencySamples });
     this.latencyRefreshes = Math.min(1024, this.latencyRefreshes + 1);
     if (
       this.pluginLatencySamples !== previous.pluginLatencySamples ||
@@ -358,7 +357,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       latencyPressureThresholdBlocks?: number;
       latencyMissThresholdBlocks?: number;
       latencyRecoveryBlocks?: number;
-      transportLatencySamples?: number;
+      transportLatencySamples?: number; reportedLatencySamples?: number;
       latencyIncreases?: number;
       latencyDecreases?: number;
       consecutiveLowDeadlineLeadBlocks?: number;
@@ -439,7 +438,7 @@ export class SoundBridgeAudioNode extends EventTarget {
         sampleRate: this.sampleRate,
         maxBlockSize: frames,
         blockId: typed.blockId,
-        reportedLatencySamples: typed.transportLatencySamples,
+        reportedLatencySamples: typed.reportedLatencySamples ?? combinedAudioNodeLatencySamples(this.pluginLatencySamples, boundedInteger(typed.transportLatencySamples, this.transportLatencySamples, 0, 1_048_576)),
         compensateOutputLatency: true
       }),
       timestamp: performance.now(),
@@ -737,6 +736,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     const previous = { pluginLatencySamples: this.pluginLatencySamples, transportLatencySamples: this.transportLatencySamples, reportedLatencySamples: this.reportedLatencySamples };
     this.pluginLatencySamples = pluginLatencySamples;
     this.reportedLatencySamples = combinedAudioNodeLatencySamples(this.pluginLatencySamples, this.transportLatencySamples);
+    this.node.port.postMessage({ type: "set-plugin-latency", pluginLatencySamples: this.pluginLatencySamples });
     this.latencyChangeEvents = Math.min(1024, this.latencyChangeEvents + 1);
     this.lastLatencyChangeDirection = "changed";
     this.dispatchEvent(new CustomEvent("latencychange", { detail: { direction: "changed", previous, diagnostics, health: this.health } }));
