@@ -274,7 +274,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       const source = input[channelIndex] ?? input[0];
       const copy = this.takeInputBuffer(frames);
       if (source) {
-        copy.set(source.subarray(0, frames));
+        copy.set(source.length === frames ? source : source.subarray(0, frames));
       } else {
         copy.fill(0);
       }
@@ -291,7 +291,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         continue;
       }
       if (source) {
-        destination.set(source.subarray(0, frames));
+        destination.set(source.length === frames ? source : source.subarray(0, frames));
       } else {
         destination.fill(0);
       }
@@ -328,7 +328,8 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       transportLatencySamples,
       reportedLatencySamples: this.reportedLatencySamples(transportLatencySamples)
     };
-    const transfer = channels.map((channel) => channel.buffer);
+    const transfer = new Array(channels.length);
+    for (let channelIndex = 0; channelIndex < channels.length; channelIndex += 1) transfer[channelIndex] = channels[channelIndex].buffer;
     this.inFlightBlocks += 1;
     (this.transportPort ?? this.port).postMessage(processMessage, transfer);
   }
@@ -426,7 +427,7 @@ class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       const offset = base + channelIndex * shared.frames;
       const source = channels[channelIndex] ?? channels[0];
       if (source) {
-        audio.set(source.subarray(0, frames), offset);
+        audio.set(source.length === frames ? source : source.subarray(0, frames), offset);
         if (frames < shared.frames) {
           audio.fill(0, offset + frames, offset + shared.frames);
         }
