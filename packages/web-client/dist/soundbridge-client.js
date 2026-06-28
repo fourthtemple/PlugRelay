@@ -4721,11 +4721,23 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
   sendMidiEvents(events) { return this.client.sendMidiEvents(this.requireControllableInstance(), events); }
 
   async recreate() {
+    const previousInstanceId = this.instanceId;
+    const previousHealth = this.health;
     this.destroyed = false;
     this.recoveryInProgress = false;
     this.processTimeoutRecoveryAttempts = 0;
+    this.dispatchEvent(new CustomEvent("recreate-started", { detail: { previousInstanceId, health: previousHealth } }));
     await this.destroyInstance().catch(() => void 0);
-    await this.createInstance();
+    try {
+      await this.createInstance();
+      const health = this.health;
+      this.dispatchEvent(new CustomEvent("recreated", { detail: { previousInstanceId, health } }));
+      return health;
+    } catch (error) {
+      this.failClosed(error, liveEffectFailureReason(error));
+      this.dispatchEvent(new CustomEvent("recreate-failed", { detail: { error, previousInstanceId, health: this.health } }));
+      throw error;
+    }
   }
 
   async destroy() {
