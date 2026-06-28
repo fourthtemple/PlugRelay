@@ -403,14 +403,17 @@ function encodeBinaryAudioEnvelope(envelope, channels) {
   delete header.payload.inputBuses;
   delete header.payload.outputBuses;
   const headerBytes = BINARY_TEXT_ENCODER.encode(JSON.stringify(header));
-  const blocks = [mainBlock, ...inputBuses, ...outputBuses];
-  const sampleBytes = blocks.reduce((total, block) => total + block.channels.length * block.frames * FLOAT_BYTES, 0);
+  const sampleBytes = binaryBlockBytes(mainBlock) + binaryBlocksBytes(inputBuses) + binaryBlocksBytes(outputBuses);
   const buffer = new ArrayBuffer(BINARY_AUDIO_HEADER_BYTES + headerBytes.length + sampleBytes);
   const view = new DataView(buffer);
   view.setUint32(0, BINARY_AUDIO_MAGIC, false);
   view.setUint32(4, headerBytes.length, false);
   new Uint8Array(buffer, BINARY_AUDIO_HEADER_BYTES, headerBytes.length).set(headerBytes);
-  writeBinaryBlocks(view, BINARY_AUDIO_HEADER_BYTES + headerBytes.length, blocks);
+  const target = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  let offset = BINARY_AUDIO_HEADER_BYTES + headerBytes.length;
+  offset = writeBinaryBlockSamples(view, target, offset, mainBlock);
+  offset = writeBinaryBlocks(view, target, offset, inputBuses);
+  writeBinaryBlocks(view, target, offset, outputBuses);
   return buffer;
 }
 
@@ -507,21 +510,34 @@ function busHeaders(buses) {
   return buses.map((bus) => ({ index: bus.index, channels: bus.channels.length, frames: bus.frames }));
 }
 
-function writeBinaryBlocks(view, offset, blocks) {
-  const target = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-  for (const block of blocks) {
-    for (const channel of block.channels) {
-      if (LITTLE_ENDIAN_FLOATS) {
-        target.set(new Uint8Array(channel.buffer, channel.byteOffset, channel.byteLength), offset);
-        offset += channel.byteLength;
-        continue;
-      }
-      for (const sample of channel) {
-        view.setFloat32(offset, sample, true);
-        offset += FLOAT_BYTES;
-      }
+function binaryBlockBytes(block) {
+  return block.channels.length * block.frames * FLOAT_BYTES;
+}
+
+function binaryBlocksBytes(blocks) {
+  let bytes = 0;
+  for (const block of blocks) bytes += binaryBlockBytes(block);
+  return bytes;
+}
+
+function writeBinaryBlocks(view, target, offset, blocks) {
+  for (const block of blocks) offset = writeBinaryBlockSamples(view, target, offset, block);
+  return offset;
+}
+
+function writeBinaryBlockSamples(view, target, offset, block) {
+  for (const channel of block.channels) {
+    if (LITTLE_ENDIAN_FLOATS) {
+      target.set(new Uint8Array(channel.buffer, channel.byteOffset, channel.byteLength), offset);
+      offset += channel.byteLength;
+      continue;
+    }
+    for (const sample of channel) {
+      view.setFloat32(offset, sample, true);
+      offset += FLOAT_BYTES;
     }
   }
+  return offset;
 }
 
 function readBinaryBlock(view, offset, channelCount, frames) {
