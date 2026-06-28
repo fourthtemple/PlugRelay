@@ -806,6 +806,8 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.instanceId = options.instanceId;
     this.sampleRate = context.sampleRate;
     this.maxInFlightBlocks = options.maxInFlightBlocks;
+    this.maxOutputLatencyBlocks = options.maxOutputLatencyBlocks;
+    this.sharedBufferBlocks = options.sharedBufferBlocks;
     this.audioTransport = options.audioTransport;
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.inFlightBlocks = 0;
@@ -1039,6 +1041,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       maxInFlightBlocks: this.maxInFlightBlocks,
       queuedOutputBlocks: this.queuedOutputBlocks,
       outputLatencyBlocks: this.outputLatencyBlocks,
+      maxOutputLatencyBlocks: this.maxOutputLatencyBlocks,
       transportLatencySamples: this.transportLatencySamples,
       pluginLatencySamples: this.pluginLatencySamples,
       reportedLatencySamples: this.reportedLatencySamples,
@@ -1062,6 +1065,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       droppedInputBlocks: this.droppedInputBlocks,
       underruns: this.underruns,
       sharedAudioEnabled: this.sharedAudioEnabled,
+      sharedBufferBlocks: this.sharedBufferBlocks,
       sharedInputQueuedBlocks: this.sharedInputQueuedBlocks,
       sharedInputQueuedMaxBlocks: this.sharedInputQueuedMaxBlocks,
       sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks,

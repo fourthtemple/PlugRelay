@@ -31,7 +31,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private readonly responseJitterThresholdBlocks: number;
   private inFlightBlocks = 0;
   private destroyed = false;
-  private readonly maxInFlightBlocks: number;
+  private readonly maxInFlightBlocks: number; private readonly maxOutputLatencyBlocks: number; private readonly sharedBufferBlocks: number;
   private readonly audioTransport: "binary" | "json";
   private readonly audioRequestTimeoutMs: number;
   private bypassed = false;
@@ -88,7 +88,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.instanceId = options.instanceId;
     this.sampleRate = context.sampleRate;
     this.responseJitterThresholdBlocks = options.responseJitterThresholdBlocks;
-    this.maxInFlightBlocks = options.maxInFlightBlocks;
+    this.maxInFlightBlocks = options.maxInFlightBlocks; this.maxOutputLatencyBlocks = options.maxOutputLatencyBlocks; this.sharedBufferBlocks = options.sharedBufferBlocks;
     this.audioTransport = options.audioTransport;
     this.audioRequestTimeoutMs = options.audioRequestTimeoutMs;
     this.maxConsecutiveRenderBudgetMisses = options.maxConsecutiveRenderBudgetMisses;
@@ -281,7 +281,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       inFlightBlocks: this.workletInFlightBlocks ?? this.inFlightBlocks,
       maxInFlightBlocks: this.maxInFlightBlocks,
       queuedOutputBlocks: this.queuedOutputBlocks,
-      outputLatencyBlocks: this.outputLatencyBlocks,
+      outputLatencyBlocks: this.outputLatencyBlocks, maxOutputLatencyBlocks: this.maxOutputLatencyBlocks,
       transportLatencySamples: this.transportLatencySamples,
       pluginLatencySamples: this.pluginLatencySamples,
       reportedLatencySamples: this.reportedLatencySamples,
@@ -304,7 +304,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       staleOutputBlocks: this.staleOutputBlocks,
       droppedInputBlocks: this.droppedInputBlocks,
       underruns: this.underruns,
-      sharedAudioEnabled: this.sharedAudioEnabled,
+      sharedAudioEnabled: this.sharedAudioEnabled, sharedBufferBlocks: this.sharedBufferBlocks,
       sharedInputQueuedBlocks: this.sharedInputQueuedBlocks, sharedInputQueuedMaxBlocks: this.sharedInputQueuedMaxBlocks,
       sharedOutputQueuedBlocks: this.sharedOutputQueuedBlocks, sharedOutputQueuedMaxBlocks: this.sharedOutputQueuedMaxBlocks,
       sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,

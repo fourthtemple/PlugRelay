@@ -64,6 +64,7 @@ export interface SoundBridgeAudioNodeHealth {
   maxInFlightBlocks: number;
   queuedOutputBlocks: number;
   outputLatencyBlocks: number;
+  maxOutputLatencyBlocks: number;
   transportLatencySamples: number;
   pluginLatencySamples: number;
   reportedLatencySamples: number;
@@ -87,6 +88,7 @@ export interface SoundBridgeAudioNodeHealth {
   droppedInputBlocks: number;
   underruns: number;
   sharedAudioEnabled: boolean;
+  sharedBufferBlocks: number;
   sharedInputQueuedBlocks: number;
   sharedInputQueuedMaxBlocks: number;
   sharedOutputQueuedBlocks: number;

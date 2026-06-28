@@ -49,6 +49,7 @@ const node = await SoundBridgeAudioNode.createLivePerformance(fakeContext, fakeC
   outputChannels: 2,
   workletUrl: "/soundbridge-worklet.js"
 });
+assert(node.health.maxOutputLatencyBlocks === 4 && node.health.sharedBufferBlocks === 8, "AudioNode health reports fixed live worklet limits");
 
 let statsDetail;
 let deadlineMissEvents = 0;
