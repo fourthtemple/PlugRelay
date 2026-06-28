@@ -705,7 +705,7 @@ export function createNativeWorkerProcesses({
       const bus = value[busPosition];
       if (!bus || typeof bus !== "object" || Array.isArray(bus)) continue;
       const index = normalizeBusIndex(bus.index);
-      if (index === undefined) continue;
+      if (index === undefined || index === 0) continue;
       if (byIndex[index] !== undefined) {
         continue;
       }
