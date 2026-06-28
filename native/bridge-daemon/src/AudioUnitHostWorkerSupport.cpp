@@ -595,22 +595,20 @@ bool parseAudioBuses(
     return true;
   }
 
-  std::stringstream stream(encoded);
-  std::string token;
   std::set<std::uint32_t> seenIndexes;
-  while (std::getline(stream, token, ';')) {
-    if (token.empty()) {
-      return false;
-    }
+  const char* cursor = encoded.data();
+  const char* const end = cursor + encoded.size();
+  while (cursor < end) {
+    const char* const tokenEnd = std::find(cursor, end, ';');
+    if (cursor == tokenEnd) return false;
     if (seenIndexes.size() >= kMaxWorkerChannels) {
       return false;
     }
-    const auto separator = token.find('=');
-    if (separator == std::string::npos) {
-      return false;
-    }
+    const char* const separator = std::find(cursor, tokenEnd, '=');
+    if (separator == tokenEnd) return false;
     std::uint32_t index = 0;
-    if (!parseUint32Arg(token.substr(0, separator).c_str(), 0, kMaxWorkerChannels - 1, index)) {
+    const auto parsed = std::from_chars(cursor, separator, index);
+    if (parsed.ec != std::errc{} || parsed.ptr != separator || index >= kMaxWorkerChannels) {
       return false;
     }
     if (!seenIndexes.insert(index).second) {
@@ -618,7 +616,8 @@ bool parseAudioBuses(
     }
     buses.push_back(IndexedAudioBus{
         index,
-        parseChannels(token.substr(separator + 1), frames)});
+        parseChannels(std::string(separator + 1, static_cast<std::size_t>(tokenEnd - separator - 1)), frames)});
+    cursor = tokenEnd == end ? end : tokenEnd + 1;
   }
   return true;
 }
