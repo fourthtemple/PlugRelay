@@ -30,14 +30,14 @@ export function wetMixedChannels(
   wetMix: number,
   maxFrames = Number.MAX_SAFE_INTEGER
 ): ArrayLike<number>[] {
+  if (wetMix <= 0) {
+    return dryChannels(dryInput ?? [], outputChannels, maxFrames);
+  }
   const wetOutput = boundedLiveEffectChannels(wetChannels, outputChannels, maxFrames);
   if (wetMix >= 1) {
     return wetOutput;
   }
   const dry = dryChannels(dryInput ?? [], outputChannels, maxFrames);
-  if (wetMix <= 0) {
-    return dry;
-  }
   return Array.from({ length: outputChannels }, (_, channelIndex) => {
     const wet = wetOutput.length > 0 ? wetOutput[channelIndex % wetOutput.length] : [];
     const dryChannel = dry[channelIndex];
@@ -77,9 +77,10 @@ export function boundedLiveEffectChannels(
 }
 
 export function boundedLiveEffectBusBlocks(buses: BinaryAudioBusBlock[] | undefined, maxFrames: number): BinaryAudioBusBlock[] | undefined {
+  if (!buses?.length) return undefined;
   const bounded: BinaryAudioBusBlock[] = [];
   const seen = new Set<number>();
-  for (const bus of buses ?? []) {
+  for (const bus of buses) {
     const index = Math.floor(Number(bus.index));
     if (!Number.isFinite(index) || index < 0 || index > 31 || seen.has(index)) continue;
     seen.add(index);

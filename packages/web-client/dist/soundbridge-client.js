@@ -5651,14 +5651,14 @@ function transitionLiveEffectOutputChannels(channels, previousTail, previousPath
 }
 
 function wetMixedLiveEffectChannels(wetChannels, dryInput, outputChannels, wetMix, maxFrames = Number.MAX_SAFE_INTEGER) {
+  if (wetMix <= 0) {
+    return dryLiveEffectChannels(dryInput ?? [], outputChannels, maxFrames);
+  }
   const wetOutput = boundedLiveEffectChannels(wetChannels, outputChannels, maxFrames);
   if (wetMix >= 1) {
     return wetOutput;
   }
   const dry = dryLiveEffectChannels(dryInput ?? [], outputChannels, maxFrames);
-  if (wetMix <= 0) {
-    return dry;
-  }
   return Array.from({ length: outputChannels }, (_, channelIndex) => {
     const wet = wetOutput.length > 0 ? wetOutput[channelIndex % wetOutput.length] : [];
     const dryChannel = dry[channelIndex];
@@ -5691,9 +5691,10 @@ function boundedLiveEffectChannels(channels, channelCount, maxFrames) {
 }
 
 function boundedLiveEffectBusBlocks(buses, maxFrames) {
+  if (!buses?.length) return void 0;
   const bounded = [];
   const seen = new Set();
-  for (const bus of buses ?? []) {
+  for (const bus of buses) {
     const index = Math.floor(Number(bus.index));
     if (!Number.isFinite(index) || index < 0 || index > 31 || seen.has(index)) continue;
     seen.add(index);
