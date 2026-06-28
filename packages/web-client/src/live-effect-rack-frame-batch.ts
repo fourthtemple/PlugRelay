@@ -119,20 +119,21 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       return this.schedulerDryResult(frame, targets, targetCount, "frame-batch-deadline-pressure");
     }
     const startedAt = this.nowMs();
-    const targetResults: Array<LiveEffectRackFrameBatchTargetResult | undefined> = Array.from({ length: targetCount });
-    const targetPromises = Array.from({ length: targetCount }, (_unused, index) =>
-      this.processTarget(frame, targets[index], index).then((result) => {
+    const targetResults = new Array<LiveEffectRackFrameBatchTargetResult | undefined>(targetCount);
+    const targetPromises = new Array<Promise<LiveEffectRackFrameBatchTargetResult>>(targetCount);
+    for (let index = 0; index < targetCount; index += 1) {
+      targetPromises[index] = this.processTarget(frame, targets[index], index).then((result) => {
         targetResults[index] = result;
         return result;
-      })
-    );
+      });
+    }
     const processing = Promise.all(targetPromises);
     try {
       const results = await withLiveEffectTimeout(processing, this.processTimeoutMs);
       return this.recordProcessBudget(frame, results, this.nowMs() - startedAt);
     } catch (error) {
       processing.catch(() => undefined);
-      return this.recordProcessTimeout(frame, targets, targetCount, this.nowMs() - startedAt, error, targetResults.slice());
+      return this.recordProcessTimeout(frame, targets, targetCount, this.nowMs() - startedAt, error, copyCompletedResults(targetResults));
     }
   }
 
@@ -311,14 +312,9 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       this.processBudgetTripped = true;
       this.recoveryDryBlocks = 0;
       this.lastError = new Error("frame_batch_process_budget_exceeded");
-      const result = this.result(
-        frame,
-        results.map((result) => this.dryTargetFromScheduledResult(result, this.lastError)),
-        boundedDurationMs,
-        true,
-        false,
-        this.lastError
-      );
+      const dryResults = new Array<LiveEffectRackFrameBatchTargetResult>(results.length);
+      for (let index = 0; index < results.length; index += 1) dryResults[index] = this.dryTargetFromScheduledResult(results[index], this.lastError);
+      const result = this.result(frame, dryResults, boundedDurationMs, true, false, this.lastError);
       this.dispatchEvent(new CustomEvent("frame-batch-process-budget-exceeded", { detail: { result, health: this.health } }));
       this.dispatchEvent(new CustomEvent("frame-batch-process-budget-tripped", { detail: { result, health: this.health } }));
       return result;
@@ -347,9 +343,10 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       this.processTimeoutMs,
       boundedOptionalNumber(totalDurationMs, 0, 60000) ?? 0
     );
-    const results = Array.from({ length: targetCount }, (_unused, index) =>
-      completedResults[index] ?? this.dryTargetResult(frame, targets[index], index, error, "frame-batch-process-timeout")
-    );
+    const results = new Array<LiveEffectRackFrameBatchTargetResult>(targetCount);
+    for (let index = 0; index < targetCount; index += 1) {
+      results[index] = completedResults[index] ?? this.dryTargetResult(frame, targets[index], index, error, "frame-batch-process-timeout");
+    }
     this.recordResponseDeadlineLead(results, boundedDurationMs);
     const result = this.result(frame, results, boundedDurationMs, false, true, error);
     this.dispatchEvent(new CustomEvent("frame-batch-process-timeout", { detail: { result, health: this.health } }));
@@ -394,9 +391,8 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     const timeoutActive = this.processTimeoutTripped;
     const error = this.lastError ?? new Error(timeoutActive ? "frame_batch_process_timeout" : "frame_batch_process_budget_exceeded");
     const renderEngine = timeoutActive ? "frame-batch-process-timeout" : "frame-batch-process-budget-exceeded";
-    const results = Array.from({ length: targetCount }, (_unused, index) =>
-      this.dryTargetResult(frame, targets[index], index, error, renderEngine)
-    );
+    const results = new Array<LiveEffectRackFrameBatchTargetResult>(targetCount);
+    for (let index = 0; index < targetCount; index += 1) results[index] = this.dryTargetResult(frame, targets[index], index, error, renderEngine);
     const result = this.result(frame, results, 0, false, false, error);
     this.maybeRecoverFromProcessBudget();
     this.maybeRecoverFromProcessTimeout();
@@ -409,9 +405,8 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     targetCount: number,
     renderEngine: string
   ): LiveEffectRackFrameBatchResult {
-    const results = Array.from({ length: targetCount }, (_unused, index) =>
-      this.schedulerDryTargetResult(frame, targets[index], index, renderEngine)
-    );
+    const results = new Array<LiveEffectRackFrameBatchTargetResult>(targetCount);
+    for (let index = 0; index < targetCount; index += 1) results[index] = this.schedulerDryTargetResult(frame, targets[index], index, renderEngine);
     const result = this.result(frame, results, 0, false, false, undefined);
     this.dispatchEvent(new CustomEvent(renderEngine, { detail: { result, health: this.health, deadlinePressure: frame.deadlinePressure } }));
     return result;
@@ -464,24 +459,21 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
     processTimedOut: boolean,
     error: unknown
   ): LiveEffectRackFrameBatchResult {
-    const failedTargets = results.filter((result) => result.error !== undefined || result.healthy === false).length;
-    const dryTargets = results.filter((result) => result.dry).length;
-    const bypassedTargets = results.filter(isIntentionalBypassResult).length;
-    const skippedTargets = results.filter((result) => result.skipped).length;
+    const counts = countFrameBatchResults(results);
     const result = {
       frame,
       deadlinePressure: frame.deadlinePressure,
       results,
       targetCount: results.length,
-      processedTargets: results.filter((result) => result.response !== undefined && !result.skipped).length,
-      skippedTargets,
-      failedTargets,
-      dryTargets,
-      bypassedTargets,
-      healthy: failedTargets === 0 && !this.processBudgetTripped && !this.processTimeoutTripped,
+      processedTargets: counts.processedTargets,
+      skippedTargets: counts.skippedTargets,
+      failedTargets: counts.failedTargets,
+      dryTargets: counts.dryTargets,
+      bypassedTargets: counts.bypassedTargets,
+      healthy: counts.failedTargets === 0 && !this.processBudgetTripped && !this.processTimeoutTripped,
       latencySamples: maxLatency(results, "latencySamples"),
       reportedLatencySamples: maxLatency(results, "reportedLatencySamples"),
-      maxDurationMs: results.reduce((max, result) => Math.max(max, result.durationMs), 0),
+      maxDurationMs: counts.maxDurationMs,
       totalDurationMs: boundedOptionalNumber(totalDurationMs, 0, 60000) ?? 0,
       lastResponseDeadlineLeadMs: this.lastResponseDeadlineLeadMs,
       lastResponseDeadlineLeadBlocks: this.lastResponseDeadlineLeadBlocks,
@@ -504,7 +496,7 @@ export class LiveEffectRackFrameBatchProcessor extends EventTarget {
       error
     };
     this.lastResult = result;
-    if (dryTargets > 0) this.dispatchEvent(new CustomEvent("frame-batch-dry-output", { detail: { result, health: this.health, reason: result.processTimeoutTripped ? "frame-batch-process-timeout" : result.processBudgetTripped ? "frame-batch-process-budget-exceeded" : result.skippedTargets > 0 ? (frame.stale ? "frame-batch-stale-input" : frame.deadlinePressure.pressure ? "frame-batch-deadline-pressure" : "frame-batch-skipped") : result.bypassedTargets >= dryTargets ? "frame-batch-bypass" : "frame-batch-target-dry", deadlinePressure: frame.deadlinePressure } }));
+    if (counts.dryTargets > 0) this.dispatchEvent(new CustomEvent("frame-batch-dry-output", { detail: { result, health: this.health, reason: result.processTimeoutTripped ? "frame-batch-process-timeout" : result.processBudgetTripped ? "frame-batch-process-budget-exceeded" : result.skippedTargets > 0 ? (frame.stale ? "frame-batch-stale-input" : frame.deadlinePressure.pressure ? "frame-batch-deadline-pressure" : "frame-batch-skipped") : result.bypassedTargets >= counts.dryTargets ? "frame-batch-bypass" : "frame-batch-target-dry", deadlinePressure: frame.deadlinePressure } }));
     this.dispatchHealthChangeIfNeeded();
     return result;
   }
@@ -659,7 +651,36 @@ export function createLivePerformanceFrameBatchProcessor(
 }
 
 function maxLatency(results: LiveEffectRackFrameBatchTargetResult[], key: "latencySamples" | "reportedLatencySamples"): number {
-  return results.reduce((max, result) => Math.max(max, result[key]), 0);
+  let max = 0;
+  for (let index = 0; index < results.length; index += 1) max = Math.max(max, results[index][key]);
+  return max;
+}
+
+function countFrameBatchResults(results: LiveEffectRackFrameBatchTargetResult[]): { processedTargets: number; skippedTargets: number; failedTargets: number; dryTargets: number; bypassedTargets: number; maxDurationMs: number } {
+  let processedTargets = 0;
+  let skippedTargets = 0;
+  let failedTargets = 0;
+  let dryTargets = 0;
+  let bypassedTargets = 0;
+  let maxDurationMs = 0;
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index];
+    if (result.response !== undefined && !result.skipped) processedTargets += 1;
+    if (result.skipped) skippedTargets += 1;
+    if (result.error !== undefined || result.healthy === false) failedTargets += 1;
+    if (result.dry) dryTargets += 1;
+    if (isIntentionalBypassResult(result)) bypassedTargets += 1;
+    maxDurationMs = Math.max(maxDurationMs, result.durationMs);
+  }
+  return { processedTargets, skippedTargets, failedTargets, dryTargets, bypassedTargets, maxDurationMs };
+}
+
+function copyCompletedResults(
+  results: Array<LiveEffectRackFrameBatchTargetResult | undefined>
+): Array<LiveEffectRackFrameBatchTargetResult | undefined> {
+  const copied = new Array<LiveEffectRackFrameBatchTargetResult | undefined>(results.length);
+  for (let index = 0; index < results.length; index += 1) copied[index] = results[index];
+  return copied;
 }
 
 function isIntentionalBypassResult(result: LiveEffectRackFrameBatchTargetResult): boolean {
@@ -673,13 +694,16 @@ function isIntentionalBypassResult(result: LiveEffectRackFrameBatchTargetResult)
 }
 
 function frameBatchBlockDurationMs(results: LiveEffectRackFrameBatchTargetResult[]): number {
-  const firstRate = results.find((result) => result.scheduled.request.sampleRate !== undefined)?.scheduled.request.sampleRate;
+  let firstRate: number | undefined;
+  let maxFrames = 0;
+  for (let resultIndex = 0; resultIndex < results.length; resultIndex += 1) {
+    const request = results[resultIndex].scheduled.request;
+    if (firstRate === undefined && request.sampleRate !== undefined) firstRate = request.sampleRate;
+    for (let channelIndex = 0; channelIndex < request.channels.length; channelIndex += 1) {
+      maxFrames = Math.max(maxFrames, request.channels[channelIndex].length);
+    }
+  }
   const sampleRate = boundedLiveEffectInteger(firstRate, 48000, 1, 384000);
-  const frames = boundedLiveEffectInteger(
-    results.reduce((max, result) => Math.max(max, ...result.scheduled.request.channels.map((channel) => channel.length)), 0),
-    128,
-    1,
-    8192
-  );
+  const frames = boundedLiveEffectInteger(maxFrames, 128, 1, 8192);
   return liveEffectBlockDurationMs(sampleRate, frames);
 }
