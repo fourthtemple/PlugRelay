@@ -1,7 +1,6 @@
 import type {
   AudioBlockRequest,
   AudioBlockResponse,
-  AudioBusBlock,
   AutomationLanePoint,
   ClearAutomationLaneResponse,
   CreateFileGrantRequest,
@@ -25,9 +24,15 @@ import type {
   SetAutomationLaneResponse,
   SetVst3ProgramDataResponse
 } from "../../protocol/src/messages";
+import {
+  decodeBinaryAudioEnvelope,
+  encodeBinaryAudioEnvelope,
+  type BinaryAudioBusBlock
+} from "./binary-audio-codec";
 import { createSharedAudioTransport, type SharedAudioTransportDescriptor, type SharedAudioTransportOptions } from "./shared-audio";
 
 export type { SharedAudioTransportDescriptor } from "./shared-audio";
+export type { BinaryAudioBusBlock } from "./binary-audio-codec";
 
 export interface SoundBridgeClientOptions {
   url?: string;
@@ -36,10 +41,6 @@ export interface SoundBridgeClientOptions {
   requestTimeoutMs?: number;
   transport?: "main" | "worker";
   transportWorkerUrl?: string | URL;
-}
-
-export interface BinaryAudioBusBlock extends Omit<AudioBusBlock, "channels"> {
-  channels: ArrayLike<number>[];
 }
 
 export interface BinaryAudioBlockRequest extends Omit<AudioBlockRequest, "channels" | "inputBuses"> {
@@ -529,216 +530,6 @@ export class SoundBridgeClient extends EventTarget {
     }
     this.pending.clear();
   }
-}
-
-const BINARY_AUDIO_MAGIC = 0x53424131;
-const BINARY_AUDIO_HEADER_BYTES = 8;
-const FLOAT_BYTES = 4;
-const LITTLE_ENDIAN_FLOATS = new Uint8Array(new Float32Array([1]).buffer)[0] === 0;
-const BINARY_TEXT_ENCODER = new TextEncoder();
-const BINARY_TEXT_DECODER = new TextDecoder();
-const MAX_BINARY_CHANNELS = 32;
-const MAX_BINARY_FRAMES = 8192;
-const MAX_BINARY_BUSES = 32;
-
-function encodeBinaryAudioEnvelope(envelope: RequestEnvelope, channels: ArrayLike<number>[]): ArrayBuffer {
-  const mainBlock = normalizeBinaryBlock(channels);
-  const payload = envelope.payload && typeof envelope.payload === "object" ? envelope.payload : {};
-  const inputBuses = normalizeBinaryBuses((payload as { inputBuses?: BinaryAudioBusBlock[] }).inputBuses);
-  const outputBuses = normalizeBinaryBuses((payload as { outputBuses?: BinaryAudioBusBlock[] }).outputBuses);
-  const header = {
-    ...envelope,
-    payload: {
-      ...payload,
-      channels: undefined,
-      inputBuses: undefined,
-      outputBuses: undefined
-    },
-    binaryAudio: {
-      channels: mainBlock.channels.length,
-      frames: mainBlock.frames,
-      ...(inputBuses.length > 0 ? { inputBuses: busHeaders(inputBuses) } : {}),
-      ...(outputBuses.length > 0 ? { outputBuses: busHeaders(outputBuses) } : {})
-    }
-  };
-  delete header.payload.channels;
-  delete header.payload.inputBuses;
-  delete header.payload.outputBuses;
-  const headerBytes = BINARY_TEXT_ENCODER.encode(JSON.stringify(header));
-  const blocks = [mainBlock, ...inputBuses, ...outputBuses];
-  const sampleBytes = blocks.reduce((total, block) => total + block.channels.length * block.frames * FLOAT_BYTES, 0);
-  const buffer = new ArrayBuffer(BINARY_AUDIO_HEADER_BYTES + headerBytes.length + sampleBytes);
-  const view = new DataView(buffer);
-  view.setUint32(0, BINARY_AUDIO_MAGIC, false);
-  view.setUint32(4, headerBytes.length, false);
-  new Uint8Array(buffer, BINARY_AUDIO_HEADER_BYTES, headerBytes.length).set(headerBytes);
-  writeBinaryBlocks(view, BINARY_AUDIO_HEADER_BYTES + headerBytes.length, blocks);
-  return buffer;
-}
-
-function decodeBinaryAudioEnvelope(data: unknown): ResponseEnvelope {
-  const bytes = binaryBytes(data);
-  if (!bytes || bytes.byteLength < BINARY_AUDIO_HEADER_BYTES) {
-    throw new Error("invalid_binary_audio_frame");
-  }
-
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint32(0, false) !== BINARY_AUDIO_MAGIC) {
-    throw new Error("invalid_binary_audio_magic");
-  }
-  const headerLength = view.getUint32(4, false);
-  const headerEnd = BINARY_AUDIO_HEADER_BYTES + headerLength;
-  if (headerLength < 2 || headerEnd > bytes.byteLength) {
-    throw new Error("invalid_binary_audio_header");
-  }
-
-  const headerBytes = bytes.subarray(BINARY_AUDIO_HEADER_BYTES, headerEnd);
-  const envelope = JSON.parse(BINARY_TEXT_DECODER.decode(headerBytes)) as ResponseEnvelope & {
-    binaryAudio?: { channels?: number; frames?: number; inputBuses?: unknown; outputBuses?: unknown };
-  };
-  const channelCount = boundedBinaryInteger(envelope.binaryAudio?.channels, 0, MAX_BINARY_CHANNELS);
-  const frames = boundedBinaryInteger(envelope.binaryAudio?.frames, 1, MAX_BINARY_FRAMES);
-  let offset = headerEnd;
-  const mainBlock = readBinaryBlock(view, offset, channelCount, frames);
-  offset = mainBlock.offset;
-  const inputBuses = readBinaryBuses(view, offset, envelope.binaryAudio?.inputBuses);
-  offset = inputBuses.offset;
-  const outputBuses = readBinaryBuses(view, offset, envelope.binaryAudio?.outputBuses);
-  offset = outputBuses.offset;
-  if (bytes.byteLength !== offset) {
-    throw new Error("invalid_binary_audio_payload");
-  }
-
-  if (envelope.ok && envelope.payload && typeof envelope.payload === "object") {
-    const payload = envelope.payload as AudioBlockResponse;
-    payload.channels = mainBlock.channels;
-    if (inputBuses.blocks.length > 0) {
-      (payload as AudioBlockResponse & { inputBuses?: AudioBusBlock[] }).inputBuses = inputBuses.blocks as unknown as AudioBusBlock[];
-    }
-    if (outputBuses.blocks.length > 0) {
-      payload.outputBuses = outputBuses.blocks as unknown as AudioBusBlock[];
-    }
-  }
-  delete envelope.binaryAudio;
-  return envelope;
-}
-
-function normalizeBinaryBlock(channels: ArrayLike<number>[]): { channels: Float32Array[]; frames: number } {
-  const limited = channels.slice(0, MAX_BINARY_CHANNELS);
-  const frames = Math.max(1, Math.min(MAX_BINARY_FRAMES, Math.max(0, ...limited.map((channel) => Math.max(0, Math.floor(Number(channel.length ?? 0)) || 0)))));
-  return { channels: limited.map((channel) => {
-    let reusable = channel instanceof Float32Array && channel.length === frames;
-    for (let index = 0; reusable && index < frames; index += 1) reusable = Number.isFinite(channel[index]);
-    if (reusable) return channel;
-    const normalized = new Float32Array(frames);
-    for (let index = 0; index < frames; index += 1) {
-      const value = Number(channel[index] ?? 0);
-      normalized[index] = Number.isFinite(value) ? value : 0;
-    }
-    return normalized;
-  }), frames };
-}
-
-function normalizeBinaryBuses(buses?: BinaryAudioBusBlock[]): Array<{ index: number; channels: Float32Array[]; frames: number }> {
-  if (!Array.isArray(buses)) {
-    return [];
-  }
-  const seen = new Set<number>();
-  return buses.slice(0, MAX_BINARY_BUSES).map((bus) => {
-    const index = boundedBinaryInteger(bus?.index, 0, MAX_BINARY_BUSES - 1);
-    if (seen.has(index)) {
-      throw new Error("binary_audio_duplicate_bus");
-    }
-    seen.add(index);
-    return { index, ...normalizeBinaryBlock(Array.isArray(bus?.channels) ? bus.channels : []) };
-  });
-}
-
-function busHeaders(buses: Array<{ index: number; channels: Float32Array[]; frames: number }>): Array<{ index: number; channels: number; frames: number }> {
-  return buses.map((bus) => ({ index: bus.index, channels: bus.channels.length, frames: bus.frames }));
-}
-
-function writeBinaryBlocks(view: DataView, offset: number, blocks: Array<{ channels: Float32Array[] }>): void {
-  const target = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-  for (const block of blocks) {
-    for (const channel of block.channels) {
-      if (LITTLE_ENDIAN_FLOATS) {
-        target.set(new Uint8Array(channel.buffer, channel.byteOffset, channel.byteLength), offset);
-        offset += channel.byteLength;
-        continue;
-      }
-      for (const sample of channel) {
-        view.setFloat32(offset, sample, true);
-        offset += FLOAT_BYTES;
-      }
-    }
-  }
-}
-
-function readBinaryBlock(view: DataView, offset: number, channelCount: number, frames: number): { channels: Float32Array[]; offset: number } {
-  const byteLength = channelCount * frames * FLOAT_BYTES;
-  if (offset + byteLength > view.byteLength) {
-    throw new Error("invalid_binary_audio_payload");
-  }
-  return { channels: readBinaryChannels(view, offset, channelCount, frames), offset: offset + byteLength };
-}
-
-function readBinaryBuses(view: DataView, offset: number, specs: unknown): { blocks: Array<{ index: number; channels: Float32Array[] }>; offset: number } {
-  if (specs === undefined) {
-    return { blocks: [], offset };
-  }
-  if (!Array.isArray(specs) || specs.length > MAX_BINARY_BUSES) {
-    throw new Error("binary_audio_bus_out_of_range");
-  }
-  const seen = new Set<number>();
-  const blocks: Array<{ index: number; channels: Float32Array[] }> = [];
-  for (const spec of specs) {
-    const raw = spec as { index?: unknown; channels?: unknown; frames?: unknown };
-    const index = boundedBinaryInteger(raw.index, 0, MAX_BINARY_BUSES - 1);
-    if (seen.has(index)) {
-      throw new Error("binary_audio_duplicate_bus");
-    }
-    seen.add(index);
-    const channelCount = boundedBinaryInteger(raw.channels, 0, MAX_BINARY_CHANNELS);
-    const frames = boundedBinaryInteger(raw.frames, 1, MAX_BINARY_FRAMES);
-    const block = readBinaryBlock(view, offset, channelCount, frames);
-    offset = block.offset;
-    blocks.push({ index, channels: block.channels });
-  }
-  return { blocks, offset };
-}
-
-function readBinaryChannels(view: DataView, offset: number, channelCount: number, frames: number): Float32Array[] {
-  const channels: Float32Array[] = [];
-  const byteLength = frames * FLOAT_BYTES;
-  for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-    const normalized = new Float32Array(frames);
-    if (LITTLE_ENDIAN_FLOATS) {
-      new Uint8Array(normalized.buffer).set(new Uint8Array(view.buffer, view.byteOffset + offset, byteLength));
-      offset += byteLength;
-    } else {
-      for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) {
-        normalized[frameIndex] = view.getFloat32(offset, true);
-        offset += FLOAT_BYTES;
-      }
-    }
-    channels.push(normalized);
-  }
-  return channels;
-}
-
-function binaryBytes(data: unknown): Uint8Array | undefined {
-  if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  return undefined;
-}
-
-function boundedBinaryInteger(value: unknown, min: number, max: number): number {
-  const integer = Math.floor(Number(value));
-  if (!Number.isFinite(integer) || integer < min || integer > max) {
-    throw new Error("binary_audio_integer_out_of_range");
-  }
-  return integer;
 }
 
 function boundedAudioWorkletInteger(value: unknown, fallback: number, min: number, max: number): number {

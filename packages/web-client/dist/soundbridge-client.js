@@ -459,19 +459,29 @@ function decodeBinaryAudioEnvelope(data) {
 }
 
 function normalizeBinaryBlock(channels) {
-  const limited = channels.slice(0, MAX_BINARY_CHANNELS);
-  const frames = Math.max(1, Math.min(MAX_BINARY_FRAMES, Math.max(0, ...limited.map((channel) => Math.max(0, Math.floor(Number(channel.length ?? 0)) || 0)))));
-  return { channels: limited.map((channel) => {
+  const channelCount = Math.min(channels.length, MAX_BINARY_CHANNELS);
+  let frames = 1;
+  for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+    const length = Math.max(0, Math.floor(Number(channels[channelIndex]?.length ?? 0)) || 0);
+    frames = Math.max(frames, Math.min(MAX_BINARY_FRAMES, length));
+  }
+  const normalizedChannels = new Array(channelCount);
+  for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+    const channel = channels[channelIndex];
     let reusable = channel instanceof Float32Array && channel.length === frames;
     for (let index = 0; reusable && index < frames; index += 1) reusable = Number.isFinite(channel[index]);
-    if (reusable) return channel;
+    if (reusable) {
+      normalizedChannels[channelIndex] = channel;
+      continue;
+    }
     const normalized = new Float32Array(frames);
     for (let index = 0; index < frames; index += 1) {
       const value = Number(channel[index] ?? 0);
       normalized[index] = Number.isFinite(value) ? value : 0;
     }
-    return normalized;
-  }), frames };
+    normalizedChannels[channelIndex] = normalized;
+  }
+  return { channels: normalizedChannels, frames };
 }
 
 function normalizeBinaryBuses(buses) {
@@ -479,14 +489,18 @@ function normalizeBinaryBuses(buses) {
     return [];
   }
   const seen = /* @__PURE__ */ new Set();
-  return buses.slice(0, MAX_BINARY_BUSES).map((bus) => {
+  const blocks = [];
+  const busCount = Math.min(buses.length, MAX_BINARY_BUSES);
+  for (let busPosition = 0; busPosition < busCount; busPosition += 1) {
+    const bus = buses[busPosition];
     const index = boundedBinaryInteger(bus?.index, 0, MAX_BINARY_BUSES - 1);
     if (seen.has(index)) {
       throw new Error("binary_audio_duplicate_bus");
     }
     seen.add(index);
-    return { index, ...normalizeBinaryBlock(Array.isArray(bus?.channels) ? bus.channels : []) };
-  });
+    blocks.push({ index, ...normalizeBinaryBlock(Array.isArray(bus?.channels) ? bus.channels : []) });
+  }
+  return blocks;
 }
 
 function busHeaders(buses) {
