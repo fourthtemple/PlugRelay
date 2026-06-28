@@ -98,6 +98,8 @@ private:
   UInt32 samplesUntilNextBeat(const HostTransportContext& transport) const;
   void installHostCallbacks();
   std::uint32_t audioUnitElementCount(AudioUnitScope scope, std::uint32_t fallback) const;
+  void prepareOutputBuffers();
+  AudioBufferList* outputBufferListFor(std::uint32_t busIndex, std::uint32_t frames);
   void configure();
 
   AudioUnit unit_ = nullptr;
@@ -111,6 +113,8 @@ private:
   std::uint32_t outputBusCount_ = 0;
   std::vector<bool> inputBusActive_;
   std::vector<bool> outputBusActive_;
+  std::vector<std::vector<std::vector<float>>> outputStorage_;
+  std::vector<AudioBufferList*> outputBufferLists_;
   std::vector<IndexedAudioBus> currentInputBuses_;
   std::uint32_t currentInputFrames_ = 0;
   HostTransportContext currentTransport_;

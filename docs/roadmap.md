@@ -10,7 +10,7 @@ SoundBridge already has the core security and host shape in place:
 
 - loopback daemon with pairing, origin checks, session ownership, and bounded request envelopes
 - installed VST3 hosting through the Steinberg VST3 SDK worker when the SDK is available, with pre-sized render buffers for the realtime process path
-- installed macOS Audio Unit hosting through the CoreAudio worker for realtime-compatible profiles
+- installed macOS Audio Unit hosting through the CoreAudio worker for realtime-compatible profiles, with pre-sized output buffers for active render buses
 - installed compatible LV2 audio/control hosting through the native LV2 C ABI worker
 - bounded plugin scanning metadata for VST3, AU, and LV2 without exposing launch paths to browsers
 - bounded parameters, automation events, automation curves, timeline lanes, MIDI events, transport context, latency, tail, state, bus layouts, and file-grant operations

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <sstream>
@@ -15,6 +16,19 @@
 #include <utility>
 
 namespace soundbridge::audio_unit_worker {
+
+namespace {
+
+std::vector<std::vector<float>> renderedChannels(
+    const std::vector<std::vector<float>>& storage,
+    std::uint32_t frames) {
+  std::vector<std::vector<float>> channels;
+  channels.reserve(storage.size());
+  for (const auto& channel : storage) channels.emplace_back(channel.begin(), channel.begin() + std::min<std::size_t>(frames, channel.size()));
+  return channels;
+}
+
+} // namespace
 
 HostedAudioUnit::HostedAudioUnit(
     std::string componentType,
@@ -47,6 +61,7 @@ HostedAudioUnit::HostedAudioUnit(
 }
 
 HostedAudioUnit::~HostedAudioUnit() {
+  for (auto* outputList : outputBufferLists_) std::free(outputList);
   if (unit_ != nullptr) {
     AudioUnitUninitialize(unit_);
     AudioComponentInstanceDispose(unit_);
@@ -299,27 +314,24 @@ RenderedAudio HostedAudioUnit::render(
     }
   }
 
-  RenderedAudio rendered;
-  auto outputList = makeAudioBufferList(rendered.channels, outputChannels_, frames);
-
   AudioTimeStamp timeStamp {};
   timeStamp.mFlags = kAudioTimeStampSampleTimeValid;
   timeStamp.mSampleTime = currentTransport_.samplePosition;
   AudioUnitRenderActionFlags flags = 0;
-  checkStatus(AudioUnitRender(unit_, &flags, &timeStamp, 0, frames, outputList.get()), "AudioUnitRender");
+  checkStatus(AudioUnitRender(unit_, &flags, &timeStamp, 0, frames, outputBufferListFor(0, frames)), "AudioUnitRender");
+  RenderedAudio rendered;
+  rendered.channels = renderedChannels(outputStorage_[0], frames);
   rendered.outputBuses.push_back(IndexedAudioBus{0, rendered.channels});
 
   for (std::uint32_t busIndex = 1; busIndex < outputBusActive_.size(); ++busIndex) {
     if (!outputBusActive_[busIndex]) {
       continue;
     }
-    std::vector<std::vector<float>> busChannels;
-    auto busOutputList = makeAudioBufferList(busChannels, outputChannels_, frames);
     AudioUnitRenderActionFlags busFlags = 0;
     checkStatus(
-        AudioUnitRender(unit_, &busFlags, &timeStamp, busIndex, frames, busOutputList.get()),
+        AudioUnitRender(unit_, &busFlags, &timeStamp, busIndex, frames, outputBufferListFor(busIndex, frames)),
         "AudioUnitRender auxiliary output");
-    rendered.outputBuses.push_back(IndexedAudioBus{busIndex, std::move(busChannels)});
+    rendered.outputBuses.push_back(IndexedAudioBus{busIndex, renderedChannels(outputStorage_[busIndex], frames)});
   }
 
   sampleTime_ = currentTransport_.samplePosition + frames;
@@ -625,6 +637,43 @@ std::uint32_t HostedAudioUnit::audioUnitElementCount(AudioUnitScope scope, std::
   return std::clamp<std::uint32_t>(count, 0, kMaxWorkerChannels);
 }
 
+void HostedAudioUnit::prepareOutputBuffers() {
+  for (auto* outputList : outputBufferLists_) std::free(outputList);
+  outputStorage_.resize(outputBusActive_.size());
+  outputBufferLists_.assign(outputBusActive_.size(), nullptr);
+  const auto listBytes = sizeof(AudioBufferList) + sizeof(AudioBuffer) * (outputChannels_ > 0 ? outputChannels_ - 1 : 0);
+  for (std::uint32_t busIndex = 0; busIndex < outputBusActive_.size(); ++busIndex) {
+    if (!outputBusActive_[busIndex]) {
+      continue;
+    }
+    auto* list = static_cast<AudioBufferList*>(std::calloc(1, listBytes));
+    if (list == nullptr) {
+      throw std::bad_alloc();
+    }
+    outputStorage_[busIndex].assign(outputChannels_, std::vector<float>(maxBlockSize_, 0.0F));
+    list->mNumberBuffers = outputChannels_;
+    for (std::uint32_t channelIndex = 0; channelIndex < outputChannels_; ++channelIndex) {
+      list->mBuffers[channelIndex].mNumberChannels = 1;
+      list->mBuffers[channelIndex].mDataByteSize = maxBlockSize_ * sizeof(Float32);
+      list->mBuffers[channelIndex].mData = outputStorage_[busIndex][channelIndex].data();
+    }
+    outputBufferLists_[busIndex] = list;
+  }
+}
+
+AudioBufferList* HostedAudioUnit::outputBufferListFor(std::uint32_t busIndex, std::uint32_t frames) {
+  if (busIndex >= outputBufferLists_.size() || outputBufferLists_[busIndex] == nullptr) {
+    throw std::runtime_error("Audio Unit output bus is not prepared.");
+  }
+  auto* list = outputBufferLists_[busIndex];
+  for (std::uint32_t channelIndex = 0; channelIndex < outputChannels_; ++channelIndex) {
+    auto& channel = outputStorage_[busIndex][channelIndex];
+    std::fill(channel.begin(), channel.begin() + frames, 0.0F);
+    list->mBuffers[channelIndex].mDataByteSize = frames * sizeof(Float32);
+  }
+  return list;
+}
+
 void HostedAudioUnit::configure() {
   UInt32 maxFrames = maxBlockSize_;
   checkStatus(
@@ -690,6 +739,7 @@ void HostedAudioUnit::configure() {
   }
 
   installHostCallbacks();
+  prepareOutputBuffers();
   checkStatus(AudioUnitInitialize(unit_), "AudioUnitInitialize");
 }
 
