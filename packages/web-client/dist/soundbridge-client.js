@@ -3799,6 +3799,23 @@ export class LiveEffectRackBlockScheduler {
     this.nextSamplePosition = optionalLiveEffectSchedulerInteger(options.nextSamplePosition, 0, LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION);
   }
 
+  setTimingPolicy(options) {
+    this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, this.maxInputAgeMs, 0, 60000);
+    this.deadlineLeadTargetBlocks = boundedLiveEffectNumber(
+      options.deadlineLeadTargetBlocks,
+      this.deadlineLeadTargetBlocks,
+      0,
+      64
+    );
+    this.responseJitterThresholdBlocks = boundedLiveEffectNumber(
+      options.responseJitterThresholdBlocks,
+      this.responseJitterThresholdBlocks,
+      0,
+      64
+    );
+    return this.snapshot();
+  }
+
   snapshot() {
     return {
       nextBlockId: this.nextBlockId,

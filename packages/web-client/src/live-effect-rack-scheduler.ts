@@ -57,6 +57,23 @@ export interface LiveEffectRackBlockSchedulerOptions {
   transport?: Partial<LiveTransportBlockOptions>;
 }
 
+export interface LiveEffectRackSchedulerTimingPolicyOptions {
+  maxInputAgeMs?: number;
+  deadlineLeadTargetBlocks?: number;
+  responseJitterThresholdBlocks?: number;
+}
+
+export interface LiveEffectRackBlockSchedulerSnapshot {
+  nextBlockId: number;
+  nextSamplePosition?: number;
+  transportLatencySamples: number;
+  transportLatencyBlocks: number;
+  maxInputAgeMs: number;
+  deadlineLeadTargetBlocks: number;
+  responseJitterThresholdBlocks: number;
+  deadlinePressure: LiveEffectRackDeadlinePressure;
+}
+
 export interface LiveEffectRackScheduledBlock {
   request: LiveEffectBlockRequest;
   blockId: number;
@@ -93,10 +110,10 @@ export interface LiveEffectRackDeadlinePressureHealth {
 export class LiveEffectRackBlockScheduler {
   readonly sampleRate: number;
   readonly maxBlockSize: number;
-  readonly maxInputAgeMs: number;
+  maxInputAgeMs: number;
   readonly compensateOutputLatency: boolean;
-  readonly deadlineLeadTargetBlocks: number;
-  readonly responseJitterThresholdBlocks: number;
+  deadlineLeadTargetBlocks: number;
+  responseJitterThresholdBlocks: number;
   private readonly nowMs: () => number;
   private readonly baseTransport: Partial<LiveTransportBlockOptions>;
   private nextBlockId: number;
@@ -264,16 +281,24 @@ export class LiveEffectRackBlockScheduler {
     this.nextSamplePosition = optionalSchedulerInteger(options.nextSamplePosition, 0, LIVE_EFFECT_SCHEDULER_MAX_SAMPLE_POSITION);
   }
 
-  snapshot(): {
-    nextBlockId: number;
-    nextSamplePosition?: number;
-    transportLatencySamples: number;
-    transportLatencyBlocks: number;
-    maxInputAgeMs: number;
-    deadlineLeadTargetBlocks: number;
-    responseJitterThresholdBlocks: number;
-    deadlinePressure: LiveEffectRackDeadlinePressure;
-  } {
+  setTimingPolicy(options: LiveEffectRackSchedulerTimingPolicyOptions): LiveEffectRackBlockSchedulerSnapshot {
+    this.maxInputAgeMs = boundedLiveEffectNumber(options.maxInputAgeMs, this.maxInputAgeMs, 0, 60000);
+    this.deadlineLeadTargetBlocks = boundedLiveEffectNumber(
+      options.deadlineLeadTargetBlocks,
+      this.deadlineLeadTargetBlocks,
+      0,
+      64
+    );
+    this.responseJitterThresholdBlocks = boundedLiveEffectNumber(
+      options.responseJitterThresholdBlocks,
+      this.responseJitterThresholdBlocks,
+      0,
+      64
+    );
+    return this.snapshot();
+  }
+
+  snapshot(): LiveEffectRackBlockSchedulerSnapshot {
     return {
       nextBlockId: this.nextBlockId,
       nextSamplePosition: this.nextSamplePosition,
