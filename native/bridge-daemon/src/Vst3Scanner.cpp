@@ -1,10 +1,10 @@
-#include "SoundBridge/Vst3Scanner.h"
+#include "PlugRelay/Vst3Scanner.h"
 
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "public.sdk/source/vst/hosting/module.h"
 #endif
@@ -19,7 +19,7 @@
 #include <sstream>
 #include <utility>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
@@ -34,8 +34,8 @@ std::filesystem::path homeLibraryVst3Path() {
 }
 
 std::filesystem::path repositoryExampleVst3Path() {
-#ifdef SOUNDBRIDGE_SOURCE_DIR
-  return std::filesystem::path(SOUNDBRIDGE_SOURCE_DIR) / "native" / "example-plugins" / "VST3";
+#ifdef PLUGRELAY_SOURCE_DIR
+  return std::filesystem::path(PLUGRELAY_SOURCE_DIR) / "native" / "example-plugins" / "VST3";
 #else
   return {};
 #endif
@@ -124,8 +124,8 @@ std::optional<std::uint32_t> manifestIntValue(const std::string& manifest, const
   return static_cast<std::uint32_t>(value);
 }
 
-void applySoundBridgeManifest(NativePluginInfo& info, const std::filesystem::path& bundlePath) {
-  const auto manifestPath = bundlePath / "Contents" / "Resources" / "SoundBridgePlugin.json";
+void applyPlugRelayManifest(NativePluginInfo& info, const std::filesystem::path& bundlePath) {
+  const auto manifestPath = bundlePath / "Contents" / "Resources" / "PlugRelayPlugin.json";
   const auto manifest = readTextFile(manifestPath);
   if (manifest.empty()) {
     return;
@@ -178,7 +178,7 @@ std::filesystem::path macBinaryPath(const std::filesystem::path& bundlePath) {
   return {};
 }
 
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
 std::string cfStringToUtf8(CFStringRef value) {
   if (value == nullptr) {
     return {};
@@ -320,7 +320,7 @@ void applyInfoPlistMetadata(NativePluginInfo& info, const std::filesystem::path&
 }
 #endif
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 std::string kindFromVst3SubCategories(const VST3::Hosting::ClassInfo& classInfo) {
   const auto& subCategories = classInfo.subCategories();
   const auto hasPrefix = [&](const std::string& prefix) {
@@ -419,6 +419,7 @@ std::vector<NativePluginInfo> Vst3Scanner::scan() const {
     if (!std::filesystem::is_directory(root, error)) {
       continue;
     }
+    const bool repositoryExampleRoot = root == repositoryExampleVst3Path();
 
     for (const auto& entry : std::filesystem::directory_iterator(root, error)) {
       if (error) {
@@ -430,8 +431,9 @@ std::vector<NativePluginInfo> Vst3Scanner::scan() const {
         continue;
       }
 
-      const bool isBundle = entry.is_directory(error);
-      if (error || !isBundle) {
+      std::error_code entryError;
+      const bool isBundle = entry.is_directory(entryError);
+      if (entryError || !isBundle) {
         continue;
       }
 
@@ -442,25 +444,29 @@ std::vector<NativePluginInfo> Vst3Scanner::scan() const {
       info.vendor = "Unknown";
       info.category = "VST3";
       info.kind = "unknown";
-      info.bundlePath = std::filesystem::weakly_canonical(path, error).string();
-      if (error) {
+      std::error_code canonicalError;
+      info.bundlePath = std::filesystem::weakly_canonical(path, canonicalError).string();
+      if (canonicalError) {
         info.bundlePath = path.string();
-        error.clear();
       }
-      info.hasContents = std::filesystem::is_directory(path / "Contents", error) && !error;
+      std::error_code contentsError;
+      info.hasContents = std::filesystem::is_directory(path / "Contents", contentsError) && !contentsError;
       auto executablePath = macBinaryPath(path);
       info.hasExecutable = !executablePath.empty();
       if (info.hasExecutable) {
-        info.executablePath = std::filesystem::weakly_canonical(executablePath, error).string();
-        if (error) {
+        canonicalError.clear();
+        info.executablePath = std::filesystem::weakly_canonical(executablePath, canonicalError).string();
+        if (canonicalError) {
           info.executablePath = executablePath.string();
-          error.clear();
         }
       }
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
       applyInfoPlistMetadata(info, path);
 #endif
-      applySoundBridgeManifest(info, path);
+      applyPlugRelayManifest(info, path);
+      if (repositoryExampleRoot && !info.hasManifest) {
+        continue;
+      }
       plugins.push_back(std::move(info));
     }
   }
@@ -473,7 +479,7 @@ std::string vst3BundleListToJson(const std::vector<NativePluginInfo>& plugins) {
 }
 
 std::string vst3FactoryMetadataToJson(const std::filesystem::path& bundlePath) {
-#ifndef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifndef PLUGRELAY_ENABLE_VST3_SDK
   (void)bundlePath;
   return factoryMetadataErrorToJson("vst3_sdk_unavailable", "The VST3 SDK host adapter is not available in this build.");
 #else
@@ -538,4 +544,4 @@ std::string vst3FactoryMetadataToJson(const std::filesystem::path& bundlePath) {
 #endif
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

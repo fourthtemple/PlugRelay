@@ -48,7 +48,7 @@ export function createDaemonFileGrants({
       });
     }
     if (fileGrants.size >= maxTotalFileGrants) {
-      throw makeProtocolError("quota_exceeded", "The local SoundBridge daemon has reached its total file grant limit.", {
+      throw makeProtocolError("quota_exceeded", "The local PlugRelay daemon has reached its total file grant limit.", {
         maxTotalFileGrants
       });
     }

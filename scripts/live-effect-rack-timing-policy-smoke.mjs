@@ -1,4 +1,4 @@
-import { SoundBridgeLiveEffectRack } from "../packages/web-client/dist/soundbridge-client.js";
+import { PlugRelayLiveEffectRack } from "../packages/web-client/dist/plugrelay-client.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -62,7 +62,7 @@ class FakeTimingPolicyClient {
 }
 
 const client = new FakeTimingPolicyClient();
-const rack = await SoundBridgeLiveEffectRack.create({
+const rack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,

@@ -4,7 +4,7 @@ Browser DAWs are starting to load local desktop plugins through native companion
 
 That product direction is useful. It is also powerful enough that the safety model should not be hidden inside proprietary bridge behavior. A browser-to-native plugin bridge is a local native execution surface exposed to web origins. It can scan installed plugins, instantiate third-party binaries, route audio and MIDI, persist plugin state, and sometimes open native plugin editors.
 
-SoundBridge should help make this category auditable by documenting a small open protocol and the security properties any compatible bridge should satisfy.
+PlugRelay should help make this category auditable by documenting a small open protocol and the security properties any compatible bridge should satisfy.
 
 ## The Trust Boundary
 
@@ -69,7 +69,7 @@ The protocol should be small and testable:
 - binary transports negotiate capabilities rather than assuming browser features
 - version negotiation is explicit and backward-compatible additions are optional
 
-SoundBridge's current protocol is still early, but this is the direction it should hold itself to.
+PlugRelay's current protocol is still early, but this is the direction it should hold itself to.
 
 ## Audit Artifacts
 
@@ -88,13 +88,13 @@ An auditable implementation should publish:
 
 The goal is not to make every product open source. The goal is to make the contract inspectable enough that users are not asked to blindly trust a native bridge that any website might try to reach.
 
-## SoundBridge Position
+## PlugRelay Position
 
-SoundBridge should be open about this risk because the whole project exists at that boundary.
+PlugRelay should be open about this risk because the whole project exists at that boundary.
 
 We should avoid claiming "secure VSTs in the browser" as a slogan. The accurate claim is narrower:
 
-SoundBridge is designing an auditable browser-to-native audio plugin bridge where local approval, origin binding, session ownership, loopback transport, worker isolation, and protocol conformance are first-class parts of the product.
+PlugRelay is designing an auditable browser-to-native audio plugin bridge where local approval, origin binding, session ownership, loopback transport, worker isolation, and protocol conformance are first-class parts of the product.
 
 That is the standard this project should invite other browser DAWs and bridge applications to adopt.
 

@@ -1,9 +1,9 @@
-#include "SoundBridge/Vst3HostWorkerSupport.h"
-#include "SoundBridge/Vst3StreamSupport.h"
+#include "PlugRelay/Vst3HostWorkerSupport.h"
+#include "PlugRelay/Vst3StreamSupport.h"
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
-#include "SoundBridge/Base64.h"
+#include "PlugRelay/Base64.h"
 
 #include "public.sdk/source/common/memorystream.h"
 
@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace soundbridge::vst3_worker {
+namespace plugrelay::vst3_worker {
 namespace {
 
 bool programDataSupported(
@@ -102,6 +102,6 @@ std::string setProgramData(
   return "{\"ok\":true}";
 }
 
-} // namespace soundbridge::vst3_worker
+} // namespace plugrelay::vst3_worker
 
 #endif

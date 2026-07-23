@@ -1,12 +1,12 @@
-#include "SoundBridge/AudioUnitHostWorker.h"
-#include "SoundBridge/AudioUnitScanner.h"
-#include "SoundBridge/ExampleInstrumentRenderer.h"
-#include "SoundBridge/Lv2HostWorker.h"
-#include "SoundBridge/Lv2Scanner.h"
-#include "SoundBridge/NativePlugin.h"
-#include "SoundBridge/PluginCatalog.h"
-#include "SoundBridge/Vst3HostWorker.h"
-#include "SoundBridge/Vst3Scanner.h"
+#include "PlugRelay/AudioUnitHostWorker.h"
+#include "PlugRelay/AudioUnitScanner.h"
+#include "PlugRelay/ExampleInstrumentRenderer.h"
+#include "PlugRelay/Lv2HostWorker.h"
+#include "PlugRelay/Lv2Scanner.h"
+#include "PlugRelay/NativePlugin.h"
+#include "PlugRelay/PluginCatalog.h"
+#include "PlugRelay/Vst3HostWorker.h"
+#include "PlugRelay/Vst3Scanner.h"
 
 #include <iostream>
 #include <sstream>
@@ -16,35 +16,35 @@
 namespace {
 
 void printUsage() {
-  std::cout << "soundbridge-daemon " << SOUNDBRIDGE_VERSION << "\n";
+  std::cout << "plugrelay-daemon " << PLUGRELAY_VERSION << "\n";
   std::cout << "Usage:\n";
-  std::cout << "  soundbridge-daemon --scan\n";
-  std::cout << "  soundbridge-daemon --scan-installed\n";
-  std::cout << "  soundbridge-daemon --scan-examples\n";
-  std::cout << "  soundbridge-daemon --scan-vst3\n";
-  std::cout << "  soundbridge-daemon --scan-au\n";
-  std::cout << "  soundbridge-daemon --scan-lv2\n";
-  std::cout << "  soundbridge-daemon --inspect-vst3-factory <bundle-path>\n";
-  std::cout << "  soundbridge-daemon --host-status\n";
-  std::cout << "  soundbridge-daemon --host-au-worker <type> <subtype> <manufacturer> <sample-rate> <max-block> <inputs> <outputs> <kind>\n";
-  std::cout << "  soundbridge-daemon --host-lv2-worker <bundle-path> <sample-rate> <max-block> <inputs> <outputs> <kind>\n";
-  std::cout << "  soundbridge-daemon --host-vst3-worker <bundle-path> <sample-rate> <max-block> <inputs> <outputs> <kind>\n";
-  std::cout << "  soundbridge-daemon --render-example-block <plugin-id> <frames> <sample-rate> <gain> <tone> <detune> <note:velocity,...>\n";
+  std::cout << "  plugrelay-daemon --scan\n";
+  std::cout << "  plugrelay-daemon --scan-installed\n";
+  std::cout << "  plugrelay-daemon --scan-examples\n";
+  std::cout << "  plugrelay-daemon --scan-vst3\n";
+  std::cout << "  plugrelay-daemon --scan-au\n";
+  std::cout << "  plugrelay-daemon --scan-lv2\n";
+  std::cout << "  plugrelay-daemon --inspect-vst3-factory <bundle-path>\n";
+  std::cout << "  plugrelay-daemon --host-status\n";
+  std::cout << "  plugrelay-daemon --host-au-worker <type> <subtype> <manufacturer> <sample-rate> <max-block> <inputs> <outputs> <kind>\n";
+  std::cout << "  plugrelay-daemon --host-lv2-worker <bundle-path> <sample-rate> <max-block> <inputs> <outputs> <kind>\n";
+  std::cout << "  plugrelay-daemon --host-vst3-worker <bundle-path> <sample-rate> <max-block> <inputs> <outputs> <kind>\n";
+  std::cout << "  plugrelay-daemon --render-example-block <plugin-id> <frames> <sample-rate> <gain> <tone> <detune> <note:velocity,...>\n";
 }
 
 std::string formatStatusToJson(
-    soundbridge::PluginFormat format,
+    plugrelay::PluginFormat format,
     bool scanAvailable,
     bool hostAvailable,
     bool exampleHostAvailable,
     const std::string& notes) {
   std::ostringstream output;
   output << "{";
-  output << "\"format\":\"" << soundbridge::pluginFormatToString(format) << "\",";
+  output << "\"format\":\"" << plugrelay::pluginFormatToString(format) << "\",";
   output << "\"scanAvailable\":" << (scanAvailable ? "true" : "false") << ",";
   output << "\"hostAvailable\":" << (hostAvailable ? "true" : "false") << ",";
   output << "\"exampleHostAvailable\":" << (exampleHostAvailable ? "true" : "false") << ",";
-  output << "\"notes\":\"" << soundbridge::jsonEscape(notes) << "\"";
+  output << "\"notes\":\"" << plugrelay::jsonEscape(notes) << "\"";
   output << "}";
   return output.str();
 }
@@ -54,29 +54,29 @@ std::string hostStatusToJson() {
   output << "{";
   output << "\"formats\":[";
   output << formatStatusToJson(
-      soundbridge::PluginFormat::Vst3,
+      plugrelay::PluginFormat::Vst3,
       true,
-      soundbridge::vst3HostWorkerAvailable(),
+      plugrelay::vst3HostWorkerAvailable(),
       true,
-      soundbridge::vst3HostWorkerStatus());
+      plugrelay::vst3HostWorkerStatus());
   output << ",";
   output << formatStatusToJson(
-      soundbridge::PluginFormat::AudioUnit,
-#ifdef SOUNDBRIDGE_MACOS
+      plugrelay::PluginFormat::AudioUnit,
+#ifdef PLUGRELAY_MACOS
       true,
 #else
       false,
 #endif
-      soundbridge::audioUnitHostAvailable(),
+      plugrelay::audioUnitHostAvailable(),
       true,
-      soundbridge::audioUnitHostStatus());
+      plugrelay::audioUnitHostStatus());
   output << ",";
   output << formatStatusToJson(
-      soundbridge::PluginFormat::Lv2,
+      plugrelay::PluginFormat::Lv2,
       true,
-      soundbridge::lv2HostWorkerAvailable(),
+      plugrelay::lv2HostWorkerAvailable(),
       true,
-      soundbridge::lv2HostWorkerStatus());
+      plugrelay::lv2HostWorkerStatus());
   output << "]";
   output << "}";
   return output.str();
@@ -93,38 +93,38 @@ int main(int argc, char** argv) {
   const std::string command = argv[1];
 
   if (command == "--scan") {
-    const soundbridge::PluginCatalog catalog;
-    std::cout << soundbridge::nativePluginListToJson(catalog.scanAll()) << "\n";
+    const plugrelay::PluginCatalog catalog;
+    std::cout << plugrelay::nativePluginListToJson(catalog.scanAll()) << "\n";
     return 0;
   }
 
   if (command == "--scan-installed") {
-    const soundbridge::PluginCatalog catalog;
-    std::cout << soundbridge::nativePluginListToJson(catalog.scanAll(false)) << "\n";
+    const plugrelay::PluginCatalog catalog;
+    std::cout << plugrelay::nativePluginListToJson(catalog.scanAll(false)) << "\n";
     return 0;
   }
 
   if (command == "--scan-examples") {
-    const soundbridge::PluginCatalog catalog;
-    std::cout << soundbridge::nativePluginListToJson(catalog.scanExamples()) << "\n";
+    const plugrelay::PluginCatalog catalog;
+    std::cout << plugrelay::nativePluginListToJson(catalog.scanExamples()) << "\n";
     return 0;
   }
 
   if (command == "--scan-vst3") {
-    const soundbridge::Vst3Scanner scanner;
-    std::cout << soundbridge::vst3BundleListToJson(scanner.scan()) << "\n";
+    const plugrelay::Vst3Scanner scanner;
+    std::cout << plugrelay::vst3BundleListToJson(scanner.scan()) << "\n";
     return 0;
   }
 
   if (command == "--scan-au") {
-    const soundbridge::AudioUnitScanner scanner;
-    std::cout << soundbridge::nativePluginListToJson(scanner.scan()) << "\n";
+    const plugrelay::AudioUnitScanner scanner;
+    std::cout << plugrelay::nativePluginListToJson(scanner.scan()) << "\n";
     return 0;
   }
 
   if (command == "--scan-lv2") {
-    const soundbridge::Lv2Scanner scanner;
-    std::cout << soundbridge::nativePluginListToJson(scanner.scan()) << "\n";
+    const plugrelay::Lv2Scanner scanner;
+    std::cout << plugrelay::nativePluginListToJson(scanner.scan()) << "\n";
     return 0;
   }
 
@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
       std::cerr << "--inspect-vst3-factory requires a VST3 bundle path.\n";
       return 2;
     }
-    std::cout << soundbridge::vst3FactoryMetadataToJson(argv[2]) << "\n";
+    std::cout << plugrelay::vst3FactoryMetadataToJson(argv[2]) << "\n";
     return 0;
   }
 
@@ -143,15 +143,15 @@ int main(int argc, char** argv) {
   }
 
   if (command == "--host-au-worker") {
-    return soundbridge::runAudioUnitHostWorker(argc, argv);
+    return plugrelay::runAudioUnitHostWorker(argc, argv);
   }
 
   if (command == "--host-lv2-worker") {
-    return soundbridge::runLv2HostWorker(argc, argv);
+    return plugrelay::runLv2HostWorker(argc, argv);
   }
 
   if (command == "--host-vst3-worker") {
-    return soundbridge::runVst3HostWorker(argc, argv);
+    return plugrelay::runVst3HostWorker(argc, argv);
   }
 
   if (command == "--render-example-block") {
@@ -160,9 +160,9 @@ int main(int argc, char** argv) {
       return 2;
     }
 
-    soundbridge::ExampleRenderConfig config;
+    plugrelay::ExampleRenderConfig config;
     config.pluginId = argv[2];
-    if (!soundbridge::isExampleInstrumentPluginId(config.pluginId)) {
+    if (!plugrelay::isExampleInstrumentPluginId(config.pluginId)) {
       std::cerr << "Unknown example instrument plugin id: " << config.pluginId << "\n";
       return 3;
     }
@@ -177,10 +177,10 @@ int main(int argc, char** argv) {
       std::cerr << "--render-example-block received invalid numeric arguments: " << error.what() << "\n";
       return 2;
     }
-    config.voices = soundbridge::parseExampleVoices(argv[8]);
+    config.voices = plugrelay::parseExampleVoices(argv[8]);
 
-    std::cout << soundbridge::exampleInstrumentBlockToJson(
-        soundbridge::renderExampleInstrumentBlock(config)) << "\n";
+    std::cout << plugrelay::exampleInstrumentBlockToJson(
+        plugrelay::renderExampleInstrumentBlock(config)) << "\n";
     return 0;
   }
 

@@ -1,13 +1,13 @@
 {
-  "name": "@soundbridge/web-client",
+  "name": "@plugrelay/web-client",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
-  "main": "./dist/soundbridge-client.js",
+  "main": "./dist/plugrelay-client.js",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./dist/soundbridge-client.js",
-    "./transport-worker": "./dist/soundbridge-transport-worker.js",
-    "./worklet": "./dist/soundbridge-worklet.js"
+    ".": "./dist/plugrelay-client.js",
+    "./transport-worker": "./dist/plugrelay-transport-worker.js",
+    "./worklet": "./dist/plugrelay-worklet.js"
   }
 }

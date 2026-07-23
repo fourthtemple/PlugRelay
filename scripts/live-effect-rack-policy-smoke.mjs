@@ -2,7 +2,7 @@ import {
   calibrateLiveEffectRackPolicy,
   createLiveEffectRackPolicy,
   createLivePerformanceRackOptions
-} from "../packages/web-client/dist/soundbridge-client.js";
+} from "../packages/web-client/dist/plugrelay-client.js";
 
 function assert(condition, message) {
   if (!condition) {

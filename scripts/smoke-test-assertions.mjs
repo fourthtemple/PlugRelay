@@ -87,7 +87,10 @@ export function assertOutputBuses(block, layout, message) {
     assert(Array.isArray(bus.channels), `${message}: output bus channels are arrays`);
     assert(bus.channels.length <= MAX_AUDIO_CHANNELS, `${message}: output bus channel count is bounded`);
     for (const channel of bus.channels) {
-      assert(Array.isArray(channel) && channel.length <= 8192, `${message}: output bus frame count is bounded`);
+      assert(
+        (Array.isArray(channel) || channel instanceof Float32Array) && channel.length <= 8192,
+        `${message}: output bus frame count is bounded`
+      );
     }
   }
 }

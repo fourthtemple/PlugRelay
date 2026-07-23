@@ -4,7 +4,7 @@ import path from "node:path";
 import { createDaemonNormalizers } from "./daemon-normalizers.mjs";
 import { createNativeWorkerProcesses } from "./native-worker-processes.mjs";
 
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-render-deadline-"));
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "plugrelay-render-deadline-"));
 let passed = 0;
 const failures = [];
 

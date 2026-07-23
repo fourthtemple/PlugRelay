@@ -1,12 +1,12 @@
 # Roadmap
 
-This roadmap tracks what still needs to be completed for SoundBridge to become a dependable open standard and reference implementation for hosting local VST3, Audio Unit, and LV2 plugins from browser or desktop hosts.
+This roadmap tracks what still needs to be completed for PlugRelay to become a dependable open standard and reference implementation for hosting local VST3, Audio Unit, and LV2 plugins from browser or desktop hosts.
 
-The current priority is core hosting compatibility first, with VST3 as the primary near-term target. The core goal is an auditable bridge boundary: normally installed plugins should be able to run much as they do in desktop DAWs, while websites and local hosts only receive the bounded SoundBridge protocol instead of arbitrary access to the user's machine. OS-level sandboxing is a real but extended hardening profile, not the definition of project completion, because many commercial plugins expect existing license files, cache folders, sample libraries, helper services, and vendor authorization workflows in the normal user environment.
+The current priority is core hosting compatibility first, with VST3 as the primary near-term target. The core goal is an auditable bridge boundary: normally installed plugins should be able to run much as they do in desktop DAWs, while websites and local hosts only receive the bounded PlugRelay protocol instead of arbitrary access to the user's machine. OS-level sandboxing is a real but extended hardening profile, not the definition of project completion, because many commercial plugins expect existing license files, cache folders, sample libraries, helper services, and vendor authorization workflows in the normal user environment.
 
 ## Current Baseline
 
-SoundBridge already has the core security and host shape in place:
+PlugRelay already has the core security and host shape in place:
 
 - loopback daemon with pairing, origin checks, session ownership, and bounded request envelopes
 - installed VST3 hosting through the Steinberg VST3 SDK worker when the SDK is available, with pre-sized render buffers for the realtime process path
@@ -91,7 +91,7 @@ A future remote profile should support:
 - per-collaborator roles, such as listen-only, parameter control, MIDI input, or render/export permission
 - explicit local approval prompts before any remote collaborator can scan, instantiate, control, hear, or render through local plugins
 - path-free metadata, state, preset, and file-grant responses, with file grants remaining local and owner-approved
-- clear license posture: plugins execute only on the machine where they are installed and authorized; SoundBridge does not transmit plugin binaries or local license material to collaborators
+- clear license posture: plugins execute only on the machine where they are installed and authorized; PlugRelay does not transmit plugin binaries or local license material to collaborators
 - revocation, auditing, quotas, and rate limits suitable for long-lived collaborative sessions
 - WebRTC or another jitter-aware media path for collaborator monitoring, separate from the bounded plugin-control protocol
 
@@ -132,9 +132,9 @@ The reference implementation is macOS-first today.
 
 OS-level plugin sandboxing is a serious future endeavor, but it is an extended security profile beyond the core compatibility target. A sandbox can improve containment for malicious or untrusted plugins, enterprise deployments, public machines, and stricter app-distribution environments, but it may also break ordinary commercial plugin behavior that depends on license managers, caches, sample libraries, helper services, or vendor authorization state already present in the user's account.
 
-SoundBridge should describe these as explicit capability levels rather than a single universal endpoint:
+PlugRelay should describe these as explicit capability levels rather than a single universal endpoint:
 
-- `compatibility-worker`: plugin DSP runs in a separate worker process under the normal user environment, similar to current desktop DAWs; the browser still sees only the bounded SoundBridge protocol.
+- `compatibility-worker`: plugin DSP runs in a separate worker process under the normal user environment, similar to current desktop DAWs; the browser still sees only the bounded PlugRelay protocol.
 - `brokered-files`: user-visible file workflows use explicit grants and path-free browser responses, while plugin-internal license/cache behavior may continue to use the normal user environment.
 - `native-editor-broker`: native UI is isolated from the daemon behind a separate broker with explicit policy for file dialogs, clipboard, drag/drop, focus, and attached grants.
 - `sandboxed-worker`: plugin workers run under an OS containment policy that narrows filesystem and process access where the platform can enforce it.
@@ -150,7 +150,7 @@ Future sandboxing work should evaluate:
 
 ## Done Criteria
 
-SoundBridge is ready to call production-grade for the core compatibility profile when:
+PlugRelay is ready to call production-grade for the core compatibility profile when:
 
 - a normal developer can install the bridge, pair a site, scan plugins, create VST3/AU/LV2 instances, and process audio without reading internal docs
 - common commercial and open-source VST3/AU/LV2 plugins work through the compatibility probe, including render-duration and render-budget evidence

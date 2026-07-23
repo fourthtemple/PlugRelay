@@ -1,4 +1,4 @@
-import { createLivePerformanceAudioNodeRecreateController } from "../packages/web-client/dist/soundbridge-client.js";
+import { createLivePerformanceAudioNodeRecreateController } from "../packages/web-client/dist/plugrelay-client.js";
 
 let health = audioNodeHealth({ fallbackOutputBlocks: 10 });
 const target = {

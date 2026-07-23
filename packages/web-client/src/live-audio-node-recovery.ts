@@ -1,5 +1,5 @@
 import { boundedInteger } from "./bridge-node-options";
-import type { SoundBridgeAudioNodeHealth } from "./bridge-node-options";
+import type { PlugRelayAudioNodeHealth } from "./bridge-node-options";
 
 const LIVE_AUDIO_NODE_RECOVERY_BLOCKS = 16;
 const LIVE_AUDIO_NODE_RECOVERY_ATTEMPTS = 1;
@@ -7,7 +7,7 @@ const LIVE_AUDIO_NODE_RECOVERY_ATTEMPTS = 1;
 export type LivePerformanceAudioNodeRecoveryReason = "audio-error" | "render-budget" | "transport-pressure";
 
 export interface LivePerformanceAudioNodeRecoveryTarget {
-  readonly health: SoundBridgeAudioNodeHealth;
+  readonly health: PlugRelayAudioNodeHealth;
   retry(): boolean;
 }
 
@@ -30,7 +30,7 @@ export interface LivePerformanceAudioNodeRecoverySnapshot {
   recoveryBlocksRemaining: number;
   retryAttempts: number;
   maxRetryAttempts: number;
-  health: SoundBridgeAudioNodeHealth;
+  health: PlugRelayAudioNodeHealth;
 }
 
 export class LivePerformanceAudioNodeRecoveryController {
@@ -54,7 +54,7 @@ export class LivePerformanceAudioNodeRecoveryController {
     this.recoverAudioErrors = options.recoverAudioErrors === true;
   }
 
-  record(health: SoundBridgeAudioNodeHealth = this.node.health): LivePerformanceAudioNodeRecoverySnapshot {
+  record(health: PlugRelayAudioNodeHealth = this.node.health): LivePerformanceAudioNodeRecoverySnapshot {
     const reason = this.recoveryReason(health);
     if (reason === undefined) {
       this.resetWindow(health);
@@ -87,7 +87,7 @@ export class LivePerformanceAudioNodeRecoveryController {
     this.activeReason = undefined;
   }
 
-  private recoveryReason(health: SoundBridgeAudioNodeHealth): LivePerformanceAudioNodeRecoveryReason | undefined {
+  private recoveryReason(health: PlugRelayAudioNodeHealth): LivePerformanceAudioNodeRecoveryReason | undefined {
     if (!health.bypassed) return undefined;
     if (health.unhealthyReason === "process-timeout") return undefined;
     if (this.recoverTransportPressure && health.transportPressureAutoBypassed) return "transport-pressure";
@@ -96,7 +96,7 @@ export class LivePerformanceAudioNodeRecoveryController {
     return undefined;
   }
 
-  private recordDryBlocks(health: SoundBridgeAudioNodeHealth): void {
+  private recordDryBlocks(health: PlugRelayAudioNodeHealth): void {
     const fallbackBlocks = boundedInteger(health.fallbackOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER);
     if (this.lastFallbackOutputBlocks === undefined) {
       this.lastFallbackOutputBlocks = fallbackBlocks;
@@ -109,7 +109,7 @@ export class LivePerformanceAudioNodeRecoveryController {
     this.lastFallbackOutputBlocks = fallbackBlocks;
   }
 
-  private resetWindow(health: SoundBridgeAudioNodeHealth): void {
+  private resetWindow(health: PlugRelayAudioNodeHealth): void {
     this.dryBlocks = 0;
     this.lastFallbackOutputBlocks = boundedInteger(health.fallbackOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER);
     this.activeReason = undefined;
@@ -120,7 +120,7 @@ export class LivePerformanceAudioNodeRecoveryController {
     active: boolean,
     exhausted: boolean,
     reason: LivePerformanceAudioNodeRecoveryReason | undefined,
-    health: SoundBridgeAudioNodeHealth
+    health: PlugRelayAudioNodeHealth
   ): LivePerformanceAudioNodeRecoverySnapshot {
     return {
       applied,

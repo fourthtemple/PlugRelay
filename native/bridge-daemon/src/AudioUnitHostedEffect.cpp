@@ -1,8 +1,8 @@
-#include "SoundBridge/AudioUnitHostedEffect.h"
+#include "PlugRelay/AudioUnitHostedEffect.h"
 
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
 
-#include "SoundBridge/Base64.h"
+#include "PlugRelay/Base64.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -15,7 +15,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace soundbridge::audio_unit_worker {
+namespace plugrelay::audio_unit_worker {
 
 namespace {
 
@@ -742,6 +742,6 @@ void HostedAudioUnit::configure() {
   checkStatus(AudioUnitInitialize(unit_), "AudioUnitInitialize");
 }
 
-} // namespace soundbridge::audio_unit_worker
+} // namespace plugrelay::audio_unit_worker
 
 #endif

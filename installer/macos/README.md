@@ -7,20 +7,20 @@ The production daemon should ship as a signed, notarized macOS app bundle with a
 Draft cask shape:
 
 ```ruby
-cask "soundbridge" do
+cask "plugrelay" do
   version "0.1.0"
   sha256 "<release-sha256>"
 
-  url "https://github.com/<org>/soundbridge/releases/download/v#{version}/SoundBridge-#{version}.dmg"
-  name "SoundBridge"
+  url "https://github.com/<org>/plugrelay/releases/download/v#{version}/PlugRelay-#{version}.dmg"
+  name "PlugRelay"
   desc "Local browser-to-native audio plugin bridge"
-  homepage "https://github.com/<org>/soundbridge"
+  homepage "https://github.com/<org>/plugrelay"
 
-  app "SoundBridge.app"
+  app "PlugRelay.app"
 
   zap trash: [
-    "~/Library/Application Support/SoundBridge",
-    "~/Library/Preferences/org.soundbridge.daemon.plist"
+    "~/Library/Application Support/PlugRelay",
+    "~/Library/Preferences/org.plugrelay.daemon.plist"
   ]
 end
 ```

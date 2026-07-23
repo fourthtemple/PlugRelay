@@ -1,4 +1,4 @@
-import { SoundBridgeLiveEffectRack } from "../packages/web-client/dist/soundbridge-client.js";
+import { PlugRelayLiveEffectRack } from "../packages/web-client/dist/plugrelay-client.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -45,7 +45,7 @@ const processBudgetClient = createClient(async (request) => {
   await sleep(5);
   return createResponse(request);
 });
-const processBudgetRack = await SoundBridgeLiveEffectRack.create({
+const processBudgetRack = await PlugRelayLiveEffectRack.create({
   client: processBudgetClient,
   plugin,
   sampleRate: 48000,
@@ -86,7 +86,7 @@ const renderBudgetClient = createClient(async (request) =>
     renderBudgetExceeded: true
   })
 );
-const renderBudgetRack = await SoundBridgeLiveEffectRack.create({
+const renderBudgetRack = await PlugRelayLiveEffectRack.create({
   client: renderBudgetClient,
   plugin,
   sampleRate: 48000,

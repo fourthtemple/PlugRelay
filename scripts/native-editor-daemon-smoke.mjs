@@ -8,13 +8,13 @@ import { waitForListen } from "./security-smoke-daemon-cases.mjs";
 import { assertPublicPluginMetadata } from "./smoke-test-assertions.mjs";
 
 const HOST = "127.0.0.1";
-const PORT = Number(process.env.SOUNDBRIDGE_NATIVE_EDITOR_DAEMON_SMOKE_PORT ?? 48019);
+const PORT = Number(process.env.PLUGRELAY_NATIVE_EDITOR_DAEMON_SMOKE_PORT ?? 48019);
 const TOKEN = "dev-token";
 const ORIGIN = "http://127.0.0.1:5173";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(scriptDir, "native-editor-broker-fixture.mjs");
 const request = createRequestClient({ idPrefix: "native-editor-daemon", timeoutMs: 3000 });
-const grantRoot = await fs.mkdtemp(path.join(os.tmpdir(), "soundbridge-native-editor-"));
+const grantRoot = await fs.mkdtemp(path.join(os.tmpdir(), "plugrelay-native-editor-"));
 const requestedFileGrantPath = path.join(grantRoot, "Kick.wav");
 await fs.writeFile(requestedFileGrantPath, "fixture sample data");
 const fixtureFileGrantPath = await fs.realpath(requestedFileGrantPath);
@@ -22,13 +22,13 @@ const fixtureFileGrantPath = await fs.realpath(requestedFileGrantPath);
 const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
   env: {
     ...process.env,
-    SOUNDBRIDGE_HOST: HOST,
-    SOUNDBRIDGE_PORT: String(PORT),
-    SOUNDBRIDGE_PAIRING_TOKEN: TOKEN,
-    SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
-    SOUNDBRIDGE_FILE_GRANT_ROOTS: grantRoot,
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, "require-any-file-grant", fixtureFileGrantPath])
+    PLUGRELAY_HOST: HOST,
+    PLUGRELAY_PORT: String(PORT),
+    PLUGRELAY_PAIRING_TOKEN: TOKEN,
+    PLUGRELAY_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
+    PLUGRELAY_FILE_GRANT_ROOTS: grantRoot,
+    PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+    PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, "require-any-file-grant", fixtureFileGrantPath])
   },
   stdio: ["ignore", "pipe", "pipe"]
 });

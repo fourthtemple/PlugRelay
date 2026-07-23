@@ -1,11 +1,11 @@
-#include "SoundBridge/Lv2WorkerSupport.h"
+#include "PlugRelay/Lv2WorkerSupport.h"
 
-#include "SoundBridge/Lv2HostWorkerSupport.h"
+#include "PlugRelay/Lv2HostWorkerSupport.h"
 
 #include <stdexcept>
 #include <utility>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 
 void Lv2WorkerCycle::setInterface(const lv2_abi::LV2_Worker_Interface* workerInterface) {
   workerInterface_ = workerInterface;
@@ -115,4 +115,4 @@ lv2_abi::LV2_Worker_Status Lv2WorkerCycle::queueResponse(std::uint32_t size, con
   }
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker

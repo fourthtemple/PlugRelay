@@ -102,7 +102,7 @@ function enforceInstanceQuotas({ instanceMap, maxInstancesPerSession, maxTotalIn
     });
   }
   if (instanceMap.size >= maxTotalInstances) {
-    throw makeProtocolError("quota_exceeded", "The local SoundBridge daemon has reached its total plugin instance limit.", {
+    throw makeProtocolError("quota_exceeded", "The local PlugRelay daemon has reached its total plugin instance limit.", {
       maxTotalInstances
     });
   }

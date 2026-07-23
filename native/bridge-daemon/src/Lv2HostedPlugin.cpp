@@ -1,13 +1,13 @@
-#include "SoundBridge/Lv2HostedPlugin.h"
+#include "PlugRelay/Lv2HostedPlugin.h"
 
 #ifndef _WIN32
 
-#include "SoundBridge/Lv2Abi.h"
-#include "SoundBridge/Lv2AtomSupport.h"
-#include "SoundBridge/Lv2BusSupport.h"
-#include "SoundBridge/Lv2StateSupport.h"
-#include "SoundBridge/Lv2HostedPluginStateSupport.h"
-#include "SoundBridge/Lv2WorkerSupport.h"
+#include "PlugRelay/Lv2Abi.h"
+#include "PlugRelay/Lv2AtomSupport.h"
+#include "PlugRelay/Lv2BusSupport.h"
+#include "PlugRelay/Lv2StateSupport.h"
+#include "PlugRelay/Lv2HostedPluginStateSupport.h"
+#include "PlugRelay/Lv2WorkerSupport.h"
 
 #include <dlfcn.h>
 
@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 namespace {
 
 using namespace lv2_abi;
@@ -60,7 +60,7 @@ public:
       throw std::runtime_error("LV2 plugin has no basic audio output ports.");
     }
     if (inputPortIndexes_.size() > kMaxWorkerAudioPorts || outputPortIndexes_.size() > kMaxWorkerAudioPorts) {
-      throw std::runtime_error("LV2 plugin exceeds SoundBridge audio port limits.");
+      throw std::runtime_error("LV2 plugin exceeds PlugRelay audio port limits.");
     }
 
     buildAudioBusGroups();
@@ -659,6 +659,6 @@ std::string HostedLv2Plugin::outputAudioToJson(const std::vector<std::vector<flo
   return impl_->outputAudioToJson(channels);
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker
 
 #endif

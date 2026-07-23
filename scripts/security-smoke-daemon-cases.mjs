@@ -22,10 +22,10 @@ export function createSecurityDaemonCases({
     const allowlisted = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
-        SOUNDBRIDGE_HOST: host,
-        SOUNDBRIDGE_PORT: String(allowlistPort),
-        SOUNDBRIDGE_PAIRING_TOKEN: token,
-        SOUNDBRIDGE_ALLOWED_ORIGINS: origin
+        PLUGRELAY_HOST: host,
+        PLUGRELAY_PORT: String(allowlistPort),
+        PLUGRELAY_PAIRING_TOKEN: token,
+        PLUGRELAY_ALLOWED_ORIGINS: origin
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -64,10 +64,10 @@ export function createSecurityDaemonCases({
     const capped = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
-        SOUNDBRIDGE_HOST: host,
-        SOUNDBRIDGE_PORT: String(cappedPort),
-        SOUNDBRIDGE_PAIRING_TOKEN: token,
-        SOUNDBRIDGE_MAX_WEBSOCKET_MESSAGE_BYTES: "128"
+        PLUGRELAY_HOST: host,
+        PLUGRELAY_PORT: String(cappedPort),
+        PLUGRELAY_PAIRING_TOKEN: token,
+        PLUGRELAY_MAX_WEBSOCKET_MESSAGE_BYTES: "128"
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -143,10 +143,10 @@ export function createSecurityDaemonCases({
     const cleanupDaemon = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
-        SOUNDBRIDGE_HOST: host,
-        SOUNDBRIDGE_PORT: String(cleanupPort),
-        SOUNDBRIDGE_PAIRING_TOKEN: token,
-        SOUNDBRIDGE_MAX_TOTAL_INSTANCES: "1"
+        PLUGRELAY_HOST: host,
+        PLUGRELAY_PORT: String(cleanupPort),
+        PLUGRELAY_PAIRING_TOKEN: token,
+        PLUGRELAY_MAX_TOTAL_INSTANCES: "1"
       },
       stdio: ["ignore", "pipe", "pipe"]
     });

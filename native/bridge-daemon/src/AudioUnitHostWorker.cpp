@@ -1,10 +1,10 @@
-#include "SoundBridge/AudioUnitHostWorker.h"
+#include "PlugRelay/AudioUnitHostWorker.h"
 
-#include "SoundBridge/AudioUnitHostedEffect.h"
-#include "SoundBridge/AudioUnitHostWorkerSupport.h"
-#include "SoundBridge/Base64.h"
-#include "SoundBridge/NativeFileGrantSupport.h"
-#include "SoundBridge/NativePlugin.h"
+#include "PlugRelay/AudioUnitHostedEffect.h"
+#include "PlugRelay/AudioUnitHostWorkerSupport.h"
+#include "PlugRelay/Base64.h"
+#include "PlugRelay/NativeFileGrantSupport.h"
+#include "PlugRelay/NativePlugin.h"
 
 #include <algorithm>
 #include <cmath>
@@ -17,11 +17,11 @@
 #include <utility>
 #include <vector>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
 
 using namespace audio_unit_worker;
 using namespace worker_file_grants;
@@ -264,7 +264,7 @@ int runAudioUnitHostWorkerMac(int argc, char** argv) {
 } // namespace
 
 bool audioUnitHostAvailable() {
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
   return true;
 #else
   return false;
@@ -272,7 +272,7 @@ bool audioUnitHostAvailable() {
 }
 
 std::string audioUnitHostStatus() {
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
   return "Audio Unit scanner and CoreAudio host worker are available with bounded preset/state file grants.";
 #else
   return "Audio Unit hosting is only available on macOS.";
@@ -280,7 +280,7 @@ std::string audioUnitHostStatus() {
 }
 
 int runAudioUnitHostWorker(int argc, char** argv) {
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
   return runAudioUnitHostWorkerMac(argc, argv);
 #else
   (void)argc;
@@ -290,4 +290,4 @@ int runAudioUnitHostWorker(int argc, char** argv) {
 #endif
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

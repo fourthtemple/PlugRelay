@@ -1,9 +1,9 @@
-#include "SoundBridge/Base64.h"
+#include "PlugRelay/Base64.h"
 
 #include <array>
 #include <stdexcept>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
@@ -138,4 +138,4 @@ bool tryBase64DecodeTextToken(const std::string& text, std::size_t maxDecodedByt
   }
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

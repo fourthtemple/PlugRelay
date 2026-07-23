@@ -1,4 +1,4 @@
-#include "SoundBridge/Lv2Abi.h"
+#include "PlugRelay/Lv2Abi.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -10,7 +10,7 @@
 
 namespace {
 
-using namespace soundbridge::lv2_abi;
+using namespace plugrelay::lv2_abi;
 
 constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
 constexpr const char* kLv2AtomFloatUri = "http://lv2plug.in/ns/ext/atom#Float";
@@ -25,8 +25,8 @@ constexpr const char* kLv2StateMakePathUri = "http://lv2plug.in/ns/ext/state#mak
 constexpr const char* kLv2StateMapPathUri = "http://lv2plug.in/ns/ext/state#mapPath";
 constexpr const char* kLv2WorkerInterfaceUri = "http://lv2plug.in/ns/ext/worker#interface";
 constexpr const char* kLv2WorkerScheduleUri = "http://lv2plug.in/ns/ext/worker#schedule";
-constexpr const char* kMidiGainFileStateUri = "urn:soundbridge:example:lv2-gain#midiGainFile";
-constexpr const char* kMidiGainStateUri = "urn:soundbridge:example:lv2-gain#midiGain";
+constexpr const char* kMidiGainFileStateUri = "urn:plugrelay:example:lv2-gain#midiGainFile";
+constexpr const char* kMidiGainStateUri = "urn:plugrelay:example:lv2-gain#midiGain";
 constexpr float kExampleLatencyFrames = 17.0F;
 constexpr std::uint32_t kLv2StateSuccess = 0;
 constexpr std::uint32_t kLv2StateErrBadType = 2;
@@ -441,7 +441,7 @@ const void* extensionData(const char* uri) {
 }
 
 const LV2_Descriptor kDescriptor {
-    "urn:soundbridge:example:lv2-gain",
+    "urn:plugrelay:example:lv2-gain",
     instantiate,
     connectPort,
     nullptr,

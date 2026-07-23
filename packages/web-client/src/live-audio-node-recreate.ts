@@ -1,5 +1,5 @@
 import { boundedInteger } from "./bridge-node-options";
-import type { SoundBridgeAudioNodeHealth } from "./bridge-node-options";
+import type { PlugRelayAudioNodeHealth } from "./bridge-node-options";
 
 const LIVE_AUDIO_NODE_RECREATE_BLOCKS = 16;
 const LIVE_AUDIO_NODE_RECREATE_ATTEMPTS = 1;
@@ -7,12 +7,12 @@ const LIVE_AUDIO_NODE_RECREATE_ATTEMPTS = 1;
 export type LivePerformanceAudioNodeRecreateReason = "process-timeout";
 
 export interface LivePerformanceAudioNodeRecreateTarget {
-  readonly health: SoundBridgeAudioNodeHealth;
+  readonly health: PlugRelayAudioNodeHealth;
 }
 
 export interface LivePerformanceAudioNodeRecreateOptions<T = unknown> {
   node: LivePerformanceAudioNodeRecreateTarget;
-  recreate: (health: SoundBridgeAudioNodeHealth) => T | Promise<T>;
+  recreate: (health: PlugRelayAudioNodeHealth) => T | Promise<T>;
   recreateBlocks?: number;
   maxRecreateAttempts?: number;
 }
@@ -27,7 +27,7 @@ export interface LivePerformanceAudioNodeRecreateSnapshot<T = unknown> {
   recreateBlocksRemaining: number;
   recreateAttempts: number;
   maxRecreateAttempts: number;
-  health: SoundBridgeAudioNodeHealth;
+  health: PlugRelayAudioNodeHealth;
   result?: T;
   error?: unknown;
 }
@@ -36,7 +36,7 @@ export class LivePerformanceAudioNodeRecreateController<T = unknown> {
   readonly node: LivePerformanceAudioNodeRecreateTarget;
   readonly recreateBlocks: number;
   readonly maxRecreateAttempts: number;
-  private readonly recreateTarget: (health: SoundBridgeAudioNodeHealth) => T | Promise<T>;
+  private readonly recreateTarget: (health: PlugRelayAudioNodeHealth) => T | Promise<T>;
   private recreateAttempts = 0;
   private dryBlocks = 0;
   private lastFallbackOutputBlocks?: number;
@@ -49,7 +49,7 @@ export class LivePerformanceAudioNodeRecreateController<T = unknown> {
     this.maxRecreateAttempts = boundedInteger(options.maxRecreateAttempts, LIVE_AUDIO_NODE_RECREATE_ATTEMPTS, 0, 1024);
   }
 
-  async record(health: SoundBridgeAudioNodeHealth = this.node.health): Promise<LivePerformanceAudioNodeRecreateSnapshot<T>> {
+  async record(health: PlugRelayAudioNodeHealth = this.node.health): Promise<LivePerformanceAudioNodeRecreateSnapshot<T>> {
     const reason = this.recreateReason(health);
     if (reason === undefined) {
       this.resetWindow(health);
@@ -84,11 +84,11 @@ export class LivePerformanceAudioNodeRecreateController<T = unknown> {
     this.activeReason = undefined;
   }
 
-  private recreateReason(health: SoundBridgeAudioNodeHealth): LivePerformanceAudioNodeRecreateReason | undefined {
+  private recreateReason(health: PlugRelayAudioNodeHealth): LivePerformanceAudioNodeRecreateReason | undefined {
     return health.bypassed && health.unhealthyReason === "process-timeout" ? "process-timeout" : undefined;
   }
 
-  private recordDryBlocks(health: SoundBridgeAudioNodeHealth): void {
+  private recordDryBlocks(health: PlugRelayAudioNodeHealth): void {
     const fallbackBlocks = boundedInteger(health.fallbackOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER);
     if (this.lastFallbackOutputBlocks === undefined) {
       this.lastFallbackOutputBlocks = fallbackBlocks;
@@ -98,7 +98,7 @@ export class LivePerformanceAudioNodeRecreateController<T = unknown> {
     this.lastFallbackOutputBlocks = fallbackBlocks;
   }
 
-  private resetWindow(health: SoundBridgeAudioNodeHealth): void {
+  private resetWindow(health: PlugRelayAudioNodeHealth): void {
     this.dryBlocks = 0;
     this.lastFallbackOutputBlocks = boundedInteger(health.fallbackOutputBlocks, 0, 0, Number.MAX_SAFE_INTEGER);
     this.activeReason = undefined;
@@ -109,7 +109,7 @@ export class LivePerformanceAudioNodeRecreateController<T = unknown> {
     active: boolean,
     exhausted: boolean,
     reason: LivePerformanceAudioNodeRecreateReason | undefined,
-    health: SoundBridgeAudioNodeHealth,
+    health: PlugRelayAudioNodeHealth,
     result?: T,
     error?: unknown
   ): LivePerformanceAudioNodeRecreateSnapshot<T> {

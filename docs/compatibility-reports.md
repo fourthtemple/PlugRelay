@@ -1,6 +1,6 @@
 # Plugin Compatibility Reports
 
-SoundBridge compatibility work depends on reports from people who own real VST3, Audio Unit, and LV2 plugins. Do not upload commercial plugin binaries, licenses, private presets, samples, or local filesystem paths. For plugin-specific support requests, submit a probe report instead.
+PlugRelay compatibility work depends on reports from people who own real VST3, Audio Unit, and LV2 plugins. Do not upload commercial plugin binaries, licenses, private presets, samples, or local filesystem paths. For plugin-specific support requests, submit a probe report instead.
 
 ## When To File One
 
@@ -9,7 +9,7 @@ Open a plugin compatibility issue when:
 - a plugin scans but cannot be instantiated
 - a plugin renders silence, crashes, or times out
 - parameters, presets, program data, state, MIDI, transport, bus layouts, latency, tail, file grants, or editor behavior do not work
-- a plugin is discovery-only and you think SoundBridge should support its host profile or LV2 extension contract
+- a plugin is discovery-only and you think PlugRelay should support its host profile or LV2 extension contract
 
 For general feature ideas, open a normal feature request. For "please support this plugin" or "this plugin fails," include a probe report.
 
@@ -18,28 +18,28 @@ For general feature ideas, open a normal feature request. For "please support th
 Use the narrowest format and name filter that reproduces the issue:
 
 ```sh
-SOUNDBRIDGE_PROBE_REPORT=json \
-SOUNDBRIDGE_PROBE_FORMATS=vst3 \
-SOUNDBRIDGE_PROBE_FILTER="Plugin Name" \
-npm run --silent probe:installed > soundbridge-probe-report.json
+PLUGRELAY_PROBE_REPORT=json \
+PLUGRELAY_PROBE_FORMATS=vst3 \
+PLUGRELAY_PROBE_FILTER="Plugin Name" \
+npm run --silent probe:installed > plugrelay-probe-report.json
 ```
 
 For Audio Units:
 
 ```sh
-SOUNDBRIDGE_PROBE_REPORT=json \
-SOUNDBRIDGE_PROBE_FORMATS=au \
-SOUNDBRIDGE_PROBE_FILTER="Plugin Name" \
-npm run --silent probe:installed > soundbridge-probe-report.json
+PLUGRELAY_PROBE_REPORT=json \
+PLUGRELAY_PROBE_FORMATS=au \
+PLUGRELAY_PROBE_FILTER="Plugin Name" \
+npm run --silent probe:installed > plugrelay-probe-report.json
 ```
 
 For LV2:
 
 ```sh
-SOUNDBRIDGE_PROBE_REPORT=json \
-SOUNDBRIDGE_PROBE_FORMATS=lv2 \
-SOUNDBRIDGE_PROBE_FILTER="Plugin Name" \
-npm run --silent probe:installed > soundbridge-probe-report.json
+PLUGRELAY_PROBE_REPORT=json \
+PLUGRELAY_PROBE_FORMATS=lv2 \
+PLUGRELAY_PROBE_FILTER="Plugin Name" \
+npm run --silent probe:installed > plugrelay-probe-report.json
 ```
 
 Use `--silent` so npm does not print a banner before the JSON. If the report is too large to paste into an issue, attach the file.
@@ -49,19 +49,19 @@ Use `--silent` so npm does not print a banner before the JSON. If the report is 
 For a quick local pass/fail view:
 
 ```sh
-SOUNDBRIDGE_PROBE_REPORT=summary \
-SOUNDBRIDGE_PROBE_FORMATS=vst3 \
-SOUNDBRIDGE_PROBE_FILTER="Plugin Name" \
+PLUGRELAY_PROBE_REPORT=summary \
+PLUGRELAY_PROBE_FORMATS=vst3 \
+PLUGRELAY_PROBE_FILTER="Plugin Name" \
 npm run --silent probe:installed
 ```
 
 For a compact path-free JSON artifact that can feed a compatibility matrix without the full per-phase result payload:
 
 ```sh
-SOUNDBRIDGE_PROBE_REPORT=matrix \
-SOUNDBRIDGE_PROBE_FORMATS=vst3 \
-SOUNDBRIDGE_PROBE_FILTER="Plugin Name" \
-npm run --silent probe:installed > soundbridge-probe-matrix.json
+PLUGRELAY_PROBE_REPORT=matrix \
+PLUGRELAY_PROBE_FORMATS=vst3 \
+PLUGRELAY_PROBE_FILTER="Plugin Name" \
+npm run --silent probe:installed > plugrelay-probe-matrix.json
 ```
 
 ## What To Include
@@ -70,7 +70,7 @@ In the GitHub issue, include:
 
 - OS version
 - CPU architecture
-- SoundBridge commit or version
+- PlugRelay commit or version
 - plugin name, vendor, and version
 - plugin format: VST3, AU, or LV2
 - exact probe command used
@@ -103,7 +103,7 @@ Host-transport coverage is reported as `accepted`, `failed`, or `missing`. An `a
 
 Latency/tail coverage is reported as `zero`, `latency`, `tail`, `latency-tail`, `infinite-tail`, `partial`, `failed`, or `missing`. Matrix entries include bounded plugin, transport, and reported latency sample counts plus bounded tail samples and an explicit infinite-tail flag so hosts can identify plugins that need delay compensation, release-tail handling, or conservative offline bounce windows.
 
-Native-editor coverage is reported as `not-requested`, `opened`, `missing`, or `failed`. `not-requested` means the probe did not run with `SOUNDBRIDGE_PROBE_NATIVE_EDITOR_BROKER=1`; `opened` means the separate broker open/close path succeeded.
+Native-editor coverage is reported as `not-requested`, `opened`, `missing`, or `failed`. `not-requested` means the probe did not run with `PLUGRELAY_PROBE_NATIVE_EDITOR_BROKER=1`; `opened` means the separate broker open/close path succeeded.
 
 Matrix reports include one compact entry per probed plugin with path-redacted identity text, pass/fail status, failure phase/code, render-signal, live-render, and output-bus signal status, bus/event categories, bounded bus counts/indexes, VST3 note-expression counts/indexes, VST3 MIDI-controller and program-change event status, program metadata and program-data target status, parameter and state profile status, automation status, host-transport status, latency/tail status, native-editor status, parameter metadata status, and advertised file-grant operations. Each entry also includes a `featureStatus` object for dashboard-friendly buckets: `instantiation`, `parameters`, `presetSnapshots`, `vst3ProgramData`, `state`, `fileGrants`, `midiEvents`, `automation`, `transport`, `rendering`, `liveRendering`, `busLayouts`, `latencyTail`, and `editor`. They are meant for compatibility dashboards and triage; attach the full JSON report when maintainers need phase timings or detailed per-plugin payloads.
 

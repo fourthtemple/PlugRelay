@@ -1,4 +1,4 @@
-import { SoundBridgeLiveEffectRack } from "../packages/web-client/dist/soundbridge-client.js";
+import { PlugRelayLiveEffectRack } from "../packages/web-client/dist/plugrelay-client.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -28,7 +28,7 @@ function createClient(processAudioBlockBinary) {
 }
 
 const timeoutClient = createClient(() => new Promise(() => undefined));
-const timeoutRack = await SoundBridgeLiveEffectRack.create({
+const timeoutRack = await PlugRelayLiveEffectRack.create({
   client: timeoutClient,
   plugin,
   sampleRate: 48000,
@@ -63,12 +63,12 @@ assert(timeoutClient.timeouts.at(-1) === 1, "live rack process timeout passes bo
 assert(timeoutEvents === 1 && timeoutTripEvents === 1 && effectErrorEvents === 1, "live rack emits timeout and timeout-trip events beside generic effect-error");
 assert(
   timeoutEventDetail.health.unhealthyReason === "process-timeout" &&
-    timeoutEventDetail.error?.name === "SoundBridgeLiveEffectTimeout",
+    timeoutEventDetail.error?.name === "PlugRelayLiveEffectTimeout",
   "live rack process-timeout event carries timeout health and error"
 );
 assert(
   timeoutTripEventDetail.health.unhealthyReason === "process-timeout" &&
-    timeoutTripEventDetail.error?.name === "SoundBridgeLiveEffectTimeout",
+    timeoutTripEventDetail.error?.name === "PlugRelayLiveEffectTimeout",
   "live rack process-timeout trip event carries timeout health and error"
 );
 await timeoutRack.destroy();
@@ -76,7 +76,7 @@ await timeoutRack.destroy();
 const failureClient = createClient(async () => {
   throw new Error("plain processing failure");
 });
-const failureRack = await SoundBridgeLiveEffectRack.create({
+const failureRack = await PlugRelayLiveEffectRack.create({
   client: failureClient,
   plugin,
   sampleRate: 48000,
@@ -96,7 +96,7 @@ assert(unexpectedTimeoutEvents === 0 && unexpectedTimeoutTripEvents === 0, "live
 await failureRack.destroy();
 
 const cappedRecoveryClient = createClient(() => new Promise(() => undefined));
-const cappedRecoveryRack = await SoundBridgeLiveEffectRack.create({
+const cappedRecoveryRack = await PlugRelayLiveEffectRack.create({
   client: cappedRecoveryClient,
   plugin,
   sampleRate: 48000,

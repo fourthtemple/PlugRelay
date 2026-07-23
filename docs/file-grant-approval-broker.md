@@ -1,8 +1,8 @@
 # File Grant Approval Broker
 
-Preset files, samples, caches, licenses, and other plugin files cross a separate trust boundary from audio/MIDI/control data. SoundBridge therefore keeps browser-visible file access as opaque grants and expects production hosts to approve local files through a native broker.
+Preset files, samples, caches, licenses, and other plugin files cross a separate trust boundary from audio/MIDI/control data. PlugRelay therefore keeps browser-visible file access as opaque grants and expects production hosts to approve local files through a native broker.
 
-The reference daemon enables the approval broker only when `SOUNDBRIDGE_FILE_GRANT_BROKER_PATH` names an absolute executable path. Optional arguments use `SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS` as a bounded JSON string array. Broker-selected paths must still resolve inside `SOUNDBRIDGE_FILE_GRANT_ROOTS`; the daemon rejects outside-root paths and symlink escapes after `realpath`.
+The reference daemon enables the approval broker only when `PLUGRELAY_FILE_GRANT_BROKER_PATH` names an absolute executable path. Optional arguments use `PLUGRELAY_FILE_GRANT_BROKER_ARGS` as a bounded JSON string array. Broker-selected paths must still resolve inside `PLUGRELAY_FILE_GRANT_ROOTS`; the daemon rejects outside-root paths and symlink escapes after `realpath`.
 
 ## Handshake
 
@@ -54,4 +54,4 @@ To deny the request:
 
 The approval broker uses the daemon worker limits for stdout line size, stderr line size and budget, command size, ready timeout, command timeout, diagnostic log length, and termination grace. These limits are advertised under `hello.capabilities.security`.
 
-Browser-supplied paths remain disabled unless `SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS=1` is set for development or test harnesses.
+Browser-supplied paths remain disabled unless `PLUGRELAY_FILE_GRANT_ALLOW_BROWSER_PATHS=1` is set for development or test harnesses.

@@ -38,7 +38,7 @@ export async function exerciseDaemonFileGrantOperation({ absolutePath, check, pr
   const stateGrant = grantFixture(sampleGrant, {
     grantId: "filegrant-state",
     purpose: "state",
-    displayName: "Fixture State.soundbridge-state",
+    displayName: "Fixture State.plugrelay-state",
     absolutePath: `${absolutePath}.state`
   });
   const stateDirectoryGrant = grantFixture(sampleGrant, {

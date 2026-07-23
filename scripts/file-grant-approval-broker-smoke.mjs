@@ -10,7 +10,7 @@ import { createDaemonFileGrants } from "./daemon-file-grants.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(scriptDir, "file-grant-approval-broker-fixture.mjs");
-const root = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-grant-broker-"));
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "plugrelay-grant-broker-"));
 const approvedFile = path.join(root, "Approved.wav");
 fs.writeFileSync(approvedFile, "sample");
 
@@ -25,22 +25,22 @@ try {
 
   const configured = createConfiguredFileGrantApprovalBroker({
     env: {
-      SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: process.execPath,
-      SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: JSON.stringify([fixturePath, "ok", approvedFile])
+      PLUGRELAY_FILE_GRANT_BROKER_PATH: process.execPath,
+      PLUGRELAY_FILE_GRANT_BROKER_ARGS: JSON.stringify([fixturePath, "ok", approvedFile])
     }
   });
   assert(configured?.available === true, "configured file grant approval broker is available");
   assert(createConfiguredFileGrantApprovalBroker({ env: {} }) === undefined, "missing approval broker keeps it disabled");
   assertThrows(
-    () => createConfiguredFileGrantApprovalBroker({ env: { SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: "relative-broker" } }),
+    () => createConfiguredFileGrantApprovalBroker({ env: { PLUGRELAY_FILE_GRANT_BROKER_PATH: "relative-broker" } }),
     "relative approval broker paths are rejected"
   );
   assertThrows(
     () =>
       createConfiguredFileGrantApprovalBroker({
         env: {
-          SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: process.execPath,
-          SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: "{"
+          PLUGRELAY_FILE_GRANT_BROKER_PATH: process.execPath,
+          PLUGRELAY_FILE_GRANT_BROKER_ARGS: "{"
         }
       }),
     "malformed approval broker args are rejected"
@@ -49,8 +49,8 @@ try {
     () =>
       createConfiguredFileGrantApprovalBroker({
         env: {
-          SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: process.execPath,
-          SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: JSON.stringify({ arg: fixturePath })
+          PLUGRELAY_FILE_GRANT_BROKER_PATH: process.execPath,
+          PLUGRELAY_FILE_GRANT_BROKER_ARGS: JSON.stringify({ arg: fixturePath })
         }
       }),
     "non-array approval broker args are rejected"
@@ -59,8 +59,8 @@ try {
     () =>
       createConfiguredFileGrantApprovalBroker({
         env: {
-          SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: process.execPath,
-          SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: JSON.stringify([fixturePath, 1])
+          PLUGRELAY_FILE_GRANT_BROKER_PATH: process.execPath,
+          PLUGRELAY_FILE_GRANT_BROKER_ARGS: JSON.stringify([fixturePath, 1])
         }
       }),
     "non-string approval broker args are rejected"
@@ -69,8 +69,8 @@ try {
     () =>
       createConfiguredFileGrantApprovalBroker({
         env: {
-          SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: process.execPath,
-          SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: JSON.stringify(["x".repeat(4097)])
+          PLUGRELAY_FILE_GRANT_BROKER_PATH: process.execPath,
+          PLUGRELAY_FILE_GRANT_BROKER_ARGS: JSON.stringify(["x".repeat(4097)])
         }
       }),
     "oversized approval broker args are rejected"
@@ -150,7 +150,7 @@ async function assertRejectsBroker(mode, message, expectedErrorText, forbiddenEr
 }
 
 async function assertMissingBrokerExecutableRedactsPath() {
-  const missingPath = "/tmp/soundbridge-missing-file-grant-broker.lic";
+  const missingPath = "/tmp/plugrelay-missing-file-grant-broker.lic";
   const missingBroker = new FileGrantApprovalBroker({
     executablePath: missingPath,
     limits: {

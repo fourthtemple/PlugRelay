@@ -1,6 +1,6 @@
 # Security Model
 
-SoundBridge exposes native audio plugins to browser origins. That is powerful, so the default posture must be narrow and explicit.
+PlugRelay exposes native audio plugins to browser origins. That is powerful, so the default posture must be narrow and explicit.
 
 This is also why browser-to-native plugin bridges should converge on an auditable open standard. A web origin that can ask a local companion app to scan or load VST3, Audio Unit, or LV2 plugins is crossing the browser sandbox into native code. See [Why Browser Plugin Bridges Need An Open Standard](open-standard.md).
 
@@ -52,7 +52,7 @@ Non-goals for the MVP:
 
 ## Worker Profiles And Sandboxing Roadmap
 
-Worker processes contain plugin crashes, but they do not automatically contain a malicious plugin. The core SoundBridge compatibility profile may run plugin workers in the normal user environment, similar to desktop DAWs, because many commercial plugins depend on existing license files, cache folders, sample libraries, helper services, vendor authorization state, and sometimes network behavior. In that profile, the security boundary is that the browser or local host only receives the bounded SoundBridge protocol, not arbitrary filesystem paths, process handles, plugin launch paths, or direct native API access.
+Worker processes contain plugin crashes, but they do not automatically contain a malicious plugin. The core PlugRelay compatibility profile may run plugin workers in the normal user environment, similar to desktop DAWs, because many commercial plugins depend on existing license files, cache folders, sample libraries, helper services, vendor authorization state, and sometimes network behavior. In that profile, the security boundary is that the browser or local host only receives the bounded PlugRelay protocol, not arbitrary filesystem paths, process handles, plugin launch paths, or direct native API access.
 
 OS-level sandboxing remains a real extended hardening endeavor for stricter deployments. A sandboxed-worker profile can narrow filesystem, process, and network access where the platform can enforce it, but it must be advertised as a separate capability because it may break plugins that work normally in compatibility-worker mode. The reference implementation does not claim that sandboxing is complete today; it keeps plugin hosting behind worker boundaries, pairing, ownership checks, file grants, and input validation while the sandbox profile remains future work.
 
@@ -82,11 +82,11 @@ Conforming daemons MUST reject any request or upgrade whose `Host` header is not
 
 ## Remote Collaboration
 
-Two-person remote sessions are a useful future profile, but they are not the same security model as the loopback bridge. A collaborator should reach SoundBridge through an authenticated app or relay that carries user identity, invite scope, TLS transport, revocation, and role policy. The local owner should approve the remote collaborator and the requested capabilities before scanning, creating instances, sending MIDI/audio, changing parameters, or rendering through local plugins.
+Two-person remote sessions are a useful future profile, but they are not the same security model as the loopback bridge. A collaborator should reach PlugRelay through an authenticated app or relay that carries user identity, invite scope, TLS transport, revocation, and role policy. The local owner should approve the remote collaborator and the requested capabilities before scanning, creating instances, sending MIDI/audio, changing parameters, or rendering through local plugins.
 
-Remote collaborators must not receive plugin bundle paths, local filesystem paths, plugin binaries, license files, sample-library locations, cache paths, or arbitrary file handles. File grants stay local, owner-approved, operation-specific, and path-free from the remote collaborator's perspective. Plugins execute on the machine where they are installed and authorized; SoundBridge should not be used to bypass a vendor's license terms by copying plugin code or license material to another machine.
+Remote collaborators must not receive plugin bundle paths, local filesystem paths, plugin binaries, license files, sample-library locations, cache paths, or arbitrary file handles. File grants stay local, owner-approved, operation-specific, and path-free from the remote collaborator's perspective. Plugins execute on the machine where they are installed and authorized; PlugRelay should not be used to bypass a vendor's license terms by copying plugin code or license material to another machine.
 
-The reference daemon remains loopback-only by default. `SOUNDBRIDGE_ALLOW_NON_LOOPBACK=1` is for unsafe development experiments, not a production remote-collaboration mode.
+The reference daemon remains loopback-only by default. `PLUGRELAY_ALLOW_NON_LOOPBACK=1` is for unsafe development experiments, not a production remote-collaboration mode.
 
 ## Resource Limits And Input Validation
 
@@ -111,7 +111,7 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Plugin presets | 256 presets, 64-byte ids, 160-byte names, 1024 bounded parameter values per preset | `listPlugins`, `scanPlugins`, `setPreset.presetId` |
 | VST3 unit/program metadata | 1024 units, 256 lists, 256 programs per parameter, 160-byte names | `getParameters`, `createInstance.plugin.parameters` |
 | Editor sessions | 8 per session / 32 total / 10-minute TTL; native broker disabled unless explicitly configured | `openEditor`, `closeEditor` |
-| File grants | Disabled unless explicit broker roots are configured; pathless grants require `SOUNDBRIDGE_FILE_GRANT_BROKER_PATH`; browser-supplied paths additionally require `SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS=1`; 8 per session / 8 per instance / 64 total / 10-minute TTL; paths capped at 4096 bytes, display names capped at 160 bytes | `createFileGrant`, `listFileGrants`, `revokeFileGrant`, `attachFileGrant`, `listInstanceFileGrants`, `detachFileGrant` |
+| File grants | Disabled unless explicit broker roots are configured; pathless grants require `PLUGRELAY_FILE_GRANT_BROKER_PATH`; browser-supplied paths additionally require `PLUGRELAY_FILE_GRANT_ALLOW_BROWSER_PATHS=1`; 8 per session / 8 per instance / 64 total / 10-minute TTL; paths capped at 4096 bytes, display names capped at 160 bytes | `createFileGrant`, `listFileGrants`, `revokeFileGrant`, `attachFileGrant`, `listInstanceFileGrants`, `detachFileGrant` |
 | Native plugin state bytes / state envelope | 384 KiB / 1 MiB | `getState`, `setState` |
 | LV2 file-backed state | 64 files, 64 KiB per file, 192 KiB total, 256-byte relative paths | LV2 `state:mapPath` / `state:makePath` |
 | Plugin/transport latency samples | 0–1048576 | `getLatency`, `processAudioBlock.latencySamples` |
@@ -133,11 +133,11 @@ The reference daemon enforces these defaults (all overridable by environment var
 | Native worker stderr budget | 4 MiB per worker, then the worker is rejected and terminated | VST3/AU/LV2/example worker diagnostics |
 | Native worker diagnostic logs | 4096 displayed chars; control characters are escaped | VST3/AU/LV2/example worker diagnostics |
 
-Out-of-range `createInstance` values fail with `invalid_argument`. Native host workers independently clamp block size and channel counts before allocating, so a misbehaving daemon layer cannot drive a worker into an oversized allocation. The daemon also caps worker startup, worker command line size, in-flight worker command count and bytes, command execution time, stdout response lines before JSON parsing, stderr diagnostic line size before logging, total stderr diagnostic bytes per worker, and escaped diagnostic log display length. Worker stderr diagnostics redact common local path forms before logging. Text fields in worker line-protocol commands, including parameter ids, parameter display strings, and file-grant display/path strings, are base64-encoded by the daemon and decoded by workers under byte caps before parsing or lookup. The diagnostic display cap is advertised in `hello.capabilities.security.maxWorkerDiagnosticLogChars` and can be tuned with `SOUNDBRIDGE_MAX_WORKER_DIAGNOSTIC_LOG_CHARS`. Oversized commands and commands beyond the pending limits are rejected before being written to worker stdin; a missing or invalid ready handshake, timed-out command, oversized response, unterminated response, malformed JSON response, unsolicited stdout line, oversized diagnostic line, or diagnostic flood rejects pending commands and terminates that worker process instead of stranding requests, desynchronizing IPC, or growing daemon memory/logs. Worker termination sends a normal termination signal first and escalates to SIGKILL after the bounded grace period if the process ignores it. `packages/protocol/schema/protocol.schema.json` encodes the browser-facing command bounds so other implementations can validate against the same contract.
+Out-of-range `createInstance` values fail with `invalid_argument`. Native host workers independently clamp block size and channel counts before allocating, so a misbehaving daemon layer cannot drive a worker into an oversized allocation. The daemon also caps worker startup, worker command line size, in-flight worker command count and bytes, command execution time, stdout response lines before JSON parsing, stderr diagnostic line size before logging, total stderr diagnostic bytes per worker, and escaped diagnostic log display length. Worker stderr diagnostics redact common local path forms before logging. Text fields in worker line-protocol commands, including parameter ids, parameter display strings, and file-grant display/path strings, are base64-encoded by the daemon and decoded by workers under byte caps before parsing or lookup. The diagnostic display cap is advertised in `hello.capabilities.security.maxWorkerDiagnosticLogChars` and can be tuned with `PLUGRELAY_MAX_WORKER_DIAGNOSTIC_LOG_CHARS`. Oversized commands and commands beyond the pending limits are rejected before being written to worker stdin; a missing or invalid ready handshake, timed-out command, oversized response, unterminated response, malformed JSON response, unsolicited stdout line, oversized diagnostic line, or diagnostic flood rejects pending commands and terminates that worker process instead of stranding requests, desynchronizing IPC, or growing daemon memory/logs. Worker termination sends a normal termination signal first and escalates to SIGKILL after the bounded grace period if the process ignores it. `packages/protocol/schema/protocol.schema.json` encodes the browser-facing command bounds so other implementations can validate against the same contract.
 
 ## Development Token
 
-The mock daemon generates an ephemeral pairing token each time it starts and prints it to the local terminal. `SOUNDBRIDGE_PAIRING_TOKEN` exists for controlled automation and test fixtures; do not ship a public static token. The real macOS daemon should show a native confirmation prompt with the requesting origin.
+The mock daemon generates an ephemeral pairing token each time it starts and prints it to the local terminal. `PLUGRELAY_PAIRING_TOKEN` exists for controlled automation and test fixtures; do not ship a public static token. The real macOS daemon should show a native confirmation prompt with the requesting origin.
 
 The development daemon now enforces the important multi-host boundaries even with the simple token flow:
 
@@ -147,15 +147,15 @@ The development daemon now enforces the important multi-host boundaries even wit
 - disconnecting a WebSocket destroys its session-owned plugin workers
 - quotas default to 8 instances per session and 32 instances total
 
-Those defaults can be adjusted for testing with `SOUNDBRIDGE_MAX_INSTANCES_PER_SESSION`, `SOUNDBRIDGE_MAX_TOTAL_INSTANCES`, `SOUNDBRIDGE_MAX_SESSIONS_PER_ORIGIN`, `SOUNDBRIDGE_SESSION_TTL_MS`, and `SOUNDBRIDGE_MAX_WEBSOCKET_MESSAGE_BYTES`.
+Those defaults can be adjusted for testing with `PLUGRELAY_MAX_INSTANCES_PER_SESSION`, `PLUGRELAY_MAX_TOTAL_INSTANCES`, `PLUGRELAY_MAX_SESSIONS_PER_ORIGIN`, `PLUGRELAY_SESSION_TTL_MS`, and `PLUGRELAY_MAX_WEBSOCKET_MESSAGE_BYTES`.
 
-Set `SOUNDBRIDGE_ALLOWED_ORIGINS` to a comma-separated list to restrict pairing to known sites:
+Set `PLUGRELAY_ALLOWED_ORIGINS` to a comma-separated list to restrict pairing to known sites:
 
 ```sh
-SOUNDBRIDGE_ALLOWED_ORIGINS=https://your-daw.example,http://127.0.0.1:5173 npm run bridge
+PLUGRELAY_ALLOWED_ORIGINS=https://your-daw.example,http://127.0.0.1:5173 npm run bridge
 ```
 
-The daemon refuses non-loopback binds unless `SOUNDBRIDGE_ALLOW_NON_LOOPBACK=1` is set. The demo server has the same guard through `SOUNDBRIDGE_DEMO_ALLOW_NON_LOOPBACK=1` and only serves the browser demo plus the built web-client bundle.
+The daemon refuses non-loopback binds unless `PLUGRELAY_ALLOW_NON_LOOPBACK=1` is set. The demo server has the same guard through `PLUGRELAY_DEMO_ALLOW_NON_LOOPBACK=1` and only serves the browser demo plus the built web-client bundle.
 
 ## Browser Headers
 

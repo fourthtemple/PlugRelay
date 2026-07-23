@@ -12,16 +12,16 @@ const DEFAULT_COMMAND_TIMEOUT_MS = 5000;
 const DEFAULT_TERMINATION_GRACE_MS = 250;
 
 export function createConfiguredFileGrantApprovalBroker({ env = process.env, limits = {} } = {}) {
-  const executablePath = String(env.SOUNDBRIDGE_FILE_GRANT_BROKER_PATH ?? "").trim();
+  const executablePath = String(env.PLUGRELAY_FILE_GRANT_BROKER_PATH ?? "").trim();
   if (!executablePath) {
     return undefined;
   }
   if (!path.isAbsolute(executablePath)) {
-    throw new Error("SOUNDBRIDGE_FILE_GRANT_BROKER_PATH must be an absolute executable path.");
+    throw new Error("PLUGRELAY_FILE_GRANT_BROKER_PATH must be an absolute executable path.");
   }
 
   return new FileGrantApprovalBroker({
-    args: parseBrokerArgs(env.SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS),
+    args: parseBrokerArgs(env.PLUGRELAY_FILE_GRANT_BROKER_ARGS),
     executablePath,
     limits
   });
@@ -245,15 +245,15 @@ function parseBrokerArgs(rawArgs) {
   }
   const parsed = JSON.parse(String(rawArgs));
   if (!Array.isArray(parsed) || parsed.length > 16) {
-    throw new Error("SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS must be a JSON array of up to 16 strings.");
+    throw new Error("PLUGRELAY_FILE_GRANT_BROKER_ARGS must be a JSON array of up to 16 strings.");
   }
   return parsed.map((arg) => {
     if (typeof arg !== "string") {
-      throw new Error("SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS must contain only strings.");
+      throw new Error("PLUGRELAY_FILE_GRANT_BROKER_ARGS must contain only strings.");
     }
     const value = arg;
     if (Buffer.byteLength(value, "utf8") > 4096) {
-      throw new Error("SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS contains an oversized argument.");
+      throw new Error("PLUGRELAY_FILE_GRANT_BROKER_ARGS contains an oversized argument.");
     }
     return value;
   });

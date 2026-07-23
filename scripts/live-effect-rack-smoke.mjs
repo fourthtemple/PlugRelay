@@ -1,14 +1,14 @@
 import {
-  SoundBridgeProtocolError,
-  SoundBridgeLiveEffectRack,
+  PlugRelayProtocolError,
+  PlugRelayLiveEffectRack,
   createLivePerformanceRackOptions
-} from "../packages/web-client/dist/soundbridge-client.js";
+} from "../packages/web-client/dist/plugrelay-client.js";
 
 const plugin = {
   pluginId: "mock.live-effect",
   format: "mock",
   name: "Live Effect",
-  vendor: "SoundBridge",
+  vendor: "PlugRelay",
   category: "Effect",
   kind: "effect",
   inputs: 2,
@@ -73,7 +73,7 @@ class FakeLiveClient {
       await delay(this.processingDelayMs);
     }
     if (this.protocolErrorCode) {
-      throw new SoundBridgeProtocolError(this.protocolErrorCode, "native render deadline missed", this.protocolErrorDetails);
+      throw new PlugRelayProtocolError(this.protocolErrorCode, "native render deadline missed", this.protocolErrorDetails);
     }
     if (this.failProcessing) {
       throw new Error("plugin worker crashed");
@@ -186,7 +186,7 @@ assert(near(overriddenLivePerformance.maxInputAgeMs, (128 / 48000) * 1000 * 2), 
 assert(near(overriddenLivePerformance.processBudgetMs, (128 / 48000) * 1000 * 2), "live performance preset derives process budget overrides from block time");
 assert(near(overriddenLivePerformance.processTimeoutMs, (128 / 48000) * 1000 * 3), "live performance preset derives timeout overrides from block time");
 
-const rack = await SoundBridgeLiveEffectRack.create({
+const rack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -362,7 +362,7 @@ await rack.processBlock({
 });
 assert(client.binaryProcessed.at(-1)?.inputBuses?.[0]?.index === 1, "binary live rack forwards indexed input buses");
 
-const fadeRack = await SoundBridgeLiveEffectRack.create({
+const fadeRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -385,7 +385,7 @@ const fadedWet = await fadeRack.processBlock({ blockId: 10, channels: fadeInput 
 assert(near(fadedWet.channels[0][0], 1 / 6) && near(fadedWet.channels[0][1], 1 / 3), "live rack fades dry-to-wet transitions");
 await fadeRack.destroy();
 
-const pressureRack = await SoundBridgeLiveEffectRack.create({
+const pressureRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -423,7 +423,7 @@ const pressureRecovered = await pressureRack.processBlock({ blockId: 14, channel
 assert(pressureRecovered.bypassed === false && pressureRack.health.renderBudgetMisses === 0, "recovered render pressure rack resumes wet processing");
 await pressureRack.destroy();
 
-const processPressureRack = await SoundBridgeLiveEffectRack.create({
+const processPressureRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -458,7 +458,7 @@ const processRecovered = await processPressureRack.processBlock({ blockId: 19, c
 assert(processRecovered.bypassed === false && processPressureRack.health.processBudgetMisses === 0, "recovered process budget rack resumes wet processing");
 await processPressureRack.destroy();
 
-const manualRetryRack = await SoundBridgeLiveEffectRack.create({
+const manualRetryRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -488,7 +488,7 @@ assert(retryFailure.bypassed === true && manualRetryRack.retry() === false, "man
 client.failProcessing = false;
 await manualRetryRack.destroy();
 
-const backpressureRack = await SoundBridgeLiveEffectRack.create({
+const backpressureRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -510,7 +510,7 @@ const slowProcessed = await slowBlock;
 assert(slowProcessed.bypassed === false && backpressureRack.health.inFlightBlocks === 0 && backpressureRack.health.lastDryReason === undefined && backpressureEvents.health === 2, "first slow block completes after backpressure drop");
 await backpressureRack.destroy();
 
-const staleRack = await SoundBridgeLiveEffectRack.create({
+const staleRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -543,7 +543,7 @@ assert(client.processed.length === beforeStaleOutputProcessed + 1, "stale output
 client.processingDelayMs = 0;
 await staleRack.destroy();
 
-const timeoutRack = await SoundBridgeLiveEffectRack.create({
+const timeoutRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -560,7 +560,7 @@ assert(afterTimeout.bypassed === true && timeoutRack.health.healthy === false, "
 client.processingDelayMs = 0;
 await timeoutRack.destroy();
 
-const timeoutRecoveryRack = await SoundBridgeLiveEffectRack.create({
+const timeoutRecoveryRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -601,7 +601,7 @@ await flushAsync();
 assert(timeoutRecovered === 1 && timeoutRecoveryRack.health.healthy === false, "process-timeout recovery cap leaves repeated failures dry");
 await timeoutRecoveryRack.destroy();
 
-const daemonTimeoutRack = await SoundBridgeLiveEffectRack.create({
+const daemonTimeoutRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -637,7 +637,7 @@ client.protocolErrorCode = undefined;
 client.protocolErrorDetails = {};
 await daemonTimeoutRack.destroy();
 
-const daemonQuarantineRack = await SoundBridgeLiveEffectRack.create({
+const daemonQuarantineRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -667,7 +667,7 @@ client.protocolErrorCode = undefined;
 client.protocolErrorDetails = {};
 await daemonQuarantineRack.destroy();
 
-const livePerformanceRack = await SoundBridgeLiveEffectRack.createLivePerformance({
+const livePerformanceRack = await PlugRelayLiveEffectRack.createLivePerformance({
   client,
   plugin,
   sampleRate: 48000,
@@ -689,7 +689,7 @@ assert(
 );
 await livePerformanceRack.destroy();
 
-const jsonRack = await SoundBridgeLiveEffectRack.create({
+const jsonRack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,

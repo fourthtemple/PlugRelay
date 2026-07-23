@@ -13,7 +13,7 @@ import {
 import { summarizeProbeResults } from "./installed-plugin-probe-reporting.mjs";
 
 export async function exerciseInstalledProbeFileGrantSupport({ check }) {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-probe-file-grants-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "plugrelay-probe-file-grants-"));
   try {
     const result = {};
     let requestCount = 0;

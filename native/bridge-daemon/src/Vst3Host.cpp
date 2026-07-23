@@ -1,9 +1,9 @@
-#include "SoundBridge/Vst3Host.h"
+#include "PlugRelay/Vst3Host.h"
 
-namespace soundbridge {
+namespace plugrelay {
 
 bool Vst3Host::sdkAvailable() const {
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
   return true;
 #else
   return false;
@@ -25,4 +25,4 @@ std::uint32_t Vst3Host::latencySamplesForInstance(const std::string& /* instance
   return 0;
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

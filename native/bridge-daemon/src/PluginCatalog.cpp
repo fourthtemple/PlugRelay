@@ -1,12 +1,12 @@
-#include "SoundBridge/PluginCatalog.h"
+#include "PlugRelay/PluginCatalog.h"
 
-#include "SoundBridge/AudioUnitScanner.h"
-#include "SoundBridge/Lv2Scanner.h"
-#include "SoundBridge/Vst3Scanner.h"
+#include "PlugRelay/AudioUnitScanner.h"
+#include "PlugRelay/Lv2Scanner.h"
+#include "PlugRelay/Vst3Scanner.h"
 
 #include <iterator>
 
-namespace soundbridge {
+namespace plugrelay {
 
 std::vector<NativePluginInfo> PluginCatalog::scanAll(bool includeExamples) const {
   std::vector<NativePluginInfo> plugins;
@@ -49,4 +49,4 @@ std::vector<NativePluginInfo> PluginCatalog::scanFormat(PluginFormat format) con
   return {};
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://soundbridge.dev/schema/defs/request-envelope.schema.json",
-  "title": "SoundBridge Request Envelope Schema",
+  "$id": "https://plugrelay.dev/schema/defs/request-envelope.schema.json",
+  "title": "PlugRelay Request Envelope Schema",
   "$ref": "#/$defs/requestEnvelope",
   "$defs": {
     "command": { "$ref": "../protocol.schema.json#/$defs/command" },

@@ -1,16 +1,16 @@
-# SoundBridge
+# PlugRelay
 
 Host installed VST (VST3), Audio Unit, and LV2 plugins from a website.
 
-SoundBridge runs a small local bridge daemon on the user's machine. Your browser app talks to that daemon over localhost WebSocket, and the daemon loads the native plugin.
+PlugRelay runs a small local bridge daemon on the user's machine. Your browser app talks to that daemon over localhost WebSocket, and the daemon loads the native plugin.
 
 ## Quick Start: Host VST/AU/LV2 In A Web Page
 
 Build the native bridge:
 
 ```sh
-git clone git@github.com:fourthtemple/SoundBridge.git
-cd SoundBridge
+git clone git@github.com:fourthtemple/PlugRelay.git
+cd PlugRelay
 npm run build:native
 ```
 
@@ -43,9 +43,9 @@ The daemon prints an ephemeral pairing token. Your page needs that token before 
 Serve these files from your site:
 
 ```text
-packages/web-client/dist/soundbridge-client.js
-packages/web-client/dist/soundbridge-transport-worker.js
-packages/web-client/dist/soundbridge-worklet.js
+packages/web-client/dist/plugrelay-client.js
+packages/web-client/dist/plugrelay-transport-worker.js
+packages/web-client/dist/plugrelay-worklet.js
 ```
 
 Then create a plugin instance and put it in your Web Audio graph:
@@ -53,20 +53,20 @@ Then create a plugin instance and put it in your Web Audio graph:
 ```html
 <script type="module">
   import {
-    SoundBridgeAudioNode,
-    SoundBridgeClient
-  } from "/soundbridge/soundbridge-client.js";
+    PlugRelayAudioNode,
+    PlugRelayClient
+  } from "/plugrelay/plugrelay-client.js";
 
   const audioContext = new AudioContext();
-  const client = new SoundBridgeClient({
+  const client = new PlugRelayClient({
     url: "ws://127.0.0.1:47370/bridge",
     transport: "worker"
   });
 
   await client.connect();
-  const pairingToken = window.prompt("SoundBridge pairing token")?.trim();
+  const pairingToken = window.prompt("PlugRelay pairing token")?.trim();
   if (!pairingToken) {
-    throw new Error("SoundBridge pairing token is required.");
+    throw new Error("PlugRelay pairing token is required.");
   }
   await client.pair(pairingToken);
 
@@ -101,11 +101,11 @@ Then create a plugin instance and put it in your Web Audio graph:
     await client.setPreset(instanceId, plugin.presets[0].id);
   }
 
-  const pluginNode = await SoundBridgeAudioNode.createLivePerformance(audioContext, client, {
+  const pluginNode = await PlugRelayAudioNode.createLivePerformance(audioContext, client, {
     instanceId,
     inputChannels: negotiatedInputChannels,
     outputChannels: negotiatedOutputChannels,
-    workletUrl: "/soundbridge/soundbridge-worklet.js"
+    workletUrl: "/plugrelay/plugrelay-worklet.js"
   });
   pluginNode.addEventListener("render-budget-exceeded", () => {
     console.warn("Plugin render exceeded the live block budget.", pluginNode.health);
@@ -140,15 +140,15 @@ Then create a plugin instance and put it in your Web Audio graph:
 </script>
 ```
 
-That is the core integration: scan, create an instance, connect `SoundBridgeAudioNode` with the live-performance Web Audio defaults.
+That is the core integration: scan, create an instance, connect `PlugRelayAudioNode` with the live-performance Web Audio defaults.
 For live UIs, call `pluginNode.setBypassed(true)` for emergency fail-dry behavior, call `pluginNode.setBypassed(false)` for an explicit retry after an ordinary auto-bypass, call `pluginNode.refreshLatency()` when transport latency changes or from your compensation loop, read `pluginNode.health` for bounded sample and millisecond latency totals, and listen for `latencychange`, `fallback-output`, `response-deadline-missed`, and `transport-pressure` to monitor plugin latency changes from render responses, dry/silence fallback output, deadline misses, response jitter, stale output, dropped input, underruns, shared-worker saturation, audio errors, render-budget pressure, render-budget trips, transport-pressure auto-bypass, render-budget auto-bypass, and audio-error auto-bypass. Daemon `render_timeout` and `render_quarantined` failures emit `process-timeout`, `process-timeout-tripped`, and, when they fail dry, `process-timeout-auto-bypassed`; they also surface as `pluginNode.health.unhealthyReason === "process-timeout"` so live hosts can recreate the quarantined native instance instead of blindly retrying the same one. Use `createLivePerformanceAudioNodeRecreateController()` when a Web Audio graph host wants a bounded dry-cooldown window before calling its own async instance/node replacement function. The live Web Audio worker and fallback paths use `liveTransportForBlock()` so tempo-synced AU/VST effects receive bounded, reported-latency-compensated block positions once plugin latency is known, `refreshLatency(targetSamples)` retargets the worklet's bounded output latency in place when the target maps to a different block count, shared-ring current/peak queue pressure and response jitter participate in adaptive latency recovery, live presets default transport-pressure auto-bypass to hard drop/fallback reasons while leaving soft jitter/saturation observable, `createLivePerformanceAudioNodeAdaptiveLatencyController()` reports `recreateRecommended` with current/recommended fixed-option values when a new node is needed, and `createLivePerformance()` reports worklet stats every 32 blocks by default for faster live pressure feedback.
 
 If your host owns the audio blocks directly, such as a browser DJ deck or live effects rack, use the live-performance rack defaults:
 
 ```js
-import { SoundBridgeLiveEffectRack } from "/soundbridge/soundbridge-client.js";
+import { PlugRelayLiveEffectRack } from "/plugrelay/plugrelay-client.js";
 
-const rack = await SoundBridgeLiveEffectRack.createLivePerformance({
+const rack = await PlugRelayLiveEffectRack.createLivePerformance({
   client,
   plugin,
   sampleRate: audioContext.sampleRate,
@@ -179,7 +179,7 @@ Open <http://127.0.0.1:5173>. The demo can select installed VST3/AU/LV2 plugins 
 - LV2: installed basic audio/control LV2 effects through the native LV2 host worker, including bounded TTL metadata parsing, path-free public LV2 URI, UI declaration, and block-size profile metadata, unsupported required-feature gating, bounded `buf-size:boundedBlockLength` / `fixedBlockLength` / `powerOf2BlockLength` / `options#options` host contracts, parameter metadata with bounded integer/toggle/enumeration step handling, generic parameter editor sessions, bounded preset snapshot application where metadata exists, worker-native preset-state loading through file grants, normalized and bounded display-text parameter writes, bounded automation event lists, per-block curves, and stored timeline automation lanes for control ports with block-boundary enforcement for restricted LV2 block profiles, bounded control-port state save/restore, bounded portable POD `state:interface` save/restore, brokered file-backed state through LV2 state path features, bounded atom MIDI delivery to compatible atom/event MIDI input ports, bounded host transport delivery as LV2 atom `time:Position` events where supported, bounded synchronous LV2 `work:schedule` delivery for plugins that expose `work:interface`, bounded latency reporting from standard LV2 latency output ports, bounded `pg:group` main input/output bus layout reporting with aggregate/per-audio-port fallback for older metadata, explicit bounded input/output bus buffers, rendering, and conservative tail reporting. LV2 UI hosting and advanced extension support are still roadmap items.
 - VST2: not supported.
 
-VST3 hosting is enabled when `SOUNDBRIDGE_VST3_SDK_PATH` points to a Steinberg VST3 SDK checkout, or when the local development SDK path exists.
+VST3 hosting is enabled when `PLUGRELAY_VST3_SDK_PATH` points to a Steinberg VST3 SDK checkout, or when the local development SDK path exists.
 
 ## Multiple Websites And Safety
 
@@ -197,23 +197,23 @@ The development daemon generates a new pairing token each time it starts. A prod
 You can restrict pairing to known origins during development:
 
 ```sh
-SOUNDBRIDGE_ALLOWED_ORIGINS=https://your-site.example npm run bridge
+PLUGRELAY_ALLOWED_ORIGINS=https://your-site.example npm run bridge
 ```
 
-The bridge and demo bind to loopback only by default. Non-loopback binds require an explicit unsafe test opt-in with `SOUNDBRIDGE_ALLOW_NON_LOOPBACK=1` or `SOUNDBRIDGE_DEMO_ALLOW_NON_LOOPBACK=1`.
+The bridge and demo bind to loopback only by default. Non-loopback binds require an explicit unsafe test opt-in with `PLUGRELAY_ALLOW_NON_LOOPBACK=1` or `PLUGRELAY_DEMO_ALLOW_NON_LOOPBACK=1`.
 
-Browser-to-native plugin bridges are powerful enough to need public review. SoundBridge documents its protocol and security model so this category can move toward an auditable open standard instead of opaque localhost helpers.
+Browser-to-native plugin bridges are powerful enough to need public review. PlugRelay documents its protocol and security model so this category can move toward an auditable open standard instead of opaque localhost helpers.
 
 Native plugin editor windows are intentionally not loaded into the daemon. Generic parameter editors work today, and `listPlugins()` advertises bounded `editorKinds` so hosts can show editor actions per plugin. Native editor sessions require both plugin `native-window` support and an explicitly configured separate UI broker process, and remain disabled by default. Broker file-dialog, clipboard, and drag/drop capabilities stay hidden from browser responses unless the daemon is started with explicit native-editor allow flags.
 
-Preset/sample/cache/license file access is also not ambient. The daemon exposes an opt-in file grant foundation that stays disabled unless `SOUNDBRIDGE_FILE_GRANT_ROOTS` names explicit local roots; browser responses receive opaque grant ids and display names, not absolute paths. Production-style approvals use an explicit native broker configured with `SOUNDBRIDGE_FILE_GRANT_BROKER_PATH`, then hosts can attach the opaque grant to a session-owned plugin instance. `useFileGrant restoreState`, `loadPreset`, and `saveStateDirectory` are implemented for the reference VST3/AU/LV2 native workers so they can load bounded worker-native preset/state files and save bounded state files without exposing local paths to browser code. `listPlugins()` advertises each plugin's `fileGrantOperations`; hosts should only show file-backed actions that the selected plugin advertises, and unadvertised operations fail closed. Other operations such as `loadSample`, cache, and license handling remain operation-specific host-adapter work; the absolute path is resolved only inside the daemon and sent only over bounded worker IPC. Browser-supplied path strings additionally require `SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS=1` and are intended only for development and test harnesses.
+Preset/sample/cache/license file access is also not ambient. The daemon exposes an opt-in file grant foundation that stays disabled unless `PLUGRELAY_FILE_GRANT_ROOTS` names explicit local roots; browser responses receive opaque grant ids and display names, not absolute paths. Production-style approvals use an explicit native broker configured with `PLUGRELAY_FILE_GRANT_BROKER_PATH`, then hosts can attach the opaque grant to a session-owned plugin instance. `useFileGrant restoreState`, `loadPreset`, and `saveStateDirectory` are implemented for the reference VST3/AU/LV2 native workers so they can load bounded worker-native preset/state files and save bounded state files without exposing local paths to browser code. `listPlugins()` advertises each plugin's `fileGrantOperations`; hosts should only show file-backed actions that the selected plugin advertises, and unadvertised operations fail closed. Other operations such as `loadSample`, cache, and license handling remain operation-specific host-adapter work; the absolute path is resolved only inside the daemon and sent only over bounded worker IPC. Browser-supplied path strings additionally require `PLUGRELAY_FILE_GRANT_ALLOW_BROWSER_PATHS=1` and are intended only for development and test harnesses.
 
 ## Common Problems
 
 `vst3.hostAvailable` is false:
 
 ```sh
-export SOUNDBRIDGE_VST3_SDK_PATH=/path/to/vst3sdk
+export PLUGRELAY_VST3_SDK_PATH=/path/to/vst3sdk
 npm run build:native
 ```
 
@@ -228,30 +228,30 @@ npm run scan:lv2
 A plugin shows up but you want to verify real hosting:
 
 ```sh
-SOUNDBRIDGE_PROBE_FILTER="Plugin Name" npm run probe:installed
+PLUGRELAY_PROBE_FILTER="Plugin Name" npm run probe:installed
 ```
 
-The installed-plugin probe starts a temporary loopback daemon with a random pairing token and explicit origin allowlist, then runs bounded create, listed-preset, VST3 program-data when exposed, VST3 event-metadata classification, advertised file-grant operation coverage, parameter, state, grant-backed preset/state/sample/cache/license/explicit-other workflows when advertised, latency, tail, MIDI timing plus VST3 note-expression value/text events, automation, render-signal classification, host transport, output-bus layout, and destroy checks against matching installed VST3, AU, and LV2 plugins. Set `SOUNDBRIDGE_PROBE_FILTER` to a plugin or vendor substring. Leave it empty only when you deliberately want to load every matching installed plugin. Use `SOUNDBRIDGE_PROBE_FORMATS=vst3,au`, `lv2`, or another comma-separated subset only when you intentionally want to narrow the run.
+The installed-plugin probe starts a temporary loopback daemon with a random pairing token and explicit origin allowlist, then runs bounded create, listed-preset, VST3 program-data when exposed, VST3 event-metadata classification, advertised file-grant operation coverage, parameter, state, grant-backed preset/state/sample/cache/license/explicit-other workflows when advertised, latency, tail, MIDI timing plus VST3 note-expression value/text events, automation, render-signal classification, host transport, output-bus layout, and destroy checks against matching installed VST3, AU, and LV2 plugins. Set `PLUGRELAY_PROBE_FILTER` to a plugin or vendor substring. Leave it empty only when you deliberately want to load every matching installed plugin. Use `PLUGRELAY_PROBE_FORMATS=vst3,au`, `lv2`, or another comma-separated subset only when you intentionally want to narrow the run.
 
 For a compact pass/fail and feature-coverage report without the full per-plugin JSON:
 
 ```sh
-SOUNDBRIDGE_PROBE_REPORT=summary SOUNDBRIDGE_PROBE_FILTER="Plugin Name" npm run probe:installed
+PLUGRELAY_PROBE_REPORT=summary PLUGRELAY_PROBE_FILTER="Plugin Name" npm run probe:installed
 ```
 
 For a compact JSON artifact intended for compatibility matrix ingestion:
 
 ```sh
-SOUNDBRIDGE_PROBE_REPORT=matrix SOUNDBRIDGE_PROBE_FILTER="Plugin Name" npm run --silent probe:installed
+PLUGRELAY_PROBE_REPORT=matrix PLUGRELAY_PROBE_FILTER="Plugin Name" npm run --silent probe:installed
 ```
 
 For GitHub plugin compatibility requests, attach a focused JSON probe report:
 
 ```sh
-SOUNDBRIDGE_PROBE_REPORT=json \
-SOUNDBRIDGE_PROBE_FORMATS=vst3 \
-SOUNDBRIDGE_PROBE_FILTER="Plugin Name" \
-npm run --silent probe:installed > soundbridge-probe-report.json
+PLUGRELAY_PROBE_REPORT=json \
+PLUGRELAY_PROBE_FORMATS=vst3 \
+PLUGRELAY_PROBE_FILTER="Plugin Name" \
+npm run --silent probe:installed > plugrelay-probe-report.json
 ```
 
 Do not upload plugin binaries, licenses, private presets, samples, or local filesystem paths. See [Plugin compatibility reports](docs/compatibility-reports.md).
@@ -259,10 +259,10 @@ Do not upload plugin binaries, licenses, private presets, samples, or local file
 To include the native editor broker open/close path against those installed instances:
 
 ```sh
-SOUNDBRIDGE_PROBE_NATIVE_EDITOR_BROKER=1 SOUNDBRIDGE_PROBE_FILTER="Plugin Name" npm run probe:installed
+PLUGRELAY_PROBE_NATIVE_EDITOR_BROKER=1 PLUGRELAY_PROBE_FILTER="Plugin Name" npm run probe:installed
 ```
 
-That mode uses the repo's safe fixture broker by default. Set `SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH` and `SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS` only when testing a real platform UI broker.
+That mode uses the repo's safe fixture broker by default. Set `PLUGRELAY_NATIVE_EDITOR_BROKER_PATH` and `PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS` only when testing a real platform UI broker.
 
 Installed VST3s are scanned from:
 

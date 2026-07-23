@@ -21,7 +21,7 @@ export function assertLoopbackHost(host, hostEnvName, allowEnvName) {
   }
 
   console.error(
-    `${hostEnvName}=${host} would expose SoundBridge off this machine. ` +
+    `${hostEnvName}=${host} would expose PlugRelay off this machine. ` +
       `Use 127.0.0.1, localhost, or ::1, or set ${allowEnvName}=1 if you are intentionally testing a non-loopback bind.`
   );
   process.exit(1);

@@ -1,8 +1,8 @@
-#include "SoundBridge/Lv2HostedPluginStateSupport.h"
+#include "PlugRelay/Lv2HostedPluginStateSupport.h"
 
 #ifndef _WIN32
 
-#include "SoundBridge/Base64.h"
+#include "PlugRelay/Base64.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 namespace {
 
 void restoreControlStateEntry(
@@ -207,6 +207,6 @@ void restoreLv2HostedPluginState(
   }
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker
 
 #endif

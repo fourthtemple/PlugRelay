@@ -1,9 +1,9 @@
-#include "SoundBridge/Vst3HostWorkerSupport.h"
+#include "PlugRelay/Vst3HostWorkerSupport.h"
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
-#include "SoundBridge/Base64.h"
-#include "SoundBridge/NativeAudioJson.h"
+#include "PlugRelay/Base64.h"
+#include "PlugRelay/NativeAudioJson.h"
 
 #include "public.sdk/source/vst/hosting/stringconvert.h"
 
@@ -18,7 +18,7 @@
 #include <string_view>
 #include <system_error>
 
-namespace soundbridge::vst3_worker {
+namespace plugrelay::vst3_worker {
 namespace {
 
 bool parseTransportBool(std::string_view text, bool& out) {
@@ -212,7 +212,7 @@ bool parseMidiEventToken(const std::string& token, PendingMidiEvent& event) {
       return false;
     }
     try {
-      const auto decoded = soundbridge::base64Decode(parts[2], kMaxWorkerNoteExpressionTextBytes);
+      const auto decoded = plugrelay::base64Decode(parts[2], kMaxWorkerNoteExpressionTextBytes);
       if (decoded.empty() || std::find(decoded.begin(), decoded.end(), 0) != decoded.end()) {
         return false;
       }
@@ -673,6 +673,6 @@ const VST3::Hosting::ClassInfo* findAudioClass(const VST3::Hosting::PluginFactor
   return nullptr;
 }
 
-} // namespace soundbridge::vst3_worker
+} // namespace plugrelay::vst3_worker
 
 #endif

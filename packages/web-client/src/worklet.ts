@@ -1,4 +1,4 @@
-export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
+export class PlugRelayAudioProcessor extends AudioWorkletProcessor {
   private static readonly sharedHeaderInts = 8;
   private static readonly sharedSlotInts = 4;
   private static readonly sharedWriteIndex = 0;
@@ -91,7 +91,7 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     this.lastFrames = frames;
     if (this.bypassed) { this.blockId += 1; this.writeFallbackBlock(output, input, frames, "bypass"); } else {
       const outgoing = this.copyInputBlock(input, frames);
-      if (this.sharedAudio) this.sharedOutputQueuedMaxBlocks = Math.max(this.sharedOutputQueuedMaxBlocks, Atomics.load(this.sharedAudio.outputControl, SoundBridgeAudioProcessor.sharedAvailable));
+      if (this.sharedAudio) this.sharedOutputQueuedMaxBlocks = Math.max(this.sharedOutputQueuedMaxBlocks, Atomics.load(this.sharedAudio.outputControl, PlugRelayAudioProcessor.sharedAvailable));
       this.drainSharedOutput();
       const currentBlockId = this.blockId++;
       const insertingSafetyBlock = this.latencySafetyBlocks > 0;
@@ -145,8 +145,8 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
         latencySafetyInsertions: this.latencySafetyInsertions,
         sharedAudioEnabled: Boolean(this.sharedAudio),
         sharedAudioWakeMode: this.sharedAudioWakeMode,
-        sharedInputQueuedBlocks: this.sharedAudio ? Atomics.load(this.sharedAudio.inputControl, SoundBridgeAudioProcessor.sharedAvailable) : 0, sharedInputQueuedMaxBlocks: this.sharedInputQueuedMaxBlocks,
-        sharedOutputQueuedBlocks: this.sharedAudio ? Atomics.load(this.sharedAudio.outputControl, SoundBridgeAudioProcessor.sharedAvailable) : 0, sharedOutputQueuedMaxBlocks: this.sharedOutputQueuedMaxBlocks,
+        sharedInputQueuedBlocks: this.sharedAudio ? Atomics.load(this.sharedAudio.inputControl, PlugRelayAudioProcessor.sharedAvailable) : 0, sharedInputQueuedMaxBlocks: this.sharedInputQueuedMaxBlocks,
+        sharedOutputQueuedBlocks: this.sharedAudio ? Atomics.load(this.sharedAudio.outputControl, PlugRelayAudioProcessor.sharedAvailable) : 0, sharedOutputQueuedMaxBlocks: this.sharedOutputQueuedMaxBlocks,
         sharedInputDroppedBlocks: this.sharedInputDroppedBlocks,
         sharedOutputDroppedBlocks: this.sharedOutputDroppedBlocks,
         staleOutputBlocks: this.staleOutputBlocks,
@@ -342,26 +342,26 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     if (!shared || frames > shared.frames || channels.length > shared.channels) {
       return "unsupported";
     }
-    const available = Atomics.load(shared.inputControl, SoundBridgeAudioProcessor.sharedAvailable);
+    const available = Atomics.load(shared.inputControl, PlugRelayAudioProcessor.sharedAvailable);
     const inputFull = available >= shared.slots;
     if (inputFull) {
-      Atomics.add(shared.inputControl, SoundBridgeAudioProcessor.sharedDropped, 1);
+      Atomics.add(shared.inputControl, PlugRelayAudioProcessor.sharedDropped, 1);
       this.droppedInputBlocks += 1;
       this.sharedInputDroppedBlocks += 1;
       this.recordLateOutput();
     }
     const writeIndex = inputFull
-      ? Atomics.load(shared.inputControl, SoundBridgeAudioProcessor.sharedReadIndex) % shared.slots
-      : Atomics.load(shared.inputControl, SoundBridgeAudioProcessor.sharedWriteIndex) % shared.slots;
+      ? Atomics.load(shared.inputControl, PlugRelayAudioProcessor.sharedReadIndex) % shared.slots
+      : Atomics.load(shared.inputControl, PlugRelayAudioProcessor.sharedWriteIndex) % shared.slots;
     this.writeSharedSlot(shared.inputControl, shared.inputAudio, writeIndex, blockId, frames, channels, shared);
-    Atomics.store(shared.inputControl, SoundBridgeAudioProcessor.sharedWriteIndex, (writeIndex + 1) % shared.slots);
+    Atomics.store(shared.inputControl, PlugRelayAudioProcessor.sharedWriteIndex, (writeIndex + 1) % shared.slots);
     if (inputFull) {
-      Atomics.store(shared.inputControl, SoundBridgeAudioProcessor.sharedReadIndex, (writeIndex + 1) % shared.slots);
+      Atomics.store(shared.inputControl, PlugRelayAudioProcessor.sharedReadIndex, (writeIndex + 1) % shared.slots);
     } else {
-      Atomics.add(shared.inputControl, SoundBridgeAudioProcessor.sharedAvailable, 1);
+      Atomics.add(shared.inputControl, PlugRelayAudioProcessor.sharedAvailable, 1);
     }
-    Atomics.notify(shared.inputControl, SoundBridgeAudioProcessor.sharedAvailable, 1);
-    this.sharedInputQueuedMaxBlocks = Math.max(this.sharedInputQueuedMaxBlocks, Atomics.load(shared.inputControl, SoundBridgeAudioProcessor.sharedAvailable));
+    Atomics.notify(shared.inputControl, PlugRelayAudioProcessor.sharedAvailable, 1);
+    this.sharedInputQueuedMaxBlocks = Math.max(this.sharedInputQueuedMaxBlocks, Atomics.load(shared.inputControl, PlugRelayAudioProcessor.sharedAvailable));
     return "sent";
   }
 
@@ -370,21 +370,21 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     if (!shared) {
       return;
     }
-    while (Atomics.load(shared.outputControl, SoundBridgeAudioProcessor.sharedAvailable) > 0) {
-      const readIndex = Atomics.load(shared.outputControl, SoundBridgeAudioProcessor.sharedReadIndex) % shared.slots;
+    while (Atomics.load(shared.outputControl, PlugRelayAudioProcessor.sharedAvailable) > 0) {
+      const readIndex = Atomics.load(shared.outputControl, PlugRelayAudioProcessor.sharedReadIndex) % shared.slots;
       const metadataOffset = this.sharedSlotMetadataOffset(readIndex);
-      const blockId = Atomics.load(shared.outputControl, metadataOffset + SoundBridgeAudioProcessor.sharedBlockIdOffset);
-      const frames = Atomics.load(shared.outputControl, metadataOffset + SoundBridgeAudioProcessor.sharedBlockFramesOffset);
-      const channels = Atomics.load(shared.outputControl, metadataOffset + SoundBridgeAudioProcessor.sharedBlockChannelsOffset);
+      const blockId = Atomics.load(shared.outputControl, metadataOffset + PlugRelayAudioProcessor.sharedBlockIdOffset);
+      const frames = Atomics.load(shared.outputControl, metadataOffset + PlugRelayAudioProcessor.sharedBlockFramesOffset);
+      const channels = Atomics.load(shared.outputControl, metadataOffset + PlugRelayAudioProcessor.sharedBlockChannelsOffset);
       if (Number.isFinite(blockId) && blockId >= 0 && frames > 0 && frames <= shared.frames && channels > 0) {
         this.queueSharedOutputBlock(blockId, frames, Math.min(channels, this.outputChannels, shared.channels), readIndex, shared);
       } else {
         this.sharedOutputDroppedBlocks += 1;
       }
-      Atomics.store(shared.outputControl, SoundBridgeAudioProcessor.sharedReadIndex, (readIndex + 1) % shared.slots);
-      Atomics.sub(shared.outputControl, SoundBridgeAudioProcessor.sharedAvailable, 1);
+      Atomics.store(shared.outputControl, PlugRelayAudioProcessor.sharedReadIndex, (readIndex + 1) % shared.slots);
+      Atomics.sub(shared.outputControl, PlugRelayAudioProcessor.sharedAvailable, 1);
     }
-    const outputDrops = Atomics.exchange(shared.outputControl, SoundBridgeAudioProcessor.sharedDropped, 0);
+    const outputDrops = Atomics.exchange(shared.outputControl, PlugRelayAudioProcessor.sharedDropped, 0);
     this.sharedOutputDroppedBlocks += outputDrops;
     if (outputDrops > 0) this.recordLateOutput();
   }
@@ -435,9 +435,9 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     shared: NormalizedSharedAudio
   ): void {
     const metadataOffset = this.sharedSlotMetadataOffset(slotIndex);
-    Atomics.store(control, metadataOffset + SoundBridgeAudioProcessor.sharedBlockIdOffset, blockId);
-    Atomics.store(control, metadataOffset + SoundBridgeAudioProcessor.sharedBlockFramesOffset, frames);
-    Atomics.store(control, metadataOffset + SoundBridgeAudioProcessor.sharedBlockChannelsOffset, Math.min(channels.length, shared.channels));
+    Atomics.store(control, metadataOffset + PlugRelayAudioProcessor.sharedBlockIdOffset, blockId);
+    Atomics.store(control, metadataOffset + PlugRelayAudioProcessor.sharedBlockFramesOffset, frames);
+    Atomics.store(control, metadataOffset + PlugRelayAudioProcessor.sharedBlockChannelsOffset, Math.min(channels.length, shared.channels));
     Atomics.store(control, metadataOffset + 3, this.reportedLatencySamples());
     const base = this.sharedAudioOffset(shared, slotIndex);
     for (let channelIndex = 0; channelIndex < shared.channels; channelIndex += 1) {
@@ -481,7 +481,7 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
     ) {
       return undefined;
     }
-    const controlInts = SoundBridgeAudioProcessor.sharedHeaderInts + slots * SoundBridgeAudioProcessor.sharedSlotInts;
+    const controlInts = PlugRelayAudioProcessor.sharedHeaderInts + slots * PlugRelayAudioProcessor.sharedSlotInts;
     const audioSamples = slots * channels * frames;
     if (
       descriptor.inputControl.byteLength < controlInts * Int32Array.BYTES_PER_ELEMENT ||
@@ -501,7 +501,7 @@ export class SoundBridgeAudioProcessor extends AudioWorkletProcessor {
       outputAudio: new Float32Array(descriptor.outputAudio)
     };
   }
-  private sharedSlotMetadataOffset(slotIndex: number): number { return SoundBridgeAudioProcessor.sharedHeaderInts + slotIndex * SoundBridgeAudioProcessor.sharedSlotInts; }
+  private sharedSlotMetadataOffset(slotIndex: number): number { return PlugRelayAudioProcessor.sharedHeaderInts + slotIndex * PlugRelayAudioProcessor.sharedSlotInts; }
   private sharedAudioOffset(shared: NormalizedSharedAudio, slotIndex: number): number { return slotIndex * shared.channels * shared.frames; }
   private boundedSharedTransportStats(value: { sharedTransportInFlightBlocks?: unknown; sharedInputBufferAllocations?: unknown; sharedInputBufferReuses?: unknown; sharedPooledInputBuffers?: unknown }): Record<string, number> {
     return { sharedTransportInFlightBlocks: this.boundedInteger(value.sharedTransportInFlightBlocks, 0, 0, 64), sharedInputBufferAllocations: this.boundedInteger(value.sharedInputBufferAllocations, 0, 0, Number.MAX_SAFE_INTEGER), sharedInputBufferReuses: this.boundedInteger(value.sharedInputBufferReuses, 0, 0, Number.MAX_SAFE_INTEGER), sharedPooledInputBuffers: this.boundedInteger(value.sharedPooledInputBuffers, 0, 0, 2048) };
@@ -743,4 +743,4 @@ interface NormalizedSharedAudio {
   inputControl: Int32Array; inputAudio: Float32Array; outputControl: Int32Array; outputAudio: Float32Array;
 }
 
-registerProcessor("soundbridge-audio-processor", SoundBridgeAudioProcessor);
+registerProcessor("plugrelay-audio-processor", PlugRelayAudioProcessor);

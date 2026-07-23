@@ -31,14 +31,14 @@ export function createRequestClient({ timeoutMs = 3000 } = {}) {
         }
       };
       const cleanup = () => {
-        socket.off("soundbridge-message", onMessage);
+        socket.off("plugrelay-message", onMessage);
         clearTimeout(timeout);
       };
       const timeout = setTimeout(() => {
         cleanup();
         reject(new Error(`Timed out waiting for ${command}`));
       }, timeoutMs);
-      socket.on("soundbridge-message", onMessage);
+      socket.on("plugrelay-message", onMessage);
     });
   };
 }
@@ -72,14 +72,14 @@ export function createBinaryAudioRequestClient({ timeoutMs = 3000 } = {}) {
         }
       };
       const cleanup = () => {
-        socket.off("soundbridge-message", onMessage);
+        socket.off("plugrelay-message", onMessage);
         clearTimeout(timeout);
       };
       const timeout = setTimeout(() => {
         cleanup();
         reject(new Error(`Timed out waiting for binary ${command}`));
       }, timeoutMs);
-      socket.on("soundbridge-message", onMessage);
+      socket.on("plugrelay-message", onMessage);
     });
   };
 }
@@ -136,9 +136,9 @@ export function connectWebSocket(host, port, origin) {
 
         buffer = buffer.subarray(parsed.frameLength);
         if (parsed.opcode === 0x1) {
-          socket.emit("soundbridge-message", JSON.parse(parsed.payload.toString("utf8")));
+          socket.emit("plugrelay-message", JSON.parse(parsed.payload.toString("utf8")));
         } else if (parsed.opcode === 0x2) {
-          socket.emit("soundbridge-message", decodeBinaryAudioEnvelope(parsed.payload));
+          socket.emit("plugrelay-message", decodeBinaryAudioEnvelope(parsed.payload));
         }
       }
     });

@@ -1,13 +1,13 @@
 import {
-  SoundBridgeLiveEffectRack,
+  PlugRelayLiveEffectRack,
   createLiveEffectRackBlockScheduler
-} from "../packages/web-client/dist/soundbridge-client.js";
+} from "../packages/web-client/dist/plugrelay-client.js";
 
 const plugin = {
   pluginId: "mock.live-effect-scheduled",
   format: "mock",
   name: "Live Scheduled Effect",
-  vendor: "SoundBridge",
+  vendor: "PlugRelay",
   category: "Effect",
   kind: "effect",
   inputs: 2,
@@ -77,7 +77,7 @@ function assert(condition, message) {
 
 const inputChannels = [[1, 0.5], [0.25, -0.25]];
 const client = new FakeScheduledClient();
-const rack = await SoundBridgeLiveEffectRack.create({
+const rack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,

@@ -1,4 +1,4 @@
-import { SoundBridgeProtocolError } from "./client";
+import { PlugRelayProtocolError } from "./client";
 
 const LIVE_EFFECT_MAX_LATENCY_SAMPLES = 1048576;
 export type LiveEffectFailureReason = "processing-error" | "process-timeout";
@@ -133,7 +133,7 @@ export async function withLiveEffectTimeout<T>(promise: Promise<T>, timeoutMs: n
 }
 
 export function liveEffectFailureReason(error: unknown): LiveEffectFailureReason {
-  return (error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout") || isRenderDeadlineProtocolError(error)
+  return (error instanceof Error && error.name === "PlugRelayLiveEffectTimeout") || isRenderDeadlineProtocolError(error)
     ? "process-timeout"
     : "processing-error";
 }
@@ -147,12 +147,12 @@ export function liveEffectDryReason(renderEngine: unknown, fallback: unknown): L
   return renderEngine === "dry-state-changed" ? "state-changed" : "bypass";
 }
 
-export function isRenderDeadlineProtocolError(error: unknown): error is SoundBridgeProtocolError | RenderDeadlineProtocolErrorLike {
-  const code = error instanceof SoundBridgeProtocolError ? error.code : typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
+export function isRenderDeadlineProtocolError(error: unknown): error is PlugRelayProtocolError | RenderDeadlineProtocolErrorLike {
+  const code = error instanceof PlugRelayProtocolError ? error.code : typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
   return code === "render_timeout" || code === "render_quarantined";
 }
 
-export function renderDeadlineDetails(error: SoundBridgeProtocolError | RenderDeadlineProtocolErrorLike): Record<string, unknown> {
+export function renderDeadlineDetails(error: PlugRelayProtocolError | RenderDeadlineProtocolErrorLike): Record<string, unknown> {
   return typeof error.details === "object" && error.details !== null ? error.details as Record<string, unknown> : {};
 }
 
@@ -170,6 +170,6 @@ function liveEffectBlockUnits(value: number, blockValue: number): number {
 
 function liveEffectTimeoutError(): Error {
   const error = new Error("process_block_timeout");
-  error.name = "SoundBridgeLiveEffectTimeout";
+  error.name = "PlugRelayLiveEffectTimeout";
   return error;
 }

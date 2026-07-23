@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://soundbridge.dev/schema/protocol.schema.json",
-  "title": "SoundBridge Protocol",
+  "$id": "https://plugrelay.dev/schema/protocol.schema.json",
+  "title": "PlugRelay Protocol",
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/requestEnvelope" },

@@ -1,10 +1,10 @@
-#include "SoundBridge/Vst3HostWorker.h"
+#include "PlugRelay/Vst3HostWorker.h"
 
-#include "SoundBridge/Base64.h"
-#include "SoundBridge/NativeFileGrantSupport.h"
-#include "SoundBridge/NativePlugin.h"
-#include "SoundBridge/Vst3HostedEffect.h"
-#include "SoundBridge/Vst3HostWorkerSupport.h"
+#include "PlugRelay/Base64.h"
+#include "PlugRelay/NativeFileGrantSupport.h"
+#include "PlugRelay/NativePlugin.h"
+#include "PlugRelay/Vst3HostedEffect.h"
+#include "PlugRelay/Vst3HostWorkerSupport.h"
 
 #include <algorithm>
 #include <cmath>
@@ -15,11 +15,11 @@
 #include <string>
 #include <vector>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
 using namespace vst3_worker;
 using namespace worker_file_grants;
@@ -319,7 +319,7 @@ int runVst3HostWorkerWithSdk(int argc, char** argv) {
 } // namespace
 
 bool vst3HostWorkerAvailable() {
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
   return true;
 #else
   return false;
@@ -327,7 +327,7 @@ bool vst3HostWorkerAvailable() {
 }
 
 std::string vst3HostWorkerStatus() {
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
   return "VST3 SDK host worker is available for installed bundles with bounded preset/state file grants.";
 #else
   return "VST3 SDK host worker is not linked; scanner-only VST3 support is active.";
@@ -335,7 +335,7 @@ std::string vst3HostWorkerStatus() {
 }
 
 int runVst3HostWorker(int argc, char** argv) {
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
   return runVst3HostWorkerWithSdk(argc, argv);
 #else
   (void)argc;
@@ -345,4 +345,4 @@ int runVst3HostWorker(int argc, char** argv) {
 #endif
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

@@ -38,9 +38,9 @@ const MAX_PLUGIN_STATE_BYTES = 384 * 1024;
 const MAX_PLUGIN_PROGRAM_DATA_BYTES = 384 * 1024;
 
 export function installedProbeReportMode(env = process.env) {
-  const raw = String(env.SOUNDBRIDGE_PROBE_REPORT ?? "full").trim().toLowerCase();
+  const raw = String(env.PLUGRELAY_PROBE_REPORT ?? "full").trim().toLowerCase();
   if (!REPORT_MODES.has(raw)) {
-    throw new Error("SOUNDBRIDGE_PROBE_REPORT must be one of: full, summary, json, matrix");
+    throw new Error("PLUGRELAY_PROBE_REPORT must be one of: full, summary, json, matrix");
   }
   return raw;
 }

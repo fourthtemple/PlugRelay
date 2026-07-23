@@ -1,4 +1,4 @@
-import { createLiveEffectRackChain } from "../packages/web-client/dist/soundbridge-client.js";
+import { createLiveEffectRackChain } from "../packages/web-client/dist/plugrelay-client.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

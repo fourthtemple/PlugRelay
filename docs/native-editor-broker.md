@@ -1,6 +1,6 @@
 # Native Editor Broker
 
-Native plugin editors are a separate trust boundary from audio processing. They can create windows, receive focus, interact with clipboard and drag/drop APIs, and trigger file dialogs. SoundBridge therefore keeps native editor UI code out of the daemon.
+Native plugin editors are a separate trust boundary from audio processing. They can create windows, receive focus, interact with clipboard and drag/drop APIs, and trigger file dialogs. PlugRelay therefore keeps native editor UI code out of the daemon.
 
 The daemon supports an opt-in broker contract for future VST3/AU/LV2 editor windows. It is disabled by default. When enabled, the daemon spawns a separate broker process and communicates over bounded JSON lines on stdin/stdout.
 
@@ -9,13 +9,13 @@ The daemon supports an opt-in broker contract for future VST3/AU/LV2 editor wind
 Set:
 
 ```sh
-SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH=/absolute/path/to/broker
-SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS='["optional","args"]'
+PLUGRELAY_NATIVE_EDITOR_BROKER_PATH=/absolute/path/to/broker
+PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS='["optional","args"]'
 ```
 
-`SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH` must be an absolute executable path. Args are optional and must be a JSON array of up to 16 strings, each capped at 4096 UTF-8 bytes. The daemon uses `spawn()` without a shell.
+`PLUGRELAY_NATIVE_EDITOR_BROKER_PATH` must be an absolute executable path. Args are optional and must be a JSON array of up to 16 strings, each capped at 4096 UTF-8 bytes. The daemon uses `spawn()` without a shell.
 
-Native editor file dialogs, clipboard access, and drag/drop reporting are denied by default even when the broker advertises them. A daemon must opt in with `SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_FILE_DIALOGS=1`, `SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_CLIPBOARD=1`, or `SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_DRAG_DROP=1` before those broker capabilities can appear in browser-visible editor responses.
+Native editor file dialogs, clipboard access, and drag/drop reporting are denied by default even when the broker advertises them. A daemon must opt in with `PLUGRELAY_NATIVE_EDITOR_ALLOW_FILE_DIALOGS=1`, `PLUGRELAY_NATIVE_EDITOR_ALLOW_CLIPBOARD=1`, or `PLUGRELAY_NATIVE_EDITOR_ALLOW_DRAG_DROP=1` before those broker capabilities can appear in browser-visible editor responses.
 
 When no broker path is configured, `hello.capabilities.nativeEditor` and `hello.capabilities.security.nativeEditorBroker` remain `false`, and `openEditor({ mode: "native" })` fails closed.
 

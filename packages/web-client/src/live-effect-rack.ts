@@ -3,7 +3,7 @@ import type {
   CreateInstanceResponse,
   PluginMetadata
 } from "../../protocol/src/messages";
-import { SoundBridgeClient } from "./client";
+import { PlugRelayClient } from "./client";
 import type { BinaryAudioBlockRequest } from "./client";
 import {
   boundedLiveEffectBusBlocks,
@@ -84,8 +84,8 @@ export function createLivePerformanceRackOptions(options: LivePerformanceRackOpt
   };
 }
 
-export class SoundBridgeLiveEffectRack extends EventTarget {
-  readonly client: SoundBridgeClient;
+export class PlugRelayLiveEffectRack extends EventTarget {
+  readonly client: PlugRelayClient;
   readonly plugin: PluginMetadata;
   readonly sampleRate: number;
   readonly maxBlockSize: number;
@@ -166,9 +166,9 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     this.wetMix = boundedWetMix(options.wetMix, 1);
   }
 
-  static async create(options: LiveEffectRackOptions): Promise<SoundBridgeLiveEffectRack> { const rack = new SoundBridgeLiveEffectRack(options); await rack.createInstance(); return rack; }
-  static createLivePerformance(options: LivePerformanceRackOptions): Promise<SoundBridgeLiveEffectRack> {
-    return SoundBridgeLiveEffectRack.create(createLivePerformanceRackOptions(options));
+  static async create(options: LiveEffectRackOptions): Promise<PlugRelayLiveEffectRack> { const rack = new PlugRelayLiveEffectRack(options); await rack.createInstance(); return rack; }
+  static createLivePerformance(options: LivePerformanceRackOptions): Promise<PlugRelayLiveEffectRack> {
+    return PlugRelayLiveEffectRack.create(createLivePerformanceRackOptions(options));
   }
   get instanceId(): string | undefined {
     return this.created?.instanceId;
@@ -278,20 +278,20 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
     return true;
   }
 
-  getParameters(): ReturnType<SoundBridgeClient["getParameters"]> { return this.client.getParameters(this.requireControllableInstance()); }
-  setPreset(presetId: string): ReturnType<SoundBridgeClient["setPreset"]> { return this.client.setPreset(this.requireControllableInstance(), presetId); }
-  setParameter(parameterId: string, normalizedValue: number): ReturnType<SoundBridgeClient["setParameter"]> { return this.client.setParameter(this.requireControllableInstance(), parameterId, normalizedValue); }
-  setParameterEvents(events: Parameters<SoundBridgeClient["setParameterEvents"]>[1]): ReturnType<SoundBridgeClient["setParameterEvents"]> { return this.client.setParameterEvents(this.requireControllableInstance(), events); }
+  getParameters(): ReturnType<PlugRelayClient["getParameters"]> { return this.client.getParameters(this.requireControllableInstance()); }
+  setPreset(presetId: string): ReturnType<PlugRelayClient["setPreset"]> { return this.client.setPreset(this.requireControllableInstance(), presetId); }
+  setParameter(parameterId: string, normalizedValue: number): ReturnType<PlugRelayClient["setParameter"]> { return this.client.setParameter(this.requireControllableInstance(), parameterId, normalizedValue); }
+  setParameterEvents(events: Parameters<PlugRelayClient["setParameterEvents"]>[1]): ReturnType<PlugRelayClient["setParameterEvents"]> { return this.client.setParameterEvents(this.requireControllableInstance(), events); }
   setParameterCurve(
     parameterId: string,
-    points: Parameters<SoundBridgeClient["setParameterCurve"]>[2],
-    interpolation: Parameters<SoundBridgeClient["setParameterCurve"]>[3] = "linear"
-  ): ReturnType<SoundBridgeClient["setParameterCurve"]> {
+    points: Parameters<PlugRelayClient["setParameterCurve"]>[2],
+    interpolation: Parameters<PlugRelayClient["setParameterCurve"]>[3] = "linear"
+  ): ReturnType<PlugRelayClient["setParameterCurve"]> {
     return this.client.setParameterCurve(this.requireControllableInstance(), parameterId, points, interpolation);
   }
-  setAutomationLane(parameterId: string, points: Parameters<SoundBridgeClient["setAutomationLane"]>[2]): ReturnType<SoundBridgeClient["setAutomationLane"]> { return this.client.setAutomationLane(this.requireControllableInstance(), parameterId, points); }
-  clearAutomationLane(parameterId?: string): ReturnType<SoundBridgeClient["clearAutomationLane"]> { return this.client.clearAutomationLane(this.requireControllableInstance(), parameterId); }
-  sendMidiEvents(events: Parameters<SoundBridgeClient["sendMidiEvents"]>[1]): ReturnType<SoundBridgeClient["sendMidiEvents"]> { return this.client.sendMidiEvents(this.requireControllableInstance(), events); }
+  setAutomationLane(parameterId: string, points: Parameters<PlugRelayClient["setAutomationLane"]>[2]): ReturnType<PlugRelayClient["setAutomationLane"]> { return this.client.setAutomationLane(this.requireControllableInstance(), parameterId, points); }
+  clearAutomationLane(parameterId?: string): ReturnType<PlugRelayClient["clearAutomationLane"]> { return this.client.clearAutomationLane(this.requireControllableInstance(), parameterId); }
+  sendMidiEvents(events: Parameters<PlugRelayClient["sendMidiEvents"]>[1]): ReturnType<PlugRelayClient["sendMidiEvents"]> { return this.client.sendMidiEvents(this.requireControllableInstance(), events); }
 
   async recreate(): Promise<LiveEffectRackHealth> {
     const previousInstanceId = this.instanceId;
@@ -722,7 +722,7 @@ export class SoundBridgeLiveEffectRack extends EventTarget {
 
   private requireControllableInstance(): string {
     if (this.destroyed || !this.instanceId || !this.healthy) {
-      throw new Error("SoundBridgeLiveEffectRack is not controllable while destroyed, missing an instance, or unhealthy.");
+      throw new Error("PlugRelayLiveEffectRack is not controllable while destroyed, missing an instance, or unhealthy.");
     }
     return this.instanceId;
   }

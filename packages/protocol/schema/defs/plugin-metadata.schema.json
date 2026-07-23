@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://soundbridge.dev/schema/defs/plugin-metadata.schema.json",
-  "title": "SoundBridge Plugin Metadata Schema",
+  "$id": "https://plugrelay.dev/schema/defs/plugin-metadata.schema.json",
+  "title": "PlugRelay Plugin Metadata Schema",
   "$ref": "#/$defs/pluginMetadata",
   "$defs": {
     "pluginFormat": { "type": "string", "enum": ["vst3", "au", "lv2", "mock", "unknown"] },

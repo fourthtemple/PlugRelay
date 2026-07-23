@@ -39,7 +39,7 @@ export async function runPluginDiscoverySmoke({
     );
   }
 
-  const unsupportedRequiredLv2 = plugins.find((plugin) => plugin.pluginId === "lv2:soundbridge-unsupported-required.lv2");
+  const unsupportedRequiredLv2 = plugins.find((plugin) => plugin.pluginId === "lv2:plugrelay-unsupported-required.lv2");
   assert(
     unsupportedRequiredLv2?.hostable === false &&
       unsupportedRequiredLv2.hostUnavailableReason?.includes("unsupported LV2 host features"),
@@ -66,26 +66,26 @@ export async function runPluginDiscoverySmoke({
     "scanPlugins includes the LV2 example instrument"
   );
   assert(
-    lv2Scan.plugins.some((plugin) => plugin.pluginId === "lv2:soundbridge-unsupported-required.lv2" && plugin.hostable === false),
+    lv2Scan.plugins.some((plugin) => plugin.pluginId === "lv2:plugrelay-unsupported-required.lv2" && plugin.hostable === false),
     "scanPlugins preserves unsupported-required LV2 bundles as discovery-only"
   );
   assert(
-    lv2Scan.plugins.some((plugin) => plugin.pluginId === "lv2:soundbridge-unsupported-option.lv2" && plugin.hostable === false),
+    lv2Scan.plugins.some((plugin) => plugin.pluginId === "lv2:plugrelay-unsupported-option.lv2" && plugin.hostable === false),
     "scanPlugins preserves unsupported-required-option LV2 bundles as discovery-only"
   );
   assert(
-    lv2Scan.plugins.some((plugin) => plugin.pluginId === "lv2:soundbridge-example-gain.lv2" && plugin.hostable === true),
+    lv2Scan.plugins.some((plugin) => plugin.pluginId === "lv2:plugrelay-example-gain.lv2" && plugin.hostable === true),
     "scanPlugins treats LV2 bounded-block-length plus options requirements as hostable"
   );
 
-  const lv2GainMetadata = lv2Scan.plugins.find((plugin) => plugin.pluginId === "lv2:soundbridge-example-gain.lv2")?.metadata;
+  const lv2GainMetadata = lv2Scan.plugins.find((plugin) => plugin.pluginId === "lv2:plugrelay-example-gain.lv2")?.metadata;
   assert(
     lv2GainMetadata?.lv2UiTypes === "x11" &&
       lv2GainMetadata.lv2UiCount === "1" &&
       lv2GainMetadata.lv2UiBinaryCount === "0",
     "scanPlugins exposes bounded path-free LV2 UI declaration metadata"
   );
-  const lv2BlockProfileMetadata = lv2Scan.plugins.find((plugin) => plugin.pluginId === "lv2:soundbridge-block-profile-gain.lv2")?.metadata;
+  const lv2BlockProfileMetadata = lv2Scan.plugins.find((plugin) => plugin.pluginId === "lv2:plugrelay-block-profile-gain.lv2")?.metadata;
   assert(
     lv2BlockProfileMetadata?.lv2BlockSizeProfile === "fixed-power-of-two",
     "scanPlugins exposes LV2 fixed power-of-two block profile metadata"
@@ -95,7 +95,7 @@ export async function runPluginDiscoverySmoke({
     socket,
     "createInstance",
     {
-      pluginId: "lv2:soundbridge-unsupported-required.lv2",
+      pluginId: "lv2:plugrelay-unsupported-required.lv2",
       format: "lv2",
       sampleRate: 48000,
       maxBlockSize: 128,

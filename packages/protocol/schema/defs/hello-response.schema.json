@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://soundbridge.dev/schema/defs/hello-response.schema.json",
-  "title": "SoundBridge Hello Response Schema",
+  "$id": "https://plugrelay.dev/schema/defs/hello-response.schema.json",
+  "title": "PlugRelay Hello Response Schema",
   "$ref": "#/$defs/helloResponse",
   "$defs": {
     "pluginFormatCapability": {

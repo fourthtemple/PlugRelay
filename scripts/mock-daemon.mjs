@@ -92,7 +92,7 @@ const validators = createDaemonValidators({
 });
 const { boundedFrames, requireIntInRange, requireNumberInRange, requireSampleRate } = validators;
 
-assertLoopbackHost(HOST, "SOUNDBRIDGE_HOST", "SOUNDBRIDGE_ALLOW_NON_LOOPBACK");
+assertLoopbackHost(HOST, "PLUGRELAY_HOST", "PLUGRELAY_ALLOW_NON_LOOPBACK");
 
 const NATIVE_RENDERER = resolveNativeRenderer();
 const NATIVE_HOST_STATUS = loadNativeHostStatus(NATIVE_RENDERER);
@@ -469,16 +469,16 @@ const server = createDaemonWebSocketServer({
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`SoundBridge mock daemon listening on ws://${HOST}:${PORT}/bridge`);
+  console.log(`PlugRelay mock daemon listening on ws://${HOST}:${PORT}/bridge`);
   if (PAIRING_TOKEN_IS_EPHEMERAL) {
     console.log(`Ephemeral pairing token: ${PAIRING_TOKEN}`);
   } else {
-    console.log("Using pairing token from SOUNDBRIDGE_PAIRING_TOKEN.");
+    console.log("Using pairing token from PLUGRELAY_PAIRING_TOKEN.");
   }
   if (ALLOWED_ORIGINS.length === 0) {
     console.warn(
       "WARNING: no origin allowlist set. Any browser origin holding the pairing token can pair. " +
-        "Set SOUNDBRIDGE_ALLOWED_ORIGINS (and ship a native per-origin approval prompt) before production use."
+        "Set PLUGRELAY_ALLOWED_ORIGINS (and ship a native per-origin approval prompt) before production use."
     );
   }
 });
@@ -631,11 +631,17 @@ async function processAudioBlock(payload, session, options = {}) {
     recordRenderSuccess(instance);
     const renderDurationMs = boundedRenderDurationMs(renderStartedAt);
     const renderedChannels = Array.isArray(rendered) ? rendered : rendered.channels;
-    const channels = normalizeAudioChannels(renderedChannels, instance.outputChannels, frames);
+    const normalizedChannels = normalizeAudioChannels(renderedChannels, instance.outputChannels, frames);
     return {
       blockId: payload.blockId,
-      channels,
-      outputBuses: normalizeOutputBusBlocks(rendered.outputBuses, channels, instance.layout, frames, { normalizedMain: true }),
+      channels: normalizedChannels,
+      outputBuses: normalizeOutputBusBlocks(
+        rendered.outputBuses,
+        normalizedChannels,
+        instance.layout,
+        frames,
+        { normalizedMain: true }
+      ),
       ...(transport ? { transport } : {}),
       latencySamples: normalizeLatencySamples(instance.pluginLatencySamples),
       tailSamples: normalizeTailSamples(instance.pluginTailSamples),
@@ -649,7 +655,7 @@ async function processAudioBlock(payload, session, options = {}) {
   const renderStartedAt = renderTimestampMs();
   const gainLinear = Math.pow(10, normalizedGainToDb(parameterValue(instance, "gain", 0.5)) / 20);
   const output = channels.slice(0, instance.outputChannels).map((channel) => {
-    if (!Array.isArray(channel)) {
+    if (!Array.isArray(channel) && !ArrayBuffer.isView(channel)) {
       return [];
     }
     return channel.map((sample) => {
@@ -692,11 +698,7 @@ function getInstance(instanceId, session) {
   }
   return instance;
 }
-
-function getPlugin(pluginId) {
-  return plugins.find((plugin) => plugin.pluginId === pluginId);
-}
-
+function getPlugin(pluginId) { return plugins.find((plugin) => plugin.pluginId === pluginId); }
 async function sendMidiEvents(instanceId, events, session) {
   const instance = getInstance(instanceId, session);
   const acceptedEvents = normalizeMidiEvents(events, instance.maxBlockSize);

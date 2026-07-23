@@ -1,11 +1,11 @@
-#include "SoundBridge/ExampleInstrumentRenderer.h"
+#include "PlugRelay/ExampleInstrumentRenderer.h"
 
 #include <algorithm>
 #include <cmath>
 #include <sstream>
 #include <utility>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
@@ -41,9 +41,9 @@ float clampAudio(double sample) {
 } // namespace
 
 bool isExampleInstrumentPluginId(const std::string& pluginId) {
-  return pluginId == "vst3:soundbridge-example-polysynth.vst3" ||
-      pluginId == "au:soundbridge-example-tonewheel.component" ||
-      pluginId == "lv2:soundbridge-example-wavefold.lv2";
+  return pluginId == "vst3:plugrelay-example-polysynth.vst3" ||
+      pluginId == "au:plugrelay-example-tonewheel.component" ||
+      pluginId == "lv2:plugrelay-example-wavefold.lv2";
 }
 
 ExampleInstrumentState::ExampleInstrumentState(std::string pluginId)
@@ -87,8 +87,8 @@ std::vector<std::vector<float>> ExampleInstrumentState::render(
   const double normalizedTone = clamp01(tone);
   const double detuneRatio = std::pow(2.0, normalizedDetuneToCents(detune) / 1200.0);
   const double voiceScale = std::max(0.16, 1.0 / std::sqrt(static_cast<double>(voices_.size())));
-  const bool tonewheel = pluginId_ == "au:soundbridge-example-tonewheel.component";
-  const bool wavefold = pluginId_ == "lv2:soundbridge-example-wavefold.lv2";
+  const bool tonewheel = pluginId_ == "au:plugrelay-example-tonewheel.component";
+  const bool wavefold = pluginId_ == "lv2:plugrelay-example-wavefold.lv2";
 
   for (std::uint32_t frame = 0; frame < frames; ++frame) {
     double mixed = 0.0;
@@ -177,4 +177,4 @@ std::vector<ExampleVoice> parseExampleVoices(const std::string& voices) {
   return parsed;
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

@@ -1,10 +1,10 @@
-import { SoundBridgeLiveEffectRack } from "../packages/web-client/dist/soundbridge-client.js";
+import { PlugRelayLiveEffectRack } from "../packages/web-client/dist/plugrelay-client.js";
 
 const plugin = {
   pluginId: "mock.live-effect.transport",
   format: "mock",
   name: "Live Effect Transport",
-  vendor: "SoundBridge",
+  vendor: "PlugRelay",
   kind: "effect",
   inputs: 1,
   outputs: 1,
@@ -42,7 +42,7 @@ class FakeClient {
 }
 
 const client = new FakeClient();
-const rack = await SoundBridgeLiveEffectRack.create({ client, plugin, sampleRate: 48000, maxBlockSize: 128 });
+const rack = await PlugRelayLiveEffectRack.create({ client, plugin, sampleRate: 48000, maxBlockSize: 128 });
 await rack.refreshLatency(256);
 await rack.processBlock({ blockId: 10, channels: [[1, 0]] });
 

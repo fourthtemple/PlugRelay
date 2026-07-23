@@ -1,4 +1,4 @@
-export interface SoundBridgeAudioNodeOptions {
+export interface PlugRelayAudioNodeOptions {
   instanceId: string;
   inputChannels?: number;
   outputChannels?: number;
@@ -22,15 +22,15 @@ export interface SoundBridgeAudioNodeOptions {
   maxConsecutiveRenderBudgetMisses?: number;
   maxConsecutiveAudioErrors?: number;
   maxConsecutiveTransportPressureEvents?: number;
-  transportPressureAutoBypassReasons?: ArrayLike<SoundBridgeAudioNodeTransportPressureReason>;
+  transportPressureAutoBypassReasons?: ArrayLike<PlugRelayAudioNodeTransportPressureReason>;
   bypassed?: boolean;
   workletUrl?: string;
 }
 
-export interface LivePerformanceAudioNodeOptions extends SoundBridgeAudioNodeOptions {}
+export interface LivePerformanceAudioNodeOptions extends PlugRelayAudioNodeOptions {}
 
-export type SoundBridgeAudioNodeFallbackReason = "bypass" | "latency-safety" | "underrun";
-export type SoundBridgeAudioNodeTransportPressureReason =
+export type PlugRelayAudioNodeFallbackReason = "bypass" | "latency-safety" | "underrun";
+export type PlugRelayAudioNodeTransportPressureReason =
   | "deadline-miss"
   | "dropped-input"
   | "latency-safety"
@@ -41,20 +41,20 @@ export type SoundBridgeAudioNodeTransportPressureReason =
   | "stale-output"
   | "underrun";
 
-export interface SoundBridgeAudioNodeFallbackOutputEventDetail {
+export interface PlugRelayAudioNodeFallbackOutputEventDetail {
   deltaBlocks: number;
-  reason?: SoundBridgeAudioNodeFallbackReason;
+  reason?: PlugRelayAudioNodeFallbackReason;
   stats: unknown;
-  health: SoundBridgeAudioNodeHealth;
+  health: PlugRelayAudioNodeHealth;
 }
 
-export interface SoundBridgeAudioNodeProcessTimeoutEventDetail {
+export interface PlugRelayAudioNodeProcessTimeoutEventDetail {
   error: unknown;
   autoBypassed: boolean;
-  health: SoundBridgeAudioNodeHealth;
+  health: PlugRelayAudioNodeHealth;
 }
 
-export interface SoundBridgeAudioNodeHealth {
+export interface PlugRelayAudioNodeHealth {
   healthy: boolean;
   instanceId: string;
   bypassed: boolean;
@@ -84,7 +84,7 @@ export interface SoundBridgeAudioNodeHealth {
   responseDeadlineMisses: number;
   responseDeadlineMissesSinceLastStats: number;
   fallbackOutputBlocks: number;
-  lastFallbackReason?: SoundBridgeAudioNodeFallbackReason;
+  lastFallbackReason?: PlugRelayAudioNodeFallbackReason;
   staleOutputBlocks: number;
   droppedInputBlocks: number;
   underruns: number;
@@ -104,7 +104,7 @@ export interface SoundBridgeAudioNodeHealth {
   consecutiveTransportPressureEvents: number;
   maxConsecutiveTransportPressureEvents: number;
   transportPressureAutoBypassed: boolean;
-  transportPressureAutoBypassReasons?: SoundBridgeAudioNodeTransportPressureReason[];
+  transportPressureAutoBypassReasons?: PlugRelayAudioNodeTransportPressureReason[];
   lastTransportPressureReasons: string[];
   lastRenderEngine?: string;
   lastRenderDurationMs?: number;
@@ -132,7 +132,7 @@ const LIVE_AUDIO_NODE_STATS_INTERVAL_BLOCKS = 32;
 const LIVE_AUDIO_NODE_SHARED_BUFFER_BLOCKS = 4;
 const LIVE_AUDIO_NODE_AUDIO_REQUEST_TIMEOUT_MS = 250;
 const LIVE_AUDIO_NODE_CALIBRATION_SAMPLES = 256;
-const LIVE_AUDIO_NODE_TRANSPORT_PRESSURE_AUTO_BYPASS_REASONS: SoundBridgeAudioNodeTransportPressureReason[] = ["deadline-miss", "dropped-input", "latency-safety", "shared-input-drop", "shared-output-drop", "stale-output", "underrun"];
+const LIVE_AUDIO_NODE_TRANSPORT_PRESSURE_AUTO_BYPASS_REASONS: PlugRelayAudioNodeTransportPressureReason[] = ["deadline-miss", "dropped-input", "latency-safety", "shared-input-drop", "shared-output-drop", "stale-output", "underrun"];
 
 export interface LivePerformanceAudioNodePolicyOptions extends LivePerformanceAudioNodeOptions {
   sampleRate?: number;
@@ -161,7 +161,7 @@ export interface LivePerformanceAudioNodeCalibrationOptions extends LivePerforma
 }
 
 export interface LivePerformanceAudioNodePolicy {
-  options: SoundBridgeAudioNodeOptions;
+  options: PlugRelayAudioNodeOptions;
   sampleRate: number;
   maxBlockFrames: number;
   blockDurationMs: number;
@@ -234,7 +234,7 @@ export interface LivePerformanceAudioNodeCalibrationWindowSnapshot {
   samples: number;
   droppedSamples: number;
   calibration: LivePerformanceAudioNodeCalibration;
-  recommendedOptions: SoundBridgeAudioNodeOptions;
+  recommendedOptions: PlugRelayAudioNodeOptions;
 }
 
 export interface LivePerformanceAudioNodeLatencyRefresher<T = unknown> {
@@ -252,7 +252,7 @@ interface LivePerformanceAudioNodeCalibrationPressureCounters {
   responseDeadlineMisses: number;
 }
 
-export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAudioNodeOptions): SoundBridgeAudioNodeOptions {
+export function createLivePerformanceAudioNodeOptions(options: LivePerformanceAudioNodeOptions): PlugRelayAudioNodeOptions {
   const maxQueuedOutputBlocks = boundedInteger(options.maxQueuedOutputBlocks, LIVE_AUDIO_NODE_MAX_QUEUED_OUTPUT_BLOCKS, 1, 64);
   const outputLatencyBlocks = boundedInteger(options.outputLatencyBlocks, Math.min(LIVE_AUDIO_NODE_OUTPUT_LATENCY_BLOCKS, maxQueuedOutputBlocks), 1, maxQueuedOutputBlocks);
   const maxOutputLatencyBlocks = boundedInteger(
@@ -430,10 +430,10 @@ export function boundedOptionalNumber(value: unknown, min: number, max: number):
 }
 
 export function boundedAudioNodeTransportPressureReasons(
-  reasons: ArrayLike<SoundBridgeAudioNodeTransportPressureReason> | undefined
-): SoundBridgeAudioNodeTransportPressureReason[] | undefined {
+  reasons: ArrayLike<PlugRelayAudioNodeTransportPressureReason> | undefined
+): PlugRelayAudioNodeTransportPressureReason[] | undefined {
   if (reasons === undefined || reasons === null) return undefined;
-  const values: SoundBridgeAudioNodeTransportPressureReason[] = [];
+  const values: PlugRelayAudioNodeTransportPressureReason[] = [];
   const length = boundedInteger(reasons.length, 0, 0, 16);
   for (let index = 0; index < length; index += 1) {
     const reason = audioNodeTransportPressureReason(reasons[index]);
@@ -444,7 +444,7 @@ export function boundedAudioNodeTransportPressureReasons(
 
 export function shouldAutoBypassAudioNodeTransportPressure(
   reasons: ArrayLike<unknown>,
-  autoBypassReasons?: ArrayLike<SoundBridgeAudioNodeTransportPressureReason>
+  autoBypassReasons?: ArrayLike<PlugRelayAudioNodeTransportPressureReason>
 ): boolean {
   if (autoBypassReasons === undefined || autoBypassReasons === null) return true;
   const allowed = boundedAudioNodeTransportPressureReasons(autoBypassReasons) ?? [];
@@ -513,7 +513,7 @@ function audioNodeSharedQueueMaxBlocks(options: LivePerformanceAudioNodeCalibrat
   return Math.max(boundedInteger(inputQueued, 0, 0, 64), boundedInteger(outputQueued, 0, 0, 64));
 }
 
-function audioNodeTransportPressureReason(reason: unknown): SoundBridgeAudioNodeTransportPressureReason | undefined {
+function audioNodeTransportPressureReason(reason: unknown): PlugRelayAudioNodeTransportPressureReason | undefined {
   return reason === "deadline-miss" ||
     reason === "dropped-input" ||
     reason === "latency-safety" ||
@@ -650,7 +650,7 @@ export class LivePerformanceAudioNodeCalibrationWindow {
     });
   }
 
-  recommendedOptions(overrides: Partial<SoundBridgeAudioNodeOptions> = {}): SoundBridgeAudioNodeOptions {
+  recommendedOptions(overrides: Partial<PlugRelayAudioNodeOptions> = {}): PlugRelayAudioNodeOptions {
     return livePerformanceAudioNodeOptionsFromCalibration(this.calibrate(), overrides);
   }
 
@@ -704,9 +704,9 @@ export function createLivePerformanceAudioNodeCalibrationWindow(options: LivePer
 
 export function livePerformanceAudioNodeOptionsFromCalibration(
   calibration: LivePerformanceAudioNodeCalibration,
-  overrides: Partial<SoundBridgeAudioNodeOptions> = {}
-): SoundBridgeAudioNodeOptions {
-  const recommended: SoundBridgeAudioNodeOptions = {
+  overrides: Partial<PlugRelayAudioNodeOptions> = {}
+): PlugRelayAudioNodeOptions {
+  const recommended: PlugRelayAudioNodeOptions = {
     ...calibration.policy.options,
     outputLatencyBlocks: calibration.recommendedOutputLatencyBlocks,
     maxOutputLatencyBlocks: calibration.recommendedMaxOutputLatencyBlocks,

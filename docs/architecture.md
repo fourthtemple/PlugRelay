@@ -1,6 +1,6 @@
 # Architecture
 
-SoundBridge splits browser audio hosting from native plugin hosting. The browser never loads VST3, Audio Unit, or LV2 code. It captures or generates Web Audio blocks, moves them to an `AudioWorklet`, and exchanges audio/control messages with a local daemon that owns native plugin discovery, instantiation, DSP, state, latency/tail reporting, root-limited file grants, and crash containment.
+PlugRelay splits browser audio hosting from native plugin hosting. The browser never loads VST3, Audio Unit, or LV2 code. It captures or generates Web Audio blocks, moves them to an `AudioWorklet`, and exchanges audio/control messages with a local daemon that owns native plugin discovery, instantiation, DSP, state, latency/tail reporting, root-limited file grants, and crash containment.
 
 ## Components
 
@@ -8,8 +8,8 @@ SoundBridge splits browser audio hosting from native plugin hosting. The browser
 
 The SDK is a small TypeScript package that gives Web DAWs:
 
-- a `SoundBridgeClient` for pairing, scanning, plugin instantiation, parameter changes, state, latency, tail time, editor sessions, opaque file grants, and grant-backed worker operations
-- a `SoundBridgeAudioNode` wrapper around `AudioWorkletNode`
+- a `PlugRelayClient` for pairing, scanning, plugin instantiation, parameter changes, state, latency, tail time, editor sessions, opaque file grants, and grant-backed worker operations
+- a `PlugRelayAudioNode` wrapper around `AudioWorkletNode`
 - bounded generic parameter editor sessions for hosts that do not have their own plugin UI
 - protocol message types shared with daemon implementations
 - format-aware plugin metadata for VST3, AU, LV2, and mock/test plugins
@@ -50,7 +50,7 @@ The intended production topology is:
 ```mermaid
 flowchart LR
   WebDAW["Web DAW"] --> Worklet["AudioWorklet"]
-  Worklet --> SDK["SoundBridge SDK"]
+  Worklet --> SDK["PlugRelay SDK"]
   SDK --> WS["Local WebSocket"]
   WS --> Daemon["Bridge Daemon"]
   Daemon --> Worker["Plugin Worker Process"]
@@ -59,7 +59,7 @@ flowchart LR
 
 The worker process boundary is important. A bad plugin should be able to kill its own worker without taking down the daemon, browser, or other plugin instances.
 
-The core architectural target is a compatibility worker boundary, not a universal sandbox-first runtime. Many real plugins expect the same normal user environment they see in desktop DAWs, including license files, caches, sample libraries, helper services, and vendor authorization state. SoundBridge's boundary is that browser and desktop hosts talk to the bounded protocol, while plugin code stays in worker processes behind pairing, ownership checks, resource limits, and brokered file workflows.
+The core architectural target is a compatibility worker boundary, not a universal sandbox-first runtime. Many real plugins expect the same normal user environment they see in desktop DAWs, including license files, caches, sample libraries, helper services, and vendor authorization state. PlugRelay's boundary is that browser and desktop hosts talk to the bounded protocol, while plugin code stays in worker processes behind pairing, ownership checks, resource limits, and brokered file workflows.
 
 An operating-system sandbox around third-party plugin workers is still a real extended security profile. It should be added after core host behavior is understood well enough to avoid accidentally breaking normal plugins, and it should be advertised separately for deployments that prefer stricter containment over maximum plugin compatibility.
 

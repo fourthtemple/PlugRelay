@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://soundbridge.dev/schema/defs/midi-event.schema.json",
-  "title": "SoundBridge MIDI Event Schema",
+  "$id": "https://plugrelay.dev/schema/defs/midi-event.schema.json",
+  "title": "PlugRelay MIDI Event Schema",
   "$ref": "#/$defs/midiEvent",
   "$defs": {
     "vst3EventBusIndex": { "type": "integer", "minimum": 0, "maximum": 31 },

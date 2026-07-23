@@ -1,10 +1,10 @@
 import type { AudioBlockResponse, HostTransportState, PluginMetadata } from "../../protocol/src/messages";
-import type { SoundBridgeClient, BinaryAudioBlockRequest } from "./client";
+import type { PlugRelayClient, BinaryAudioBlockRequest } from "./client";
 import type { LiveEffectDryReason } from "./live-effect-rack-metrics";
 import type { LiveEffectRackDeadlinePressure, LiveEffectRackDeadlinePressureSkipOptions } from "./live-effect-rack-scheduler";
 
 export interface LiveEffectRackOptions {
-  client: SoundBridgeClient;
+  client: PlugRelayClient;
   plugin: PluginMetadata;
   sampleRate: number;
   maxBlockSize: number;

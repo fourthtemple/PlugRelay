@@ -1,10 +1,10 @@
-#include "SoundBridge/Lv2HostWorker.h"
+#include "PlugRelay/Lv2HostWorker.h"
 
-#include "SoundBridge/Base64.h"
-#include "SoundBridge/Lv2HostedPlugin.h"
-#include "SoundBridge/Lv2HostWorkerSupport.h"
-#include "SoundBridge/NativeFileGrantSupport.h"
-#include "SoundBridge/NativePlugin.h"
+#include "PlugRelay/Base64.h"
+#include "PlugRelay/Lv2HostedPlugin.h"
+#include "PlugRelay/Lv2HostWorkerSupport.h"
+#include "PlugRelay/NativeFileGrantSupport.h"
+#include "PlugRelay/NativePlugin.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
@@ -247,4 +247,4 @@ int runLv2HostWorker(int argc, char** argv) {
 #endif
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

@@ -1,7 +1,7 @@
-#include "SoundBridge/Lv2StateSupport.h"
+#include "PlugRelay/Lv2StateSupport.h"
 
-#include "SoundBridge/Base64.h"
-#include "SoundBridge/Lv2HostWorkerSupport.h"
+#include "PlugRelay/Base64.h"
+#include "PlugRelay/Lv2HostWorkerSupport.h"
 
 #include <algorithm>
 #include <chrono>
@@ -13,7 +13,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 
 using namespace lv2_abi;
 
@@ -39,7 +39,7 @@ public:
   Lv2StateFileBroker() {
     const auto seed = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto base = std::filesystem::temp_directory_path() /
-        ("soundbridge-lv2-state-" + std::to_string(seed));
+        ("plugrelay-lv2-state-" + std::to_string(seed));
     for (std::uint32_t index = 0; index < 32; ++index) {
       auto candidate = base;
       if (index > 0) {
@@ -501,4 +501,4 @@ void restoreLv2ExtensionState(
   }
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker

@@ -1,8 +1,8 @@
 import {
-  SoundBridgeAudioNode,
-  SoundBridgeClient,
+  PlugRelayAudioNode,
+  PlugRelayClient,
   renderParameterControls
-} from "/packages/web-client/dist/soundbridge-client.js";
+} from "/packages/web-client/dist/plugrelay-client.js";
 import { bindBridgeMonitorEvents, createEngineRetryController } from "./bridge-monitor-events.js";
 import { setCapabilityStatus } from "./capability-status.js";
 import { createFileGrantActions } from "./file-grant-actions.js";
@@ -265,7 +265,7 @@ async function connectToDaemon() {
     elements.connectButton.disabled = true;
     setStatus(elements.connectionStatus, "Connecting", "warn");
 
-    client = new SoundBridgeClient({
+    client = new PlugRelayClient({
       url: elements.daemonUrl.value.trim(),
       origin: window.location.origin,
       transport: "worker"
@@ -358,12 +358,12 @@ async function doEnsureBridgeInstance(recreate = false) {
   activeInstancePlugin = created.plugin ?? pluginBrowser.selectedPlugin();
   latestTransportLatencySamples = 0;
   elements.renderEngine.textContent = "Waiting";
-  bridge = await SoundBridgeAudioNode.createLivePerformance(audioContext, client, {
+  bridge = await PlugRelayAudioNode.createLivePerformance(audioContext, client, {
     instanceId,
     inputChannels,
     outputChannels,
     maxBlockFrames: 128,
-    workletUrl: "/packages/web-client/dist/soundbridge-worklet.js?v=20260627e"
+    workletUrl: "/packages/web-client/dist/plugrelay-worklet.js?v=20260627e"
   });
 
   analyser = audioContext.createAnalyser();

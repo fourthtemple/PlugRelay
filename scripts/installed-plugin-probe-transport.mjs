@@ -32,7 +32,7 @@ export function createProbeRequester({ requestTimeoutMs }) {
         }
       };
       const cleanup = () => {
-        socket.off("soundbridge-message", onMessage);
+        socket.off("plugrelay-message", onMessage);
         clearTimeout(timeout);
       };
       const timeout = setTimeout(() => {
@@ -41,7 +41,7 @@ export function createProbeRequester({ requestTimeoutMs }) {
         error.code = "timeout";
         reject(error);
       }, requestTimeoutMs);
-      socket.on("soundbridge-message", onMessage);
+      socket.on("plugrelay-message", onMessage);
     });
   };
 }
@@ -63,7 +63,7 @@ export function waitForListen(daemonProcess) {
     const timeout = setTimeout(() => reject(new Error("Timed out waiting for daemon to listen")), 10000);
     const onData = (chunk) => {
       const text = chunk.toString("utf8");
-      if (text.includes("SoundBridge mock daemon listening")) {
+      if (text.includes("PlugRelay mock daemon listening")) {
         cleanup();
         resolve();
       }
@@ -134,7 +134,7 @@ export function connectWebSocket(host, port, origin) {
 
         buffer = buffer.subarray(parsed.frameLength);
         if (parsed.opcode === 0x1) {
-          socket.emit("soundbridge-message", JSON.parse(parsed.payload.toString("utf8")));
+          socket.emit("plugrelay-message", JSON.parse(parsed.payload.toString("utf8")));
         }
       }
     });

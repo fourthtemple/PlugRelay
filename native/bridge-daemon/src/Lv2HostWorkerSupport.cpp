@@ -1,6 +1,6 @@
-#include "SoundBridge/Lv2HostWorkerSupport.h"
+#include "PlugRelay/Lv2HostWorkerSupport.h"
 
-#include "SoundBridge/Base64.h"
+#include "PlugRelay/Base64.h"
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
@@ -9,7 +9,7 @@
 #include <set>
 #include <sstream>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 namespace {
 
 float sanitizeSampleText(const std::string& text) {
@@ -474,4 +474,4 @@ std::string lv2OutputBusBlockToJson(const std::vector<std::vector<float>>& chann
   return output.str();
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker

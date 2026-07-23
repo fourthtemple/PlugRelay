@@ -1,8 +1,8 @@
-#include "SoundBridge/Vst3HostWorkerSupport.h"
+#include "PlugRelay/Vst3HostWorkerSupport.h"
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
-#include "SoundBridge/NativePlugin.h"
+#include "PlugRelay/NativePlugin.h"
 
 #include "public.sdk/source/vst/hosting/stringconvert.h"
 
@@ -11,7 +11,7 @@
 #include <cmath>
 #include <sstream>
 
-namespace soundbridge::vst3_worker {
+namespace plugrelay::vst3_worker {
 namespace {
 
 bool unitInfoForParameter(
@@ -447,6 +447,6 @@ std::string parameterInfoToJson(
   return output.str();
 }
 
-} // namespace soundbridge::vst3_worker
+} // namespace plugrelay::vst3_worker
 
 #endif

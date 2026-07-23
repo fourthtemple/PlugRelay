@@ -1,0 +1,12 @@
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix opts: <http://lv2plug.in/ns/ext/options#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<urn:plugrelay:example:unsupported-option>
+  a lv2:Plugin ;
+  doap:name "PlugRelay Unsupported Required Option LV2" ;
+  lv2:binary <plugrelay-unsupported-option.so> ;
+  lv2:requiredFeature opts:options ;
+  opts:requiredOption <urn:plugrelay:unsupported-required-option> ;
+  rdfs:seeAlso <plugrelay-unsupported-option.ttl> .

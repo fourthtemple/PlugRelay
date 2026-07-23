@@ -1,4 +1,4 @@
-#include "SoundBridge/Lv2TurtleMetadataSupport.h"
+#include "PlugRelay/Lv2TurtleMetadataSupport.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -12,7 +12,7 @@
 #include <set>
 #include <vector>
 
-namespace soundbridge {
+namespace plugrelay {
 namespace {
 
 constexpr const char* kLv2UridMapUri = "http://lv2plug.in/ns/ext/urid#map";
@@ -635,4 +635,4 @@ void applyLv2TurtleMetadata(
   }
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

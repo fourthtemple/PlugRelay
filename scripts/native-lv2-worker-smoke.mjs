@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const LV2_FIXTURE_BUNDLE = "native/example-plugins/LV2/soundbridge-example-gain.lv2";
-const LV2_BLOCK_PROFILE_BUNDLE = "native/example-plugins/LV2/soundbridge-block-profile-gain.lv2";
+const LV2_FIXTURE_BUNDLE = "native/example-plugins/LV2/plugrelay-example-gain.lv2";
+const LV2_BLOCK_PROFILE_BUNDLE = "native/example-plugins/LV2/plugrelay-block-profile-gain.lv2";
 
 export async function runNativeLv2WorkerSmoke({ nativeRenderer, assert, assertLayoutReport }) {
   const worker = spawn(
@@ -138,7 +138,7 @@ export async function runNativeLv2WorkerSmoke({ nativeRenderer, assert, assertLa
       "native LV2 worker restores bounded control state"
     );
 
-    const presetDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-lv2-preset-"));
+    const presetDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "plugrelay-lv2-preset-"));
     try {
       const presetPath = path.join(presetDirectory, "Gain Snapshot.preset");
       fs.writeFileSync(presetPath, `${savedState.state}\n`, "utf8");

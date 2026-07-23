@@ -1,6 +1,6 @@
-#include "SoundBridge/NativeFileGrantSupport.h"
+#include "PlugRelay/NativeFileGrantSupport.h"
 
-#include "SoundBridge/Base64.h"
+#include "PlugRelay/Base64.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -19,14 +19,14 @@
 #include <unistd.h>
 #endif
 
-namespace soundbridge::worker_file_grants {
+namespace plugrelay::worker_file_grants {
 
 namespace {
 
 constexpr std::size_t kMaxGrantIdBytes = 80;
 constexpr std::size_t kMaxDisplayNameBytes = 256;
 constexpr std::size_t kMaxPathBytes = 4096;
-constexpr char kSavedStatePrefix[] = "soundbridge-state-";
+constexpr char kSavedStatePrefix[] = "plugrelay-state-";
 constexpr char kSavedStateExtension[] = ".txt";
 
 std::string requireToken(std::istream& stream) {
@@ -506,4 +506,4 @@ std::string fileGrantSavedJson() {
   return "{\"applied\":true,\"status\":\"state-saved\"}";
 }
 
-} // namespace soundbridge::worker_file_grants
+} // namespace plugrelay::worker_file_grants

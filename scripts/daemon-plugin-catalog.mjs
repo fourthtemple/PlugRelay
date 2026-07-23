@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { classifyAudioUnitHostProfile } from "./daemon-au-host-profiles.mjs";
 import {
   clonePluginClassMetadata,
+  deduplicatePluginCatalog,
   editorKindsForHostableNativeHost,
   fileGrantOperationsForNativeHost,
   formatCategory,
@@ -17,9 +18,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function resolveNativeRenderer() {
   const candidates = [
-    process.env.SOUNDBRIDGE_NATIVE_RENDERER,
-    path.resolve(__dirname, "../native/bridge-daemon/build-current/soundbridge-daemon"),
-    path.resolve(__dirname, "../native/bridge-daemon/build/soundbridge-daemon")
+    process.env.PLUGRELAY_NATIVE_RENDERER,
+    path.resolve(__dirname, "../native/bridge-daemon/build-current/plugrelay-daemon"),
+    path.resolve(__dirname, "../native/bridge-daemon/build/plugrelay-daemon")
   ].filter(Boolean);
 
   for (const candidate of candidates) {
@@ -87,14 +88,14 @@ export function createPluginCatalogSupport({
   const metadataContext = { maxPluginMetadataTextBytes, truncateText };
 
   function createPluginCatalog() {
-    return [
+    return deduplicatePluginCatalog([
       (() => {
         const programParameter = makeProgramParameter(0);
         return {
           pluginId: "mock.gain",
           format: "mock",
           name: "Mock Gain",
-          vendor: "SoundBridge",
+          vendor: "PlugRelay",
           category: "Fx|Gain",
           kind: "effect",
           source: "mock",
@@ -128,7 +129,7 @@ export function createPluginCatalogSupport({
       })(),
       ...loadNativeExamplePlugins(),
       ...loadNativeInstalledPlugins()
-    ];
+    ]);
   }
 
   function loadNativeExamplePlugins() {
@@ -457,8 +458,8 @@ export function createPluginCatalogSupport({
     }
 
     const manifestCandidates = [
-      path.join(bundlePath, "Contents", "Resources", "SoundBridgePlugin.json"),
-      path.join(bundlePath, "SoundBridgePlugin.json")
+      path.join(bundlePath, "Contents", "Resources", "PlugRelayPlugin.json"),
+      path.join(bundlePath, "PlugRelayPlugin.json")
     ];
 
     for (const manifestPath of manifestCandidates) {
@@ -511,10 +512,10 @@ export function createPluginCatalogSupport({
   function fallbackExamplePlugins() {
     return [
       decorateExamplePlugin({
-        pluginId: "vst3:soundbridge-example-polysynth.vst3",
+        pluginId: "vst3:plugrelay-example-polysynth.vst3",
         format: "vst3",
         name: "Example PolySynth",
-        vendor: "SoundBridge",
+        vendor: "PlugRelay",
         category: "Instrument|Synth",
         kind: "instrument",
         source: "builtin-example",
@@ -522,10 +523,10 @@ export function createPluginCatalogSupport({
         outputs: 2
       }),
       decorateExamplePlugin({
-        pluginId: "au:soundbridge-example-tonewheel.component",
+        pluginId: "au:plugrelay-example-tonewheel.component",
         format: "au",
         name: "Example Tonewheel",
-        vendor: "SoundBridge",
+        vendor: "PlugRelay",
         category: "Instrument|Keys",
         kind: "instrument",
         source: "builtin-example",
@@ -533,10 +534,10 @@ export function createPluginCatalogSupport({
         outputs: 2
       }),
       decorateExamplePlugin({
-        pluginId: "lv2:soundbridge-example-wavefold.lv2",
+        pluginId: "lv2:plugrelay-example-wavefold.lv2",
         format: "lv2",
         name: "Example Wavefold",
-        vendor: "SoundBridge",
+        vendor: "PlugRelay",
         category: "Instrument|Synth",
         kind: "instrument",
         source: "builtin-example",
@@ -547,7 +548,7 @@ export function createPluginCatalogSupport({
   }
 
   function exampleDefaultsFor(pluginId) {
-    if (pluginId === "au:soundbridge-example-tonewheel.component") {
+    if (pluginId === "au:plugrelay-example-tonewheel.component") {
       return {
         engine: "tonewheel",
         gain: 0.48,
@@ -555,7 +556,7 @@ export function createPluginCatalogSupport({
         detune: 0.5
       };
     }
-    if (pluginId === "lv2:soundbridge-example-wavefold.lv2") {
+    if (pluginId === "lv2:plugrelay-example-wavefold.lv2") {
       return {
         engine: "wavefold",
         gain: 0.4,
@@ -572,7 +573,7 @@ export function createPluginCatalogSupport({
   }
 
   function examplePresetsFor(pluginId, defaults) {
-    if (pluginId === "au:soundbridge-example-tonewheel.component") {
+    if (pluginId === "au:plugrelay-example-tonewheel.component") {
       return [
         {
           id: "tonewheel-default",
@@ -595,7 +596,7 @@ export function createPluginCatalogSupport({
       ];
     }
 
-    if (pluginId === "lv2:soundbridge-example-wavefold.lv2") {
+    if (pluginId === "lv2:plugrelay-example-wavefold.lv2") {
       return [
         {
           id: "wavefold-default",

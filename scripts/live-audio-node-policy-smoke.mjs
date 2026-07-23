@@ -1,5 +1,5 @@
 import {
-  SoundBridgeAudioNode,
+  PlugRelayAudioNode,
   boundedAudioNodeTransportPressureReasons,
   calibrateLivePerformanceAudioNodePolicy,
   createLivePerformanceAudioNodeAdaptiveLatencyController,
@@ -10,7 +10,7 @@ import {
   livePerformanceAudioNodeOptionsFromCalibration,
   refreshLivePerformanceAudioNodeLatencyFromCalibration,
   shouldAutoBypassAudioNodeTransportPressure
-} from "../packages/web-client/dist/soundbridge-client.js";
+} from "../packages/web-client/dist/plugrelay-client.js";
 
 function assert(condition, message) {
   if (!condition) {
@@ -334,7 +334,7 @@ class FakeAudioWorkletNodeForPolicy {
 }
 const previousAudioWorkletNode = globalThis.AudioWorkletNode;
 globalThis.AudioWorkletNode = FakeAudioWorkletNodeForPolicy;
-const filteredNode = new SoundBridgeAudioNode(
+const filteredNode = new PlugRelayAudioNode(
   { sampleRate: 48000 },
   { createAudioWorkletTransportConnection: () => undefined, destroyInstance: async () => undefined },
   {

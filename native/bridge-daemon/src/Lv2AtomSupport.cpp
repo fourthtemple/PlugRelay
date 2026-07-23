@@ -1,11 +1,11 @@
-#include "SoundBridge/Lv2AtomSupport.h"
+#include "PlugRelay/Lv2AtomSupport.h"
 
-#include "SoundBridge/Lv2Abi.h"
+#include "PlugRelay/Lv2Abi.h"
 
 #include <algorithm>
 #include <cstring>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 
 using namespace lv2_abi;
 
@@ -243,4 +243,4 @@ std::vector<std::uint64_t> lv2MidiSequenceBuffer(
   return storage;
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker

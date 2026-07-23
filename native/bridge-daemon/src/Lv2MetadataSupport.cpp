@@ -1,4 +1,4 @@
-#include "SoundBridge/Lv2HostWorkerSupport.h"
+#include "PlugRelay/Lv2HostWorkerSupport.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@
 #include <system_error>
 #include <utility>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 namespace {
 
 bool blockContainsUri(const std::string& block, const char* prefixedName, const char* uri) {
@@ -505,4 +505,4 @@ bool lv2MetadataAcceptsRenderBlockSize(
   return true;
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker

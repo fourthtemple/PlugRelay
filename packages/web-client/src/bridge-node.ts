@@ -8,13 +8,13 @@ import {
   createLivePerformanceAudioNodeOptions,
   shouldAutoBypassAudioNodeTransportPressure
 } from "./bridge-node-options";
-import type { LivePerformanceAudioNodeOptions, SoundBridgeAudioNodeFallbackOutputEventDetail, SoundBridgeAudioNodeFallbackReason, SoundBridgeAudioNodeHealth, SoundBridgeAudioNodeOptions, SoundBridgeAudioNodeProcessTimeoutEventDetail, SoundBridgeAudioNodeTransportPressureReason } from "./bridge-node-options";
-import { SoundBridgeClient } from "./client";
+import type { LivePerformanceAudioNodeOptions, PlugRelayAudioNodeFallbackOutputEventDetail, PlugRelayAudioNodeFallbackReason, PlugRelayAudioNodeHealth, PlugRelayAudioNodeOptions, PlugRelayAudioNodeProcessTimeoutEventDetail, PlugRelayAudioNodeTransportPressureReason } from "./bridge-node-options";
+import { PlugRelayClient } from "./client";
 import { isRenderDeadlineProtocolError } from "./live-effect-rack-metrics";
 import { liveTransportForBlock } from "./live-transport";
 
 export { LivePerformanceAudioNodeCalibrationWindow, boundedAudioNodeTransportPressureReasons, calibrateLivePerformanceAudioNodePolicy, createLivePerformanceAudioNodeCalibrationWindow, createLivePerformanceAudioNodeOptions, createLivePerformanceAudioNodePolicy, livePerformanceAudioNodeOptionsFromCalibration, refreshLivePerformanceAudioNodeLatencyFromCalibration, shouldAutoBypassAudioNodeTransportPressure } from "./bridge-node-options";
-export type { LivePerformanceAudioNodeCalibration, LivePerformanceAudioNodeCalibrationHealthSample, LivePerformanceAudioNodeCalibrationOptions, LivePerformanceAudioNodeCalibrationWindowOptions, LivePerformanceAudioNodeCalibrationWindowSnapshot, LivePerformanceAudioNodeLatencyRefresher, LivePerformanceAudioNodeOptions, LivePerformanceAudioNodePolicy, LivePerformanceAudioNodePolicyOptions, SoundBridgeAudioNodeFallbackOutputEventDetail, SoundBridgeAudioNodeFallbackReason, SoundBridgeAudioNodeHealth, SoundBridgeAudioNodeOptions, SoundBridgeAudioNodeProcessTimeoutEventDetail, SoundBridgeAudioNodeTransportPressureReason } from "./bridge-node-options";
+export type { LivePerformanceAudioNodeCalibration, LivePerformanceAudioNodeCalibrationHealthSample, LivePerformanceAudioNodeCalibrationOptions, LivePerformanceAudioNodeCalibrationWindowOptions, LivePerformanceAudioNodeCalibrationWindowSnapshot, LivePerformanceAudioNodeLatencyRefresher, LivePerformanceAudioNodeOptions, LivePerformanceAudioNodePolicy, LivePerformanceAudioNodePolicyOptions, PlugRelayAudioNodeFallbackOutputEventDetail, PlugRelayAudioNodeFallbackReason, PlugRelayAudioNodeHealth, PlugRelayAudioNodeOptions, PlugRelayAudioNodeProcessTimeoutEventDetail, PlugRelayAudioNodeTransportPressureReason } from "./bridge-node-options";
 export { LivePerformanceAudioNodeAdaptiveLatencyController, createLivePerformanceAudioNodeAdaptiveLatencyController } from "./live-audio-node-adaptive-latency";
 export type { LivePerformanceAudioNodeAdaptiveLatencyDirection, LivePerformanceAudioNodeAdaptiveLatencyOptions, LivePerformanceAudioNodeAdaptiveLatencySnapshot, LivePerformanceAudioNodeAdaptiveLatencyTarget, LivePerformanceAudioNodeRecreateRecommendation, LivePerformanceAudioNodeRecreateRecommendationReason } from "./live-audio-node-adaptive-latency";
 export { LivePerformanceAudioNodeRecoveryController, createLivePerformanceAudioNodeRecoveryController } from "./live-audio-node-recovery";
@@ -22,10 +22,10 @@ export type { LivePerformanceAudioNodeRecoveryOptions, LivePerformanceAudioNodeR
 export { LivePerformanceAudioNodeRecreateController, createLivePerformanceAudioNodeRecreateController } from "./live-audio-node-recreate";
 export type { LivePerformanceAudioNodeRecreateOptions, LivePerformanceAudioNodeRecreateReason, LivePerformanceAudioNodeRecreateSnapshot, LivePerformanceAudioNodeRecreateTarget } from "./live-audio-node-recreate";
 
-export class SoundBridgeAudioNode extends EventTarget {
+export class PlugRelayAudioNode extends EventTarget {
   readonly node: AudioWorkletNode;
 
-  private readonly client: SoundBridgeClient;
+  private readonly client: PlugRelayClient;
   private readonly instanceId: string;
   private readonly sampleRate: number;
   private readonly responseJitterThresholdBlocks: number;
@@ -46,14 +46,14 @@ export class SoundBridgeAudioNode extends EventTarget {
   private latencyDecreases = 0;
   private latencyChangeEvents = 0;
   private latencyRefreshes = 0;
-  private lastLatencyChangeDirection?: SoundBridgeAudioNodeHealth["lastLatencyChangeDirection"];
+  private lastLatencyChangeDirection?: PlugRelayAudioNodeHealth["lastLatencyChangeDirection"];
   private responseDeadlineLeadSamples = 0;
   private responseJitterBlocks = 0;
   private responseJitterSamples = 0;
   private responseDeadlineMisses = 0;
   private responseDeadlineMissesSinceLastStats = 0;
   private fallbackOutputBlocks = 0;
-  private lastFallbackReason?: SoundBridgeAudioNodeFallbackReason;
+  private lastFallbackReason?: PlugRelayAudioNodeFallbackReason;
   private staleOutputBlocks = 0;
   private droppedInputBlocks = 0;
   private underruns = 0;
@@ -66,7 +66,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private consecutiveTransportPressureEvents = 0;
   private maxConsecutiveTransportPressureEvents: number;
   private transportPressureAutoBypassed = false;
-  private readonly transportPressureAutoBypassReasons?: SoundBridgeAudioNodeTransportPressureReason[];
+  private readonly transportPressureAutoBypassReasons?: PlugRelayAudioNodeTransportPressureReason[];
   private lastTransportPressureReasons: string[] = [];
   private lastRenderEngine?: string;
   private lastRenderDurationMs?: number;
@@ -80,9 +80,9 @@ export class SoundBridgeAudioNode extends EventTarget {
   private maxConsecutiveAudioErrors: number;
   private audioErrorAutoBypassed = false;
   private lastAudioError?: unknown;
-  private unhealthyReason?: SoundBridgeAudioNodeHealth["unhealthyReason"];
+  private unhealthyReason?: PlugRelayAudioNodeHealth["unhealthyReason"];
 
-  private constructor(context: AudioContext, client: SoundBridgeClient, options: Required<SoundBridgeAudioNodeOptions>) {
+  private constructor(context: AudioContext, client: PlugRelayClient, options: Required<PlugRelayAudioNodeOptions>) {
     super();
     this.client = client;
     this.instanceId = options.instanceId;
@@ -94,7 +94,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.maxConsecutiveTransportPressureEvents = options.maxConsecutiveTransportPressureEvents;
     this.transportPressureAutoBypassReasons = options.transportPressureAutoBypassReasons;
     this.bypassed = options.bypassed;
-    this.node = new AudioWorkletNode(context, "soundbridge-audio-processor", {
+    this.node = new AudioWorkletNode(context, "plugrelay-audio-processor", {
       numberOfInputs: options.inputChannels > 0 ? 1 : 0,
       numberOfOutputs: 1,
       channelCount: Math.max(1, options.inputChannels),
@@ -141,10 +141,10 @@ export class SoundBridgeAudioNode extends EventTarget {
 
   static async create(
     context: AudioContext,
-    client: SoundBridgeClient,
-    options: SoundBridgeAudioNodeOptions
-  ): Promise<SoundBridgeAudioNode> {
-    const normalized: Required<SoundBridgeAudioNodeOptions> = {
+    client: PlugRelayClient,
+    options: PlugRelayAudioNodeOptions
+  ): Promise<PlugRelayAudioNode> {
+    const normalized: Required<PlugRelayAudioNodeOptions> = {
       instanceId: options.instanceId,
       inputChannels: Math.max(0, Math.min(32, Math.floor(options.inputChannels ?? 2))),
       outputChannels: Math.max(1, Math.min(32, Math.floor(options.outputChannels ?? 2))),
@@ -170,7 +170,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       maxConsecutiveTransportPressureEvents: boundedInteger(options.maxConsecutiveTransportPressureEvents, 0, 0, 1024),
       transportPressureAutoBypassReasons: boundedAudioNodeTransportPressureReasons(options.transportPressureAutoBypassReasons),
       bypassed: options.bypassed === true,
-      workletUrl: options.workletUrl ?? "/packages/web-client/dist/soundbridge-worklet.js"
+      workletUrl: options.workletUrl ?? "/packages/web-client/dist/plugrelay-worklet.js"
     };
     normalized.outputLatencyBlocks = boundedInteger(
       options.outputLatencyBlocks,
@@ -191,15 +191,15 @@ export class SoundBridgeAudioNode extends EventTarget {
       normalized.maxQueuedOutputBlocks
     );
     await context.audioWorklet.addModule(normalized.workletUrl);
-    return new SoundBridgeAudioNode(context, client, normalized);
+    return new PlugRelayAudioNode(context, client, normalized);
   }
 
   static createLivePerformance(
     context: AudioContext,
-    client: SoundBridgeClient,
+    client: PlugRelayClient,
     options: LivePerformanceAudioNodeOptions
-  ): Promise<SoundBridgeAudioNode> {
-    return SoundBridgeAudioNode.create(context, client, createLivePerformanceAudioNodeOptions(options));
+  ): Promise<PlugRelayAudioNode> {
+    return PlugRelayAudioNode.create(context, client, createLivePerformanceAudioNodeOptions(options));
   }
 
   connect(destination: AudioNode, output?: number, input?: number): AudioNode {
@@ -231,7 +231,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     return true;
   }
 
-  async refreshLatency(transportLatencySamples = this.transportLatencySamples): Promise<SoundBridgeAudioNodeHealth> {
+  async refreshLatency(transportLatencySamples = this.transportLatencySamples): Promise<PlugRelayAudioNodeHealth> {
     if (this.destroyed) return this.health;
     const previous = { pluginLatencySamples: this.pluginLatencySamples, transportLatencySamples: this.transportLatencySamples, reportedLatencySamples: this.reportedLatencySamples };
     const requestedTransportLatencySamples = boundedInteger(transportLatencySamples, this.transportLatencySamples, 0, 1_048_576);
@@ -268,7 +268,7 @@ export class SoundBridgeAudioNode extends EventTarget {
     this.node.disconnect();
   }
 
-  get health(): SoundBridgeAudioNodeHealth {
+  get health(): PlugRelayAudioNodeHealth {
     return {
       healthy: !this.destroyed && this.unhealthyReason === undefined,
       instanceId: this.instanceId,
@@ -584,7 +584,7 @@ export class SoundBridgeAudioNode extends EventTarget {
   private reportFallbackOutput(previous: { fallbackOutputBlocks: number }, stats: unknown): void {
     const deltaBlocks = Math.max(0, this.fallbackOutputBlocks - previous.fallbackOutputBlocks);
     if (deltaBlocks <= 0) return;
-    const detail: SoundBridgeAudioNodeFallbackOutputEventDetail = { deltaBlocks, reason: this.lastFallbackReason, stats, health: this.health };
+    const detail: PlugRelayAudioNodeFallbackOutputEventDetail = { deltaBlocks, reason: this.lastFallbackReason, stats, health: this.health };
     this.dispatchEvent(new CustomEvent("fallback-output", { detail }));
   }
 
@@ -702,7 +702,7 @@ export class SoundBridgeAudioNode extends EventTarget {
       this.dispatchEvent(new CustomEvent("audio-error-auto-bypassed", { detail: { error, health: this.health } }));
     }
     if (processTimedOut) {
-      const detail: SoundBridgeAudioNodeProcessTimeoutEventDetail = { error, autoBypassed, health: this.health };
+      const detail: PlugRelayAudioNodeProcessTimeoutEventDetail = { error, autoBypassed, health: this.health };
       this.dispatchEvent(new CustomEvent("process-timeout", { detail }));
       this.dispatchEvent(new CustomEvent("process-timeout-tripped", { detail }));
       if (autoBypassed) this.dispatchEvent(new CustomEvent("process-timeout-auto-bypassed", { detail }));
@@ -744,6 +744,6 @@ export class SoundBridgeAudioNode extends EventTarget {
   }
 }
 
-function audioNodeFallbackReason(reason: unknown): SoundBridgeAudioNodeFallbackReason | undefined {
+function audioNodeFallbackReason(reason: unknown): PlugRelayAudioNodeFallbackReason | undefined {
   return reason === "bypass" || reason === "latency-safety" || reason === "underrun" ? reason : undefined;
 }

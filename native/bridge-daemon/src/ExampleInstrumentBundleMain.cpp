@@ -1,4 +1,4 @@
-#include "SoundBridge/ExampleInstrumentRenderer.h"
+#include "PlugRelay/ExampleInstrumentRenderer.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -12,12 +12,12 @@ namespace {
 std::string pluginIdForExecutable(const char* argv0) {
   const auto executableName = std::filesystem::path(argv0).filename().string();
   if (executableName.find("tonewheel") != std::string::npos) {
-    return "au:soundbridge-example-tonewheel.component";
+    return "au:plugrelay-example-tonewheel.component";
   }
   if (executableName.find("wavefold") != std::string::npos) {
-    return "lv2:soundbridge-example-wavefold.lv2";
+    return "lv2:plugrelay-example-wavefold.lv2";
   }
-  return "vst3:soundbridge-example-polysynth.vst3";
+  return "vst3:plugrelay-example-polysynth.vst3";
 }
 
 void printUsage(const char* argv0) {
@@ -31,12 +31,12 @@ void printUsage(const char* argv0) {
 int main(int argc, char** argv) {
   if (argc == 2 && std::string(argv[1]) == "--worker") {
     const auto pluginId = pluginIdForExecutable(argv[0]);
-    if (!soundbridge::isExampleInstrumentPluginId(pluginId)) {
+    if (!plugrelay::isExampleInstrumentPluginId(pluginId)) {
       std::cerr << "Unknown example instrument plugin id: " << pluginId << "\n";
       return 3;
     }
 
-    soundbridge::ExampleInstrumentState state(pluginId);
+    plugrelay::ExampleInstrumentState state(pluginId);
     std::string line;
     while (std::getline(std::cin, line)) {
       std::stringstream stream(line);
@@ -83,18 +83,18 @@ int main(int argc, char** argv) {
       stream >> voices;
 
       if (!voices.empty()) {
-        soundbridge::ExampleRenderConfig config;
+        plugrelay::ExampleRenderConfig config;
         config.pluginId = pluginId;
         config.frames = frames;
         config.sampleRate = sampleRate;
         config.gain = gain;
         config.tone = tone;
         config.detune = detune;
-        config.voices = soundbridge::parseExampleVoices(voices);
-        std::cout << soundbridge::exampleInstrumentBlockToJson(
-            soundbridge::renderExampleInstrumentBlock(config)) << std::endl;
+        config.voices = plugrelay::parseExampleVoices(voices);
+        std::cout << plugrelay::exampleInstrumentBlockToJson(
+            plugrelay::renderExampleInstrumentBlock(config)) << std::endl;
       } else {
-        std::cout << soundbridge::exampleInstrumentBlockToJson(
+        std::cout << plugrelay::exampleInstrumentBlockToJson(
             state.render(frames, sampleRate, gain, tone, detune)) << std::endl;
       }
     }
@@ -106,9 +106,9 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  soundbridge::ExampleRenderConfig config;
+  plugrelay::ExampleRenderConfig config;
   config.pluginId = pluginIdForExecutable(argv[0]);
-  if (!soundbridge::isExampleInstrumentPluginId(config.pluginId)) {
+  if (!plugrelay::isExampleInstrumentPluginId(config.pluginId)) {
     std::cerr << "Unknown example instrument plugin id: " << config.pluginId << "\n";
     return 3;
   }
@@ -123,9 +123,9 @@ int main(int argc, char** argv) {
     std::cerr << "--render-example-block received invalid numeric arguments: " << error.what() << "\n";
     return 2;
   }
-  config.voices = soundbridge::parseExampleVoices(argv[7]);
+  config.voices = plugrelay::parseExampleVoices(argv[7]);
 
-  std::cout << soundbridge::exampleInstrumentBlockToJson(
-      soundbridge::renderExampleInstrumentBlock(config)) << "\n";
+  std::cout << plugrelay::exampleInstrumentBlockToJson(
+      plugrelay::renderExampleInstrumentBlock(config)) << "\n";
   return 0;
 }

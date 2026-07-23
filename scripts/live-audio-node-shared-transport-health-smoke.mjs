@@ -27,7 +27,7 @@ class FakePort {
 
 globalThis.AudioWorkletNode = FakeAudioWorkletNode;
 
-const { SoundBridgeAudioNode } = await import("../packages/web-client/dist/soundbridge-client.js");
+const { PlugRelayAudioNode } = await import("../packages/web-client/dist/plugrelay-client.js");
 const fakeContext = {
   sampleRate: 48000,
   audioWorklet: {
@@ -43,11 +43,11 @@ const fakeClient = {
   }
 };
 
-const node = await SoundBridgeAudioNode.createLivePerformance(fakeContext, fakeClient, {
+const node = await PlugRelayAudioNode.createLivePerformance(fakeContext, fakeClient, {
   instanceId: "inst-shared-health",
   inputChannels: 2,
   outputChannels: 2,
-  workletUrl: "/soundbridge-worklet.js"
+  workletUrl: "/plugrelay-worklet.js"
 });
 assert(node.health.maxOutputLatencyBlocks === 4 && node.health.sharedBufferBlocks === 8, "AudioNode health reports fixed live worklet limits");
 

@@ -1,6 +1,6 @@
-#include "SoundBridge/Lv2BusSupport.h"
+#include "PlugRelay/Lv2BusSupport.h"
 
-#include "SoundBridge/NativePlugin.h"
+#include "PlugRelay/NativePlugin.h"
 
 #include <algorithm>
 #include <optional>
@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 namespace {
 
 std::string groupNameFromUri(const std::string& uri, const std::string& fallback) {
@@ -183,4 +183,4 @@ std::string lv2RenderedAudioToJson(
   return output.str();
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker

@@ -12,7 +12,7 @@ export function createDaemonHelloResponse({
 }) {
   return function helloResponse(paired) {
     return {
-      name: "soundbridge-mock-daemon",
+      name: "plugrelay-mock-daemon",
       protocolVersion,
       pairingRequired: true,
       transports: [

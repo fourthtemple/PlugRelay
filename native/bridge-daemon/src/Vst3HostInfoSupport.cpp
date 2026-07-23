@@ -1,15 +1,15 @@
-#include "SoundBridge/Vst3HostInfoSupport.h"
+#include "PlugRelay/Vst3HostInfoSupport.h"
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
-#include "SoundBridge/Vst3HostWorkerSupport.h"
+#include "PlugRelay/Vst3HostWorkerSupport.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <sstream>
 #include <stdexcept>
 
-namespace soundbridge::vst3_worker {
+namespace plugrelay::vst3_worker {
 
 std::string vst3LatencyToJson(Steinberg::Vst::IAudioProcessor* processor) {
   if (processor == nullptr) {
@@ -41,6 +41,6 @@ std::string vst3TailTimeToJson(Steinberg::Vst::IAudioProcessor* processor) {
   return output.str();
 }
 
-} // namespace soundbridge::vst3_worker
+} // namespace plugrelay::vst3_worker
 
 #endif

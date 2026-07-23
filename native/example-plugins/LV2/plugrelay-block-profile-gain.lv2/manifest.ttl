@@ -1,0 +1,13 @@
+@prefix buf-size: <http://lv2plug.in/ns/ext/buf-size#> .
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix opts: <http://lv2plug.in/ns/ext/options#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<urn:plugrelay:example:lv2-gain>
+  a lv2:Plugin ;
+  doap:name "PlugRelay Block Profile LV2 Gain" ;
+  lv2:binary <plugrelay-example-lv2-gain.so> ;
+  lv2:requiredFeature buf-size:boundedBlockLength, buf-size:powerOf2BlockLength, opts:options ;
+  opts:requiredOption buf-size:maxBlockLength, buf-size:sequenceSize, buf-size:fixedBlockLength ;
+  rdfs:seeAlso <plugrelay-block-profile-gain.ttl> .

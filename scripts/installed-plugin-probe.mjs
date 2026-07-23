@@ -46,23 +46,23 @@ import {
   waitForListen
 } from "./installed-plugin-probe-transport.mjs";
 
-const HOST = process.env.SOUNDBRIDGE_HOST ?? "127.0.0.1";
-const ORIGIN = process.env.SOUNDBRIDGE_PROBE_ORIGIN ?? "http://127.0.0.1:5173";
-const PAIRING_TOKEN = process.env.SOUNDBRIDGE_PAIRING_TOKEN ?? crypto.randomBytes(24).toString("base64url");
-const REQUEST_TIMEOUT_MS = intFromEnv("SOUNDBRIDGE_PROBE_TIMEOUT_MS", 15000, 1000, 120000);
-const MAX_BLOCK_SIZE = intFromEnv("SOUNDBRIDGE_PROBE_MAX_BLOCK_SIZE", 64, 1, 8192);
-const SAMPLE_RATE = intFromEnv("SOUNDBRIDGE_PROBE_SAMPLE_RATE", 48000, 8000, 384000);
-const LIMIT = intFromEnv("SOUNDBRIDGE_PROBE_LIMIT", 0, 0, 10000);
+const HOST = process.env.PLUGRELAY_HOST ?? "127.0.0.1";
+const ORIGIN = process.env.PLUGRELAY_PROBE_ORIGIN ?? "http://127.0.0.1:5173";
+const PAIRING_TOKEN = process.env.PLUGRELAY_PAIRING_TOKEN ?? crypto.randomBytes(24).toString("base64url");
+const REQUEST_TIMEOUT_MS = intFromEnv("PLUGRELAY_PROBE_TIMEOUT_MS", 15000, 1000, 120000);
+const MAX_BLOCK_SIZE = intFromEnv("PLUGRELAY_PROBE_MAX_BLOCK_SIZE", 64, 1, 8192);
+const SAMPLE_RATE = intFromEnv("PLUGRELAY_PROBE_SAMPLE_RATE", 48000, 8000, 384000);
+const LIMIT = intFromEnv("PLUGRELAY_PROBE_LIMIT", 0, 0, 10000);
 const MAX_PLUGIN_LATENCY_SAMPLES = 1_048_576;
 const MAX_PLUGIN_TAIL_SAMPLES = 1_048_576;
-const NAME_FILTER = process.env.SOUNDBRIDGE_PROBE_FILTER ?? "";
+const NAME_FILTER = process.env.PLUGRELAY_PROBE_FILTER ?? "";
 const REPORT_MODE = installedProbeReportMode();
-const PROBE_NATIVE_EDITOR_BROKER = flagFromEnv("SOUNDBRIDGE_PROBE_NATIVE_EDITOR_BROKER");
+const PROBE_NATIVE_EDITOR_BROKER = flagFromEnv("PLUGRELAY_PROBE_NATIVE_EDITOR_BROKER");
 const NATIVE_EDITOR_BROKER_FIXTURE = fileURLToPath(new URL("./native-editor-broker-fixture.mjs", import.meta.url));
 const FORMATS = installedProbeFormats();
 
 const request = createProbeRequester({ requestTimeoutMs: REQUEST_TIMEOUT_MS });
-const FILE_GRANT_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-probe-grants-"));
+const FILE_GRANT_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "plugrelay-probe-grants-"));
 
 const port = await reservePort(HOST);
 const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
@@ -640,18 +640,18 @@ function assertProbe(condition, code, message) {
 function daemonEnvironment(port) {
   const env = {
     ...process.env,
-    SOUNDBRIDGE_HOST: HOST,
-    SOUNDBRIDGE_PORT: String(port),
-    SOUNDBRIDGE_PAIRING_TOKEN: PAIRING_TOKEN,
-    SOUNDBRIDGE_ALLOWED_ORIGINS: ORIGIN,
-    SOUNDBRIDGE_FILE_GRANT_ROOTS: FILE_GRANT_ROOT,
-    SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS: "1"
+    PLUGRELAY_HOST: HOST,
+    PLUGRELAY_PORT: String(port),
+    PLUGRELAY_PAIRING_TOKEN: PAIRING_TOKEN,
+    PLUGRELAY_ALLOWED_ORIGINS: ORIGIN,
+    PLUGRELAY_FILE_GRANT_ROOTS: FILE_GRANT_ROOT,
+    PLUGRELAY_FILE_GRANT_ALLOW_BROWSER_PATHS: "1"
   };
   if (PROBE_NATIVE_EDITOR_BROKER) {
-    const configuredPath = String(process.env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH ?? "").trim();
-    env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH = configuredPath || process.execPath;
-    if (process.env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS === undefined && !configuredPath) {
-      env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS = JSON.stringify([NATIVE_EDITOR_BROKER_FIXTURE]);
+    const configuredPath = String(process.env.PLUGRELAY_NATIVE_EDITOR_BROKER_PATH ?? "").trim();
+    env.PLUGRELAY_NATIVE_EDITOR_BROKER_PATH = configuredPath || process.execPath;
+    if (process.env.PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS === undefined && !configuredPath) {
+      env.PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS = JSON.stringify([NATIVE_EDITOR_BROKER_FIXTURE]);
     }
   }
   return env;

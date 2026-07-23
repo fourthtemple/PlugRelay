@@ -1,6 +1,6 @@
 import {
-  __soundBridgeDecodeBinaryAudioEnvelope as decodeBinaryAudioEnvelope,
-  __soundBridgeEncodeBinaryAudioEnvelope as encodeBinaryAudioEnvelope
+  __plugRelayDecodeBinaryAudioEnvelope as decodeBinaryAudioEnvelope,
+  __plugRelayEncodeBinaryAudioEnvelope as encodeBinaryAudioEnvelope
 } from "./client";
 import { liveTransportForBlock } from "./live-transport";
 
@@ -100,7 +100,7 @@ function connect(url: string): void {
   if (previousSocket) {
     socket = undefined;
     clearPendingRequests();
-    rejectPendingAudioRequests("SoundBridge worker transport closed before reconnect.");
+    rejectPendingAudioRequests("PlugRelay worker transport closed before reconnect.");
     post({ type: "closed" });
     previousSocket.close();
   }
@@ -126,7 +126,7 @@ function connect(url: string): void {
     }
     socket = undefined;
     clearPendingRequests();
-    rejectPendingAudioRequests("SoundBridge worker transport closed before audio response.");
+    rejectPendingAudioRequests("PlugRelay worker transport closed before audio response.");
     post({ type: "closed" });
   });
   activeSocket.addEventListener("message", (event) => {
@@ -143,7 +143,7 @@ function connect(url: string): void {
       }
       post({ type: "message", envelope });
     } catch {
-      post({ type: "protocol-error", message: "SoundBridge worker transport received an invalid message." });
+      post({ type: "protocol-error", message: "PlugRelay worker transport received an invalid message." });
     }
   });
 }
@@ -232,7 +232,7 @@ function sendAudioProcess(port: MessagePort, config: AudioPortConfig, message: {
   };
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     recycleAudioInput(port, recyclableInput, frames);
-    port.postMessage({ type: "audio-error", blockId, error: "SoundBridge worker transport is not connected." });
+    port.postMessage({ type: "audio-error", blockId, error: "PlugRelay worker transport is not connected." });
     return;
   }
   try {
@@ -406,7 +406,7 @@ function sendSharedAudioProcess(
 ): void {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     recycleSharedInputBlock(shared, block.channels, block.frames);
-    shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: "SoundBridge worker transport is not connected.", ...sharedAudioStatusFields(shared) });
+    shared.port.postMessage({ type: "audio-error", blockId: block.blockId, error: "PlugRelay worker transport is not connected.", ...sharedAudioStatusFields(shared) });
     return;
   }
   const transport = audioBlockTransport(config, block.blockId, block.frames, block.transportLatencySamples);
@@ -468,7 +468,7 @@ function clearAudioRequestTimeout(timeout: ReturnType<typeof setTimeout> | undef
 }
 
 function audioTimeoutMessage(timeoutMs: number): string {
-  return `SoundBridge audio request timed out after ${timeoutMs} ms.`;
+  return `PlugRelay audio request timed out after ${timeoutMs} ms.`;
 }
 
 function rejectPendingAudioRequests(error: string): void {
@@ -676,7 +676,7 @@ function boundedFrames(value: unknown): number {
 
 function sendRequest(envelope: unknown, binaryAudioChannels?: ArrayLike<number>[], timeoutMs?: unknown): void {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    post({ type: "send-error", id: requestId(envelope), message: "SoundBridge worker transport is not connected." });
+    post({ type: "send-error", id: requestId(envelope), message: "PlugRelay worker transport is not connected." });
     return;
   }
   const id = requestId(envelope);
@@ -739,7 +739,7 @@ function clearPendingRequests(): void {
 }
 
 function requestTimeoutMessage(timeoutMs: number): string {
-  return `SoundBridge worker request timed out after ${timeoutMs} ms.`;
+  return `PlugRelay worker request timed out after ${timeoutMs} ms.`;
 }
 
 function post(message: unknown): void {

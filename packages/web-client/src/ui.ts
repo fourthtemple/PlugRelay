@@ -1,9 +1,9 @@
 import type { PluginParameter } from "../../protocol/src/messages";
-import { SoundBridgeClient } from "./client";
+import { PlugRelayClient } from "./client";
 
 export interface ParameterUiOptions {
   container: HTMLElement;
-  client: SoundBridgeClient;
+  client: PlugRelayClient;
   instanceId: string;
   parameters: PluginParameter[];
 }

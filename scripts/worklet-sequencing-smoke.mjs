@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import vm from "node:vm";
 
-const workletPath = resolve("packages/web-client/dist/soundbridge-worklet.js");
+const workletPath = resolve("packages/web-client/dist/plugrelay-worklet.js");
 const workletSource = readFileSync(workletPath, "utf8");
 const postedMessages = [];
 let processorCtor;
@@ -37,7 +37,7 @@ vm.runInNewContext(workletSource, {
   Array,
   SharedArrayBuffer,
   registerProcessor(name, constructor) {
-    assert(name === "soundbridge-audio-processor", "worklet registers the expected processor name");
+    assert(name === "plugrelay-audio-processor", "worklet registers the expected processor name");
     processorCtor = constructor;
   }
 });

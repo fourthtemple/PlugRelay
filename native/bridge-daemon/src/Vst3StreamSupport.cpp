@@ -1,13 +1,13 @@
-#include "SoundBridge/Vst3StreamSupport.h"
+#include "PlugRelay/Vst3StreamSupport.h"
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
-#include "SoundBridge/Base64.h"
+#include "PlugRelay/Base64.h"
 
 #include <cstdint>
 #include <stdexcept>
 
-namespace soundbridge::vst3_worker {
+namespace plugrelay::vst3_worker {
 
 std::string memoryStreamToBase64(
     Steinberg::MemoryStream& stream,
@@ -24,6 +24,6 @@ std::string memoryStreamToBase64(
   return base64Encode(data, static_cast<std::size_t>(size));
 }
 
-} // namespace soundbridge::vst3_worker
+} // namespace plugrelay::vst3_worker
 
 #endif

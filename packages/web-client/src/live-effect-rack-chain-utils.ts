@@ -90,5 +90,5 @@ export function timeoutStageResults(
 }
 
 export function isChainTimeoutError(error: unknown): boolean {
-  return error instanceof Error && error.name === "SoundBridgeLiveEffectTimeout";
+  return error instanceof Error && error.name === "PlugRelayLiveEffectTimeout";
 }

@@ -188,7 +188,7 @@ export async function probeFileGrantSampleLoad({
     return;
   }
   const samplePath = path.join(fileGrantRoot, `${safeFilename(plugin.pluginId)}.wav`);
-  fs.writeFileSync(samplePath, "SoundBridge sample fixture\n", "utf8");
+  fs.writeFileSync(samplePath, "PlugRelay sample fixture\n", "utf8");
   let grantId = "";
   try {
     const grant = await phase(result, "createSampleFileGrant", () =>
@@ -263,7 +263,7 @@ export async function probeFileGrantLicenseLoad({
     return;
   }
   const licensePath = path.join(fileGrantRoot, `${safeFilename(plugin.pluginId)}.license`);
-  fs.writeFileSync(licensePath, "SoundBridge license fixture\n", "utf8");
+  fs.writeFileSync(licensePath, "PlugRelay license fixture\n", "utf8");
   let grantId = "";
   try {
     const grant = await phase(result, "createLicenseFileGrant", () =>
@@ -301,7 +301,7 @@ export async function probeFileGrantOtherPresetLoad({
     return;
   }
   const presetPath = path.join(fileGrantRoot, `${safeFilename(plugin.pluginId)}.vendor-preset`);
-  fs.writeFileSync(presetPath, "SoundBridge vendor preset fixture\n", "utf8");
+  fs.writeFileSync(presetPath, "PlugRelay vendor preset fixture\n", "utf8");
   let grantId = "";
   try {
     const grant = await phase(result, "createOtherPresetFileGrant", () =>

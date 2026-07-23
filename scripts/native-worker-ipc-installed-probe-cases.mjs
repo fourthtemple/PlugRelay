@@ -16,23 +16,23 @@ export async function exerciseInstalledProbeSupport({ check }) {
     "installed plugin probe includes VST3, AU, and LV2 by default"
   );
   check(
-    JSON.stringify([...installedProbeFormats({ SOUNDBRIDGE_PROBE_FORMATS: " lv2,VST3,lv2 " })]) ===
+    JSON.stringify([...installedProbeFormats({ PLUGRELAY_PROBE_FORMATS: " lv2,VST3,lv2 " })]) ===
       JSON.stringify(["lv2", "vst3"]),
     "installed plugin probe normalizes explicit format filters"
   );
   let badProbeFormatCode;
   try {
-    installedProbeFormats({ SOUNDBRIDGE_PROBE_FORMATS: "vst2" });
+    installedProbeFormats({ PLUGRELAY_PROBE_FORMATS: "vst2" });
   } catch (error) {
     badProbeFormatCode = error.message;
   }
   check(badProbeFormatCode?.includes("unsupported format"), "installed plugin probe rejects unsupported format filters");
   check(
-    installedProbeReportMode({ SOUNDBRIDGE_PROBE_REPORT: "summary" }) === "summary",
+    installedProbeReportMode({ PLUGRELAY_PROBE_REPORT: "summary" }) === "summary",
     "installed plugin probe accepts summary report mode"
   );
   check(
-    installedProbeReportMode({ SOUNDBRIDGE_PROBE_REPORT: "matrix" }) === "matrix",
+    installedProbeReportMode({ PLUGRELAY_PROBE_REPORT: "matrix" }) === "matrix",
     "installed plugin probe accepts matrix report mode"
   );
 

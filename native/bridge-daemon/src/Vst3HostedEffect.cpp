@@ -1,10 +1,10 @@
-#include "SoundBridge/Vst3HostedEffect.h"
+#include "PlugRelay/Vst3HostedEffect.h"
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
-#include "SoundBridge/Vst3HostInfoSupport.h"
-#include "SoundBridge/Vst3HostWorkerProcessSupport.h"
-#include "SoundBridge/Vst3StateSupport.h"
+#include "PlugRelay/Vst3HostInfoSupport.h"
+#include "PlugRelay/Vst3HostWorkerProcessSupport.h"
+#include "PlugRelay/Vst3StateSupport.h"
 
 #include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/parameterchanges.h"
@@ -17,7 +17,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace soundbridge::vst3_worker {
+namespace plugrelay::vst3_worker {
 
 namespace {
 
@@ -684,6 +684,6 @@ void HostedVst3Effect::prepareRenderBuffers() {
   }
 }
 
-} // namespace soundbridge::vst3_worker
+} // namespace plugrelay::vst3_worker
 
 #endif

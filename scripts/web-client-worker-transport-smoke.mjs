@@ -110,8 +110,8 @@ globalThis.Worker = FakeWorker;
 globalThis.AudioWorkletNode = FakeAudioWorkletNode;
 globalThis.WebSocket = FakeMainSocket;
 
-const { SoundBridgeAudioNode, SoundBridgeClient, createLivePerformanceAudioNodeOptions } = await import("../packages/web-client/dist/soundbridge-client.js");
-const client = new SoundBridgeClient({
+const { PlugRelayAudioNode, PlugRelayClient, createLivePerformanceAudioNodeOptions } = await import("../packages/web-client/dist/plugrelay-client.js");
+const client = new PlugRelayClient({
   url: "ws://127.0.0.1:47370/bridge",
   origin: "http://127.0.0.1:5173",
   transport: "worker"
@@ -223,16 +223,16 @@ const fakeContext = {
     }
   }
 };
-await SoundBridgeAudioNode.createLivePerformance(fakeContext, client, { instanceId: "inst-source-node", inputChannels: 0, outputChannels: 2, workletUrl: "/soundbridge-worklet.js" });
+await PlugRelayAudioNode.createLivePerformance(fakeContext, client, { instanceId: "inst-source-node", inputChannels: 0, outputChannels: 2, workletUrl: "/plugrelay-worklet.js" });
 assert(FakeAudioWorkletNode.last.options.numberOfInputs === 0 && FakeAudioWorkletNode.last.options.channelCount === 1 && FakeAudioWorkletNode.last.options.processorOptions.inputChannels === 0, "zero-input live AudioNodes are source-style worklets");
-const liveNode = await SoundBridgeAudioNode.createLivePerformance(fakeContext, client, {
+const liveNode = await PlugRelayAudioNode.createLivePerformance(fakeContext, client, {
   instanceId: "inst-live-node",
   inputChannels: 2,
   outputChannels: 2,
-  workletUrl: "/soundbridge-worklet.js"
+  workletUrl: "/plugrelay-worklet.js"
 });
-assert(liveNode instanceof SoundBridgeAudioNode, "createLivePerformance returns a SoundBridgeAudioNode");
-assert(addedModules[0] === "/soundbridge-worklet.js", "createLivePerformance loads the requested worklet");
+assert(liveNode instanceof PlugRelayAudioNode, "createLivePerformance returns a PlugRelayAudioNode");
+assert(addedModules[0] === "/plugrelay-worklet.js", "createLivePerformance loads the requested worklet");
 const processorOptions = FakeAudioWorkletNode.last.options.processorOptions;
 assert(processorOptions.maxInFlightBlocks === 4, "createLivePerformance forwards live in-flight limits to the worklet");
 assert(processorOptions.maxQueuedOutputBlocks === 8, "createLivePerformance forwards live output queue limits");
@@ -256,25 +256,25 @@ liveNode.addEventListener("healthchange", (event) => {
 });
 let retryEvents = 0, retryDetail;
 liveNode.addEventListener("retry", (event) => { retryEvents += 1; retryDetail = event.detail; });
-assert(liveNode.health.bypassed === false, "SoundBridgeAudioNode health starts unbypassed");
-assert(liveNode.health.maxConsecutiveRenderBudgetMisses === 2, "SoundBridgeAudioNode health reports the render-budget miss threshold");
-assert(liveNode.health.maxConsecutiveAudioErrors === 1, "SoundBridgeAudioNode health reports the audio-error threshold");
-assert(liveNode.health.maxConsecutiveTransportPressureEvents === 3, "SoundBridgeAudioNode health reports the transport-pressure threshold");
-assert(liveNode.retry() === false && retryEvents === 0, "SoundBridgeAudioNode retry is idle before auto-bypass");
+assert(liveNode.health.bypassed === false, "PlugRelayAudioNode health starts unbypassed");
+assert(liveNode.health.maxConsecutiveRenderBudgetMisses === 2, "PlugRelayAudioNode health reports the render-budget miss threshold");
+assert(liveNode.health.maxConsecutiveAudioErrors === 1, "PlugRelayAudioNode health reports the audio-error threshold");
+assert(liveNode.health.maxConsecutiveTransportPressureEvents === 3, "PlugRelayAudioNode health reports the transport-pressure threshold");
+assert(liveNode.retry() === false && retryEvents === 0, "PlugRelayAudioNode retry is idle before auto-bypass");
 liveNode.setBypassed(true);
-assert(liveNode.health.bypassed === true, "SoundBridgeAudioNode health tracks manual bypass");
-assert(liveNode.health.bypassEvents === 1, "SoundBridgeAudioNode health counts bypass changes");
+assert(liveNode.health.bypassed === true, "PlugRelayAudioNode health tracks manual bypass");
+assert(liveNode.health.bypassEvents === 1, "PlugRelayAudioNode health counts bypass changes");
 assert(
   FakeAudioWorkletNode.last.port.messages.at(-1)?.type === "set-bypassed" &&
     FakeAudioWorkletNode.last.port.messages.at(-1)?.bypassed === true,
-  "SoundBridgeAudioNode sends bypass commands to the worklet"
+  "PlugRelayAudioNode sends bypass commands to the worklet"
 );
 assert(healthChangeEvents === 1 && healthChangeDetail?.bypassed === true, "manual bypass emits a healthchange event");
 liveNode.setBypassed(true);
 assert(healthChangeEvents === 1, "unchanged bypass state does not emit duplicate healthchange events");
 liveNode.setBypassed(false);
-assert(liveNode.health.bypassed === false, "SoundBridgeAudioNode can return to wet processing");
-assert(liveNode.health.bypassEvents === 2, "SoundBridgeAudioNode counts wet/dry bypass transitions");
+assert(liveNode.health.bypassed === false, "PlugRelayAudioNode can return to wet processing");
+assert(liveNode.health.bypassEvents === 2, "PlugRelayAudioNode counts wet/dry bypass transitions");
 assert(healthChangeEvents === 2 && healthChangeDetail?.bypassed === false, "clearing bypass emits a healthchange event");
 let statsEvents = 0;
 let statsDetail;
@@ -316,34 +316,34 @@ const pressureStats = {
   sharedTransportInFlightBlocks: 4
 };
 FakeAudioWorkletNode.last.port.onmessage({ data: pressureStats });
-assert(statsEvents === 1, "SoundBridgeAudioNode emits one stats event per worklet stats message");
-assert(statsDetail.transportLatencySamples === 256 && statsDetail.fallbackOutputBlocks === 7 && statsDetail.sharedBufferBlocks === 8, "SoundBridgeAudioNode preserves stats event details and fixed shared-ring capacity");
-assert(fallbackOutputEvents === 1 && fallbackOutputDetail?.deltaBlocks === 7 && fallbackOutputDetail?.reason === "underrun", "SoundBridgeAudioNode emits fallback-output for new fallback blocks");
-assert(liveNode.health.inFlightBlocks === 3, "SoundBridgeAudioNode health tracks worklet in-flight blocks");
-assert(liveNode.health.queuedOutputBlocks === 2, "SoundBridgeAudioNode health tracks queued output blocks");
-assert(liveNode.health.outputLatencyBlocks === 2, "SoundBridgeAudioNode health tracks output latency blocks");
-assert(liveNode.health.transportLatencySamples === 256, "SoundBridgeAudioNode health tracks transport latency samples");
-assert(liveNode.health.reportedLatencySamples === 256, "SoundBridgeAudioNode health combines transport latency before plugin refresh");
-assert(liveNode.health.reportedLatencyMs === 5.333, "SoundBridgeAudioNode health exposes reported latency in milliseconds");
-assert(liveNode.health.latencyIncreases === 1, "SoundBridgeAudioNode health tracks adaptive latency increases");
-assert(liveNode.health.latencyDecreases === 0, "SoundBridgeAudioNode health tracks adaptive latency decreases");
-assert(liveNode.health.latencyChangeEvents === 1, "SoundBridgeAudioNode health counts latency changes");
-assert(liveNode.health.lastLatencyChangeDirection === "increased", "SoundBridgeAudioNode health tracks latency direction");
-assert(liveNode.health.responseDeadlineLeadSamples === -128, "SoundBridgeAudioNode health tracks deadline lead");
-assert(liveNode.health.responseJitterSamples === 384 && liveNode.health.responseJitterBlocks === 3 && liveNode.health.responseJitterThresholdBlocks === 2, "SoundBridgeAudioNode health tracks response jitter against the live threshold");
-assert(liveNode.health.responseDeadlineMisses === 4 && liveNode.health.responseDeadlineMissesSinceLastStats === 1, "SoundBridgeAudioNode health tracks deadline misses");
-assert(liveNode.health.fallbackOutputBlocks === 7 && liveNode.health.lastFallbackReason === "underrun", "SoundBridgeAudioNode health tracks fallback output");
-assert(liveNode.health.staleOutputBlocks === 2, "SoundBridgeAudioNode health tracks stale output blocks");
-assert(liveNode.health.droppedInputBlocks === 1, "SoundBridgeAudioNode health tracks dropped input blocks");
-assert(liveNode.health.underruns === 7, "SoundBridgeAudioNode health tracks underruns");
-assert(liveNode.health.sharedAudioEnabled === true && liveNode.health.sharedInputQueuedBlocks === 3 && liveNode.health.sharedOutputQueuedBlocks === 4, "SoundBridgeAudioNode health tracks shared audio queue depth");
-assert(liveNode.health.sharedInputDroppedBlocks === 5, "SoundBridgeAudioNode health tracks shared input drops");
-assert(liveNode.health.sharedOutputDroppedBlocks === 6, "SoundBridgeAudioNode health tracks shared output drops");
-assert(latencyEvents === 1, "SoundBridgeAudioNode emits latencychange when worklet latency changes");
+assert(statsEvents === 1, "PlugRelayAudioNode emits one stats event per worklet stats message");
+assert(statsDetail.transportLatencySamples === 256 && statsDetail.fallbackOutputBlocks === 7 && statsDetail.sharedBufferBlocks === 8, "PlugRelayAudioNode preserves stats event details and fixed shared-ring capacity");
+assert(fallbackOutputEvents === 1 && fallbackOutputDetail?.deltaBlocks === 7 && fallbackOutputDetail?.reason === "underrun", "PlugRelayAudioNode emits fallback-output for new fallback blocks");
+assert(liveNode.health.inFlightBlocks === 3, "PlugRelayAudioNode health tracks worklet in-flight blocks");
+assert(liveNode.health.queuedOutputBlocks === 2, "PlugRelayAudioNode health tracks queued output blocks");
+assert(liveNode.health.outputLatencyBlocks === 2, "PlugRelayAudioNode health tracks output latency blocks");
+assert(liveNode.health.transportLatencySamples === 256, "PlugRelayAudioNode health tracks transport latency samples");
+assert(liveNode.health.reportedLatencySamples === 256, "PlugRelayAudioNode health combines transport latency before plugin refresh");
+assert(liveNode.health.reportedLatencyMs === 5.333, "PlugRelayAudioNode health exposes reported latency in milliseconds");
+assert(liveNode.health.latencyIncreases === 1, "PlugRelayAudioNode health tracks adaptive latency increases");
+assert(liveNode.health.latencyDecreases === 0, "PlugRelayAudioNode health tracks adaptive latency decreases");
+assert(liveNode.health.latencyChangeEvents === 1, "PlugRelayAudioNode health counts latency changes");
+assert(liveNode.health.lastLatencyChangeDirection === "increased", "PlugRelayAudioNode health tracks latency direction");
+assert(liveNode.health.responseDeadlineLeadSamples === -128, "PlugRelayAudioNode health tracks deadline lead");
+assert(liveNode.health.responseJitterSamples === 384 && liveNode.health.responseJitterBlocks === 3 && liveNode.health.responseJitterThresholdBlocks === 2, "PlugRelayAudioNode health tracks response jitter against the live threshold");
+assert(liveNode.health.responseDeadlineMisses === 4 && liveNode.health.responseDeadlineMissesSinceLastStats === 1, "PlugRelayAudioNode health tracks deadline misses");
+assert(liveNode.health.fallbackOutputBlocks === 7 && liveNode.health.lastFallbackReason === "underrun", "PlugRelayAudioNode health tracks fallback output");
+assert(liveNode.health.staleOutputBlocks === 2, "PlugRelayAudioNode health tracks stale output blocks");
+assert(liveNode.health.droppedInputBlocks === 1, "PlugRelayAudioNode health tracks dropped input blocks");
+assert(liveNode.health.underruns === 7, "PlugRelayAudioNode health tracks underruns");
+assert(liveNode.health.sharedAudioEnabled === true && liveNode.health.sharedInputQueuedBlocks === 3 && liveNode.health.sharedOutputQueuedBlocks === 4, "PlugRelayAudioNode health tracks shared audio queue depth");
+assert(liveNode.health.sharedInputDroppedBlocks === 5, "PlugRelayAudioNode health tracks shared input drops");
+assert(liveNode.health.sharedOutputDroppedBlocks === 6, "PlugRelayAudioNode health tracks shared output drops");
+assert(latencyEvents === 1, "PlugRelayAudioNode emits latencychange when worklet latency changes");
 assert(latencyDetail?.direction === "increased", "latencychange reports adaptive latency increase direction");
 assert(latencyDetail?.previous?.outputLatencyBlocks === 0, "latencychange includes previous latency state");
 assert(latencyDetail?.health?.transportLatencySamples === 256, "latencychange includes updated health");
-assert(transportPressureEvents === 1, "SoundBridgeAudioNode emits transport-pressure on increased pressure counters");
+assert(transportPressureEvents === 1, "PlugRelayAudioNode emits transport-pressure on increased pressure counters");
 assert(
   transportPressureDetail?.reasons?.join(",") === "deadline-miss,response-jitter,stale-output,dropped-input,underrun,shared-input-drop,shared-output-drop,shared-transport-saturation",
   "transport-pressure reports bounded pressure reasons"
@@ -351,12 +351,12 @@ assert(
 assert(transportPressureDetail?.health?.transportPressureEvents === 1, "transport-pressure includes updated health");
 assert(
   liveNode.health.lastTransportPressureReasons.includes("deadline-miss"),
-  "SoundBridgeAudioNode health tracks the latest transport-pressure reason"
+  "PlugRelayAudioNode health tracks the latest transport-pressure reason"
 );
 FakeAudioWorkletNode.last.port.onmessage({ data: { ...pressureStats, sharedTransportInFlightBlocks: 0 } });
-assert(fallbackOutputEvents === 1, "SoundBridgeAudioNode does not repeat fallback-output for unchanged counters");
-assert(transportPressureEvents === 1, "SoundBridgeAudioNode does not repeat transport-pressure for unchanged counters");
-assert(latencyEvents === 1, "SoundBridgeAudioNode does not repeat latencychange for unchanged latency stats");
+assert(fallbackOutputEvents === 1, "PlugRelayAudioNode does not repeat fallback-output for unchanged counters");
+assert(transportPressureEvents === 1, "PlugRelayAudioNode does not repeat transport-pressure for unchanged counters");
+assert(latencyEvents === 1, "PlugRelayAudioNode does not repeat latencychange for unchanged latency stats");
 FakeAudioWorkletNode.last.port.onmessage({
   data: {
     ...pressureStats,
@@ -365,14 +365,14 @@ FakeAudioWorkletNode.last.port.onmessage({
     latencyDecreases: 1, sharedTransportInFlightBlocks: 0
   }
 });
-assert(latencyEvents === 2, "SoundBridgeAudioNode emits latencychange when adaptive latency recovers");
+assert(latencyEvents === 2, "PlugRelayAudioNode emits latencychange when adaptive latency recovers");
 assert(latencyDetail?.direction === "decreased", "latencychange reports adaptive latency decrease direction");
-assert(liveNode.health.latencyDecreases === 1, "SoundBridgeAudioNode health tracks latency recovery decreases");
-assert(liveNode.health.lastLatencyChangeDirection === "decreased", "SoundBridgeAudioNode health tracks recovery direction");
+assert(liveNode.health.latencyDecreases === 1, "PlugRelayAudioNode health tracks latency recovery decreases");
+assert(liveNode.health.lastLatencyChangeDirection === "decreased", "PlugRelayAudioNode health tracks recovery direction");
 assert(transportPressureEvents === 1, "latency recovery without new pressure counters does not emit transport-pressure");
 const refreshedLatency = await liveNode.refreshLatency(384);
 const latencyRequest = FakeWorker.last.messages.at(-1);
-assert(latencyRequest.envelope.command === "getLatency", "SoundBridgeAudioNode refreshLatency requests daemon latency");
+assert(latencyRequest.envelope.command === "getLatency", "PlugRelayAudioNode refreshLatency requests daemon latency");
 assert(latencyRequest.envelope.payload.transportLatencySamples === 384 && FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "set-output-latency" && message.outputLatencyBlocks === 3), "refreshLatency retargets worklet output latency and daemon latency");
 assert(refreshedLatency.pluginLatencySamples === 96 && FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "set-plugin-latency" && message.pluginLatencySamples === 96), "refreshLatency stores plugin latency in health and updates worklet compensation");
 assert(refreshedLatency.reportedLatencySamples === 480, "refreshLatency stores plugin plus transport latency in health");
@@ -383,8 +383,8 @@ assert(healthChangeEvents === 3 && healthChangeDetail?.reportedLatencySamples ==
 FakeAudioWorkletNode.last.port.onmessage({
   data: { type: "process-diagnostics", blockId: 87, latencySamples: 144, renderEngine: "native-vst3", renderDurationMs: 1.25, renderBudgetMs: 2.667, renderBudgetExceeded: false }
 });
-assert(liveNode.health.pluginLatencySamples === 144 && FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "set-plugin-latency" && message.pluginLatencySamples === 144), "SoundBridgeAudioNode updates plugin latency from render diagnostics and worklet compensation");
-assert(liveNode.health.reportedLatencySamples === 528, "SoundBridgeAudioNode combines render latency with transport latency");
+assert(liveNode.health.pluginLatencySamples === 144 && FakeAudioWorkletNode.last.port.messages.some((message) => message.type === "set-plugin-latency" && message.pluginLatencySamples === 144), "PlugRelayAudioNode updates plugin latency from render diagnostics and worklet compensation");
+assert(liveNode.health.reportedLatencySamples === 528, "PlugRelayAudioNode combines render latency with transport latency");
 assert(liveNode.health.reportedLatencyMs === 11, "render diagnostics update reported latency milliseconds");
 assert(latencyEvents === 4 && latencyDetail?.health?.pluginLatencySamples === 144, "render latency changes emit latencychange");
 assert(healthChangeEvents === 4 && healthChangeDetail?.reportedLatencySamples === 528, "render latency changes emit healthchange");
@@ -432,9 +432,9 @@ FakeAudioWorkletNode.last.port.onmessage({
 assert(liveNode.health.bypassed === true, "sustained transport pressure auto-bypasses the AudioNode");
 assert(liveNode.health.healthy === false, "transport-pressure auto-bypass marks AudioNode unhealthy");
 assert(liveNode.health.unhealthyReason === "transport-pressure", "transport-pressure auto-bypass records a recoverable reason");
-assert(liveNode.health.transportPressureAutoBypassed === true, "SoundBridgeAudioNode health reports transport-pressure auto-bypass");
-assert(liveNode.health.consecutiveTransportPressureEvents === 3, "SoundBridgeAudioNode keeps the streak that tripped transport auto-bypass");
-assert(transportPressureAutoBypassEvents === 1, "SoundBridgeAudioNode emits transport-pressure auto-bypass once");
+assert(liveNode.health.transportPressureAutoBypassed === true, "PlugRelayAudioNode health reports transport-pressure auto-bypass");
+assert(liveNode.health.consecutiveTransportPressureEvents === 3, "PlugRelayAudioNode keeps the streak that tripped transport auto-bypass");
+assert(transportPressureAutoBypassEvents === 1, "PlugRelayAudioNode emits transport-pressure auto-bypass once");
 assert(transportPressureAutoBypassDetail?.health?.unhealthyReason === "transport-pressure", "transport-pressure auto-bypass includes unhealthy health");
 assert(
   FakeAudioWorkletNode.last.port.messages.at(-1)?.type === "set-bypassed" &&
@@ -443,7 +443,7 @@ assert(
 );
 FakeAudioWorkletNode.last.port.onmessage({ data: { ...pressureStats, outputLatencyBlocks: 1, transportLatencySamples: 128, latencyIncreases: 1, latencyDecreases: 1, responseDeadlineMisses: 7, staleOutputBlocks: 5, droppedInputBlocks: 4, underruns: 10, sharedTransportInFlightBlocks: 0 } });
 assert(liveNode.health.transportPressureAutoBypassed === true, "stale calm stats do not clear transport-pressure auto-bypass");
-assert(liveNode.retry() === true, "SoundBridgeAudioNode retry resumes after transport-pressure auto-bypass");
+assert(liveNode.retry() === true, "PlugRelayAudioNode retry resumes after transport-pressure auto-bypass");
 assert(liveNode.health.bypassed === false, "AudioNode retry unbypasses after transport-pressure auto-bypass");
 assert(liveNode.health.healthy === true, "AudioNode retry clears transport-pressure auto-bypass health");
 assert(liveNode.health.unhealthyReason === undefined, "AudioNode retry clears the transport-pressure unhealthy reason");
@@ -471,12 +471,12 @@ FakeAudioWorkletNode.last.port.onmessage({
     renderBudgetExceeded: true
   }
 });
-assert(liveNode.health.lastRenderEngine === "native-vst3", "SoundBridgeAudioNode health tracks render engine diagnostics");
-assert(liveNode.health.lastRenderDurationMs === 3.5, "SoundBridgeAudioNode health tracks render duration");
-assert(liveNode.health.lastRenderBudgetMs === 2.667, "SoundBridgeAudioNode health tracks render budget");
-assert(liveNode.health.renderBudgetExceeded === true, "SoundBridgeAudioNode health records render pressure");
-assert(liveNode.health.renderBudgetMisses === 1, "SoundBridgeAudioNode health counts render-budget misses");
-assert(renderPressureEvents === 1, "SoundBridgeAudioNode emits render-budget pressure events");
+assert(liveNode.health.lastRenderEngine === "native-vst3", "PlugRelayAudioNode health tracks render engine diagnostics");
+assert(liveNode.health.lastRenderDurationMs === 3.5, "PlugRelayAudioNode health tracks render duration");
+assert(liveNode.health.lastRenderBudgetMs === 2.667, "PlugRelayAudioNode health tracks render budget");
+assert(liveNode.health.renderBudgetExceeded === true, "PlugRelayAudioNode health records render pressure");
+assert(liveNode.health.renderBudgetMisses === 1, "PlugRelayAudioNode health counts render-budget misses");
+assert(renderPressureEvents === 1, "PlugRelayAudioNode emits render-budget pressure events");
 assert(renderPressureDetail?.health?.renderBudgetMisses === 1, "render-budget pressure events include health");
 assert(liveNode.health.renderBudgetAutoBypassed === false, "first render-budget miss stays wet");
 FakeAudioWorkletNode.last.port.onmessage({
@@ -492,10 +492,10 @@ FakeAudioWorkletNode.last.port.onmessage({
 assert(liveNode.health.bypassed === true, "repeated render-budget misses auto-bypass the AudioNode");
 assert(liveNode.health.healthy === false, "render-budget auto-bypass marks AudioNode unhealthy");
 assert(liveNode.health.unhealthyReason === "render-budget-exceeded", "render-budget auto-bypass records a recoverable reason");
-assert(liveNode.health.renderBudgetAutoBypassed === true, "SoundBridgeAudioNode health reports render-budget auto-bypass");
-assert(liveNode.health.renderBudgetMisses === 2, "SoundBridgeAudioNode keeps the miss count that tripped auto-bypass");
-assert(renderPressureEvents === 2, "SoundBridgeAudioNode emits every render-budget pressure event");
-assert(autoBypassEvents === 1, "SoundBridgeAudioNode emits render-budget auto-bypass once");
+assert(liveNode.health.renderBudgetAutoBypassed === true, "PlugRelayAudioNode health reports render-budget auto-bypass");
+assert(liveNode.health.renderBudgetMisses === 2, "PlugRelayAudioNode keeps the miss count that tripped auto-bypass");
+assert(renderPressureEvents === 2, "PlugRelayAudioNode emits every render-budget pressure event");
+assert(autoBypassEvents === 1, "PlugRelayAudioNode emits render-budget auto-bypass once");
 assert(autoBypassDetail?.health?.unhealthyReason === "render-budget-exceeded", "auto-bypass event includes unhealthy health");
 assert(
   FakeAudioWorkletNode.last.port.messages.at(-1)?.type === "set-bypassed" &&
@@ -513,7 +513,7 @@ FakeAudioWorkletNode.last.port.onmessage({
   }
 });
 assert(liveNode.health.renderBudgetAutoBypassed === true, "stale on-budget diagnostics do not clear auto-bypass");
-assert(liveNode.retry() === true, "SoundBridgeAudioNode retry resumes after render-budget auto-bypass");
+assert(liveNode.retry() === true, "PlugRelayAudioNode retry resumes after render-budget auto-bypass");
 assert(liveNode.health.bypassed === false, "AudioNode retry unbypasses after render-budget auto-bypass");
 assert(liveNode.health.healthy === true, "AudioNode retry clears render-budget auto-bypass health");
 assert(liveNode.health.unhealthyReason === undefined, "AudioNode retry clears the render-budget unhealthy reason");
@@ -538,15 +538,15 @@ FakeAudioWorkletNode.last.port.onmessage({
     blockId: 91, error: "native render timeout", sharedTransportInFlightBlocks: 2
   }
 });
-assert(audioErrorEvents === 1 && audioErrorDetail === "native render timeout", "SoundBridgeAudioNode emits audio errors");
-assert(liveNode.health.healthy === false && liveNode.health.sharedTransportInFlightBlocks === 2, "SoundBridgeAudioNode health marks audio errors unhealthy and records shared status");
-assert(liveNode.health.audioErrors === 1, "SoundBridgeAudioNode health counts audio errors");
-assert(liveNode.health.consecutiveAudioErrors === 1, "SoundBridgeAudioNode health counts consecutive audio errors");
-assert(liveNode.health.lastAudioError === "native render timeout", "SoundBridgeAudioNode health tracks the latest audio error");
-assert(liveNode.health.unhealthyReason === "audio-error", "SoundBridgeAudioNode health records the audio error reason");
+assert(audioErrorEvents === 1 && audioErrorDetail === "native render timeout", "PlugRelayAudioNode emits audio errors");
+assert(liveNode.health.healthy === false && liveNode.health.sharedTransportInFlightBlocks === 2, "PlugRelayAudioNode health marks audio errors unhealthy and records shared status");
+assert(liveNode.health.audioErrors === 1, "PlugRelayAudioNode health counts audio errors");
+assert(liveNode.health.consecutiveAudioErrors === 1, "PlugRelayAudioNode health counts consecutive audio errors");
+assert(liveNode.health.lastAudioError === "native render timeout", "PlugRelayAudioNode health tracks the latest audio error");
+assert(liveNode.health.unhealthyReason === "audio-error", "PlugRelayAudioNode health records the audio error reason");
 assert(liveNode.health.bypassed === true, "live AudioNode fails dry after an audio error");
-assert(liveNode.health.audioErrorAutoBypassed === true, "SoundBridgeAudioNode health reports audio-error auto-bypass");
-assert(audioErrorAutoBypassEvents === 1, "SoundBridgeAudioNode emits audio-error auto-bypass");
+assert(liveNode.health.audioErrorAutoBypassed === true, "PlugRelayAudioNode health reports audio-error auto-bypass");
+assert(audioErrorAutoBypassEvents === 1, "PlugRelayAudioNode emits audio-error auto-bypass");
 assert(audioErrorAutoBypassDetail?.health?.audioErrorAutoBypassed === true, "audio-error auto-bypass includes health");
 assert(
   FakeAudioWorkletNode.last.port.messages.at(-1)?.type === "set-bypassed" &&
@@ -565,16 +565,16 @@ FakeAudioWorkletNode.last.port.onmessage({
 });
 assert(liveNode.health.audioErrorAutoBypassed === true, "stale successful diagnostics do not clear audio-error auto-bypass");
 assert(liveNode.health.unhealthyReason === "audio-error", "stale successful diagnostics keep audio-error health");
-assert(liveNode.retry() === true, "SoundBridgeAudioNode retry resumes after audio-error auto-bypass");
+assert(liveNode.retry() === true, "PlugRelayAudioNode retry resumes after audio-error auto-bypass");
 assert(liveNode.health.bypassed === false, "AudioNode retry unbypasses after audio-error auto-bypass");
 assert(liveNode.health.healthy === true, "AudioNode retry clears audio-error auto-bypass health");
 assert(liveNode.health.audioErrorAutoBypassed === false, "AudioNode retry clears audio-error auto-bypass state");
 assert(liveNode.health.consecutiveAudioErrors === 0, "AudioNode retry clears consecutive audio errors");
 assert(liveNode.health.lastAudioError === undefined, "AudioNode retry clears the latest audio error");
-assert(liveNode.health.audioErrors === 1, "SoundBridgeAudioNode keeps cumulative audio error count after recovery");
+assert(liveNode.health.audioErrors === 1, "PlugRelayAudioNode keeps cumulative audio error count after recovery");
 assert(retryEvents === 3 && retryDetail?.health?.audioErrorAutoBypassed === false, "AudioNode retry emits audio-error recovery health");
 FakeAudioWorkletNode.last.port.onmessage({ data: { type: "audio-error", blockId: 93, error: { code: "render_quarantined", message: "native render quarantined" } } });
-assert(audioErrorEvents === 2 && audioErrorDetail?.code === "render_quarantined" && liveNode.health.unhealthyReason === "process-timeout", "SoundBridgeAudioNode classifies serialized render deadline errors");
+assert(audioErrorEvents === 2 && audioErrorDetail?.code === "render_quarantined" && liveNode.health.unhealthyReason === "process-timeout", "PlugRelayAudioNode classifies serialized render deadline errors");
 assert(liveNode.health.audioErrorAutoBypassed === true && audioErrorAutoBypassEvents === 2 && audioErrorAutoBypassDetail?.health?.unhealthyReason === "process-timeout", "render deadline errors fail dry with process-timeout health");
 assert(liveNode.retry() === false && retryEvents === 3 && liveNode.health.unhealthyReason === "process-timeout", "manual AudioNode retry does not clear render-deadline quarantine");
 
@@ -604,11 +604,11 @@ const fallbackClient = {
     });
   }
 };
-await SoundBridgeAudioNode.createLivePerformance(fakeContext, fallbackClient, {
+await PlugRelayAudioNode.createLivePerformance(fakeContext, fallbackClient, {
   instanceId: "inst-fallback",
   inputChannels: 1,
   outputChannels: 1,
-  workletUrl: "/soundbridge-worklet.js"
+  workletUrl: "/plugrelay-worklet.js"
 });
 const fallbackPort = FakeAudioWorkletNode.last.port;
 fallbackPort.onmessage({
@@ -629,7 +629,7 @@ assert(
   "live AudioNode fallback posts processed blocks"
 );
 
-const mainClient = new SoundBridgeClient({
+const mainClient = new PlugRelayClient({
   url: "ws://127.0.0.1:47370/bridge",
   origin: "http://127.0.0.1:5173",
   requestTimeoutMs: 500

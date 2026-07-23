@@ -1,9 +1,9 @@
-#include "SoundBridge/AudioUnitHostWorkerSupport.h"
+#include "PlugRelay/AudioUnitHostWorkerSupport.h"
 
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
 
-#include "SoundBridge/NativeAudioJson.h"
-#include "SoundBridge/NativePlugin.h"
+#include "PlugRelay/NativeAudioJson.h"
+#include "PlugRelay/NativePlugin.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -18,7 +18,7 @@
 #include <string_view>
 #include <system_error>
 
-namespace soundbridge::audio_unit_worker {
+namespace plugrelay::audio_unit_worker {
 namespace {
 
 bool parseTransportBool(std::string_view text, bool& out) {
@@ -719,6 +719,6 @@ std::unique_ptr<AudioBufferList, void (*)(AudioBufferList*)> makeAudioBufferList
           }};
 }
 
-} // namespace soundbridge::audio_unit_worker
+} // namespace plugrelay::audio_unit_worker
 
 #endif

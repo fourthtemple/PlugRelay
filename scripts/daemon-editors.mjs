@@ -29,7 +29,7 @@ export function createDaemonEditors({
     if (editors.size >= limits.maxTotalEditors) {
       throw makeProtocolError(
         "quota_exceeded",
-        "The local SoundBridge daemon has reached its total editor session limit.",
+        "The local PlugRelay daemon has reached its total editor session limit.",
         {
           maxTotalEditors: limits.maxTotalEditors
         }

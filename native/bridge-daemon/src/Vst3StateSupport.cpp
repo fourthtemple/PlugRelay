@@ -1,11 +1,11 @@
-#include "SoundBridge/Vst3StateSupport.h"
+#include "PlugRelay/Vst3StateSupport.h"
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
-#include "SoundBridge/Base64.h"
-#include "SoundBridge/NativeFileGrantSupport.h"
-#include "SoundBridge/Vst3HostWorkerSupport.h"
-#include "SoundBridge/Vst3StreamSupport.h"
+#include "PlugRelay/Base64.h"
+#include "PlugRelay/NativeFileGrantSupport.h"
+#include "PlugRelay/Vst3HostWorkerSupport.h"
+#include "PlugRelay/Vst3StreamSupport.h"
 
 #include "pluginterfaces/base/ibstream.h"
 
@@ -14,7 +14,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace soundbridge::vst3_worker {
+namespace plugrelay::vst3_worker {
 namespace {
 
 std::string componentStateBase64(Steinberg::Vst::IComponent* component) {
@@ -98,6 +98,6 @@ std::string restoreVst3State(
   return "{\"ok\":true}";
 }
 
-} // namespace soundbridge::vst3_worker
+} // namespace plugrelay::vst3_worker
 
 #endif

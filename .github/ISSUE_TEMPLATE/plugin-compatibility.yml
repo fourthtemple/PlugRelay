@@ -1,5 +1,5 @@
 name: Plugin compatibility report
-description: Report a VST3, Audio Unit, or LV2 plugin compatibility issue with a SoundBridge probe report.
+description: Report a VST3, Audio Unit, or LV2 plugin compatibility issue with a PlugRelay probe report.
 title: "[Plugin compatibility]: "
 labels:
   - compatibility
@@ -12,13 +12,13 @@ body:
         Generate a focused report with:
 
         ```sh
-        SOUNDBRIDGE_PROBE_REPORT=json \
-        SOUNDBRIDGE_PROBE_FORMATS=vst3 \
-        SOUNDBRIDGE_PROBE_FILTER="Plugin Name" \
-        npm run --silent probe:installed > soundbridge-probe-report.json
+        PLUGRELAY_PROBE_REPORT=json \
+        PLUGRELAY_PROBE_FORMATS=vst3 \
+        PLUGRELAY_PROBE_FILTER="Plugin Name" \
+        npm run --silent probe:installed > plugrelay-probe-report.json
         ```
 
-        Use `SOUNDBRIDGE_PROBE_FORMATS=au` for Audio Units or `SOUNDBRIDGE_PROBE_FORMATS=lv2` for LV2.
+        Use `PLUGRELAY_PROBE_FORMATS=au` for Audio Units or `PLUGRELAY_PROBE_FORMATS=lv2` for LV2.
   - type: input
     id: plugin_name
     attributes:
@@ -65,9 +65,9 @@ body:
     validations:
       required: true
   - type: input
-    id: soundbridge_version
+    id: plugrelay_version
     attributes:
-      label: SoundBridge commit or version
+      label: PlugRelay commit or version
       placeholder: git rev-parse --short HEAD
     validations:
       required: true

@@ -5,6 +5,36 @@ import { FILE_GRANT_OPERATION_NAMES, isKnownFileGrantOperation } from "./daemon-
 const NATIVE_FILE_GRANT_OPERATIONS = Object.freeze(["loadPreset", "restoreState", "saveStateDirectory"]);
 const PLUGIN_EDITOR_KINDS = Object.freeze(["generic-parameters", "native-window"]);
 
+export function deduplicatePluginCatalog(plugins) {
+  const unique = [];
+  const indexByPluginId = new Map();
+
+  for (const plugin of plugins) {
+    const existingIndex = indexByPluginId.get(plugin.pluginId);
+    if (existingIndex === undefined) {
+      indexByPluginId.set(plugin.pluginId, unique.length);
+      unique.push(plugin);
+      continue;
+    }
+
+    if (pluginRecordScore(plugin) > pluginRecordScore(unique[existingIndex])) {
+      unique[existingIndex] = plugin;
+    }
+  }
+
+  return unique;
+}
+
+function pluginRecordScore(plugin) {
+  let score = 0;
+  if (plugin.hostable === true) score += 16;
+  if (plugin.nativeHost) score += 8;
+  if (plugin.metadata?.stableId) score += 4;
+  if (plugin.vendor && plugin.vendor !== "Unknown") score += 2;
+  if (plugin.kind && plugin.kind !== "unknown") score += 1;
+  return score;
+}
+
 export function formatCategory(format) {
   switch (format) {
     case "vst3":

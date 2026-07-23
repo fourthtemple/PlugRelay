@@ -11,7 +11,7 @@ const fixturePath = path.join(scriptDir, "native-editor-broker-fixture.mjs");
 const fixtureEditor = {
   editorId: "editor-00000000-0000-4000-8000-000000000001"
 };
-const fixtureFileGrantPath = "/tmp/soundbridge-fixture-grant.wav";
+const fixtureFileGrantPath = "/tmp/plugrelay-fixture-grant.wav";
 const fixtureFileGrant = {
   grantId: "filegrant-00000000-0000-4000-8000-000000000001",
   purpose: "sample",
@@ -230,19 +230,19 @@ await auNativeHostOpened.brokerSession.close("editor-00000000-0000-4000-8000-000
 
 const configured = createConfiguredNativeEditorBroker({
   env: {
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath])
+    PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+    PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath])
   }
 });
 assert(configured?.available === true, "configured broker is available");
 assert(configured.capabilityPolicy.fileDialogs === false, "configured broker denies file dialogs by default");
 const configuredWithPolicy = createConfiguredNativeEditorBroker({
   env: {
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath]),
-    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_FILE_DIALOGS: "1",
-    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_CLIPBOARD: "1",
-    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_DRAG_DROP: "1"
+    PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+    PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath]),
+    PLUGRELAY_NATIVE_EDITOR_ALLOW_FILE_DIALOGS: "1",
+    PLUGRELAY_NATIVE_EDITOR_ALLOW_CLIPBOARD: "1",
+    PLUGRELAY_NATIVE_EDITOR_ALLOW_DRAG_DROP: "1"
   }
 });
 assert(
@@ -253,11 +253,11 @@ assert(
 );
 const configuredPolicyBroker = createConfiguredNativeEditorBroker({
   env: {
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, "require-allowed-policy"]),
-    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_FILE_DIALOGS: "1",
-    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_CLIPBOARD: "1",
-    SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_DRAG_DROP: "1"
+    PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+    PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, "require-allowed-policy"]),
+    PLUGRELAY_NATIVE_EDITOR_ALLOW_FILE_DIALOGS: "1",
+    PLUGRELAY_NATIVE_EDITOR_ALLOW_CLIPBOARD: "1",
+    PLUGRELAY_NATIVE_EDITOR_ALLOW_DRAG_DROP: "1"
   }
 });
 const configuredPolicyOpened = await configuredPolicyBroker.openEditor({
@@ -268,22 +268,22 @@ assert(configuredPolicyOpened.brokerSessionId.startsWith("fixture-editor-"), "co
 await configuredPolicyOpened.brokerSession.close("editor-00000000-0000-4000-8000-000000000001");
 const grantAwareConfigured = createConfiguredNativeEditorBroker({
   env: {
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-    SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, "require-file-grants", fixtureFileGrantPath])
+    PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+    PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, "require-file-grants", fixtureFileGrantPath])
   }
 });
 assert(grantAwareConfigured?.available === true, "configured broker can receive file grants");
 assert(createConfiguredNativeEditorBroker({ env: {} }) === undefined, "missing broker configuration keeps native editors disabled");
 assertThrows(
-  () => createConfiguredNativeEditorBroker({ env: { SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: "relative-broker" } }),
+  () => createConfiguredNativeEditorBroker({ env: { PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: "relative-broker" } }),
   "relative broker paths are rejected"
 );
 assertThrows(
   () =>
     createConfiguredNativeEditorBroker({
       env: {
-        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: "{"
+        PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+        PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: "{"
       }
     }),
   "malformed broker args are rejected"
@@ -292,8 +292,8 @@ assertThrows(
   () =>
     createConfiguredNativeEditorBroker({
       env: {
-        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify({ arg: fixturePath })
+        PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+        PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify({ arg: fixturePath })
       }
     }),
   "non-array broker args are rejected"
@@ -302,8 +302,8 @@ assertThrows(
   () =>
     createConfiguredNativeEditorBroker({
       env: {
-        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, 1])
+        PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+        PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify([fixturePath, 1])
       }
     }),
   "non-string broker args are rejected"
@@ -312,8 +312,8 @@ assertThrows(
   () =>
     createConfiguredNativeEditorBroker({
       env: {
-        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH: process.execPath,
-        SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify(["x".repeat(4097)])
+        PLUGRELAY_NATIVE_EDITOR_BROKER_PATH: process.execPath,
+        PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS: JSON.stringify(["x".repeat(4097)])
       }
     }),
   "oversized broker args are rejected"
@@ -448,7 +448,7 @@ function createEditorSupport(nativeEditorBroker) {
         pluginId: nativeInstance.pluginId,
         format: nativeInstance.format,
         name: "Fixture VST3",
-        vendor: "SoundBridge",
+        vendor: "PlugRelay",
         category: "Effect",
         kind: nativeInstance.kind,
         source: "scan",
@@ -516,7 +516,7 @@ async function assertRejectsBroker(mode, message, expectedErrorText, forbiddenEr
 }
 
 async function assertMissingBrokerExecutableRedactsPath() {
-  const missingPath = "/tmp/soundbridge-missing-native-editor-broker.vst3";
+  const missingPath = "/tmp/plugrelay-missing-native-editor-broker.vst3";
   const missingBroker = new NativeEditorBroker({
     executablePath: missingPath,
     limits: {

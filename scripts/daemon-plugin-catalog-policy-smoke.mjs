@@ -1,5 +1,6 @@
 import { FILE_GRANT_OPERATION_NAMES } from "./daemon-file-grant-operations.mjs";
 import {
+  deduplicatePluginCatalog,
   editorKindsForHostableNativeHost,
   fileGrantOperationsForNativeHost,
   normalizeEditorKinds,
@@ -8,6 +9,25 @@ import {
 
 const IMPLEMENTED_NATIVE_FILE_GRANT_OPERATIONS = ["loadPreset", "restoreState", "saveStateDirectory"];
 const FUTURE_NATIVE_FILE_GRANT_OPERATIONS = ["loadSample", "openCacheDirectory", "loadLicense", "other"];
+
+const preferredPlugin = {
+  pluginId: "au:duplicate.component",
+  hostable: true,
+  nativeHost: { format: "au" },
+  metadata: { stableId: "Test:aumf:dupe" },
+  vendor: "Test Vendor",
+  kind: "effect"
+};
+const firstTiedPlugin = { pluginId: "vst3:tied.vst3", hostable: true, marker: "first" };
+const deduplicatedPlugins = deduplicatePluginCatalog([
+  { pluginId: "au:duplicate.component", hostable: false },
+  firstTiedPlugin,
+  preferredPlugin,
+  { pluginId: "vst3:tied.vst3", hostable: true, marker: "second" }
+]);
+assert(deduplicatedPlugins.length === 2, "catalog exposes each pluginId once");
+assert(deduplicatedPlugins[0] === preferredPlugin, "catalog prefers the hostable metadata-rich duplicate");
+assert(deduplicatedPlugins[1] === firstTiedPlugin, "catalog keeps the first record when duplicate scores tie");
 
 for (const format of ["vst3", "au", "lv2"]) {
   const operations = fileGrantOperationsForNativeHost({ format });

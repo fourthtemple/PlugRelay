@@ -1,7 +1,7 @@
 import {
-  SoundBridgeLiveEffectRack,
+  PlugRelayLiveEffectRack,
   calibrateLiveEffectRackPolicy
-} from "../packages/web-client/dist/soundbridge-client.js";
+} from "../packages/web-client/dist/plugrelay-client.js";
 
 const plugin = {
   pluginId: "mock.live-deadline",
@@ -66,7 +66,7 @@ function delay(ms) {
 }
 
 const client = new FakeDeadlineClient();
-const rack = await SoundBridgeLiveEffectRack.create({
+const rack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,

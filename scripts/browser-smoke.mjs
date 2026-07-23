@@ -2,8 +2,8 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { chromium } = loadPlaywright();
-const PAIRING_TOKEN = process.env.SOUNDBRIDGE_PAIRING_TOKEN ?? "dev-token";
-const DEMO_URL = `http://${process.env.SOUNDBRIDGE_DEMO_HOST ?? "127.0.0.1"}:${process.env.SOUNDBRIDGE_DEMO_PORT ?? "5173"}`;
+const PAIRING_TOKEN = process.env.PLUGRELAY_PAIRING_TOKEN ?? "dev-token";
+const DEMO_URL = `http://${process.env.PLUGRELAY_DEMO_HOST ?? "127.0.0.1"}:${process.env.PLUGRELAY_DEMO_PORT ?? "5173"}`;
 
 const browser = await chromium.launch({
   channel: "chrome",
@@ -84,7 +84,7 @@ try {
     await assertParameterStateRoundTrip(page, format);
   }
 
-  console.log("SoundBridge browser smoke test passed.");
+  console.log("PlugRelay browser smoke test passed.");
 } finally {
   await browser.close();
 }

@@ -6,10 +6,10 @@ export async function runLv2HostingSmoke({
   request,
   socket
 }) {
-  const nativeLv2Effect = plugins.find((plugin) => plugin.pluginId === "lv2:soundbridge-example-gain.lv2" && plugin.hostable === true);
+  const nativeLv2Effect = plugins.find((plugin) => plugin.pluginId === "lv2:plugrelay-example-gain.lv2" && plugin.hostable === true);
   if (nativeLv2Effect) {
     assert(
-      nativeLv2Effect.metadata?.lv2Uri === "urn:soundbridge:example:lv2-gain" &&
+      nativeLv2Effect.metadata?.lv2Uri === "urn:plugrelay:example:lv2-gain" &&
         nativeLv2Effect.metadata?.stableId === nativeLv2Effect.metadata.lv2Uri,
       "installed LV2 effect exposes bounded path-free LV2 class metadata"
     );
@@ -223,7 +223,7 @@ export async function runLv2HostingSmoke({
     await request(socket, "destroyInstance", { instanceId: nativeLv2Instance.instanceId }, true, pair.sessionToken);
   }
 
-  const nativeLv2BlockProfile = plugins.find((plugin) => plugin.pluginId === "lv2:soundbridge-block-profile-gain.lv2" && plugin.hostable === true);
+  const nativeLv2BlockProfile = plugins.find((plugin) => plugin.pluginId === "lv2:plugrelay-block-profile-gain.lv2" && plugin.hostable === true);
   if (nativeLv2BlockProfile) {
     await request(
       socket,

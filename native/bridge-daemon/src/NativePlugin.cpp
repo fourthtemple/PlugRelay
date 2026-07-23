@@ -1,9 +1,9 @@
-#include "SoundBridge/NativePlugin.h"
+#include "PlugRelay/NativePlugin.h"
 
 #include <cstdio>
 #include <sstream>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
@@ -185,4 +185,4 @@ std::string nativePluginListToJson(const std::vector<NativePluginInfo>& plugins)
   return output.str();
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

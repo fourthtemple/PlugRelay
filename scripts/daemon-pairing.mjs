@@ -45,20 +45,20 @@ export function createDaemonPairing({
     }
 
     if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestedOrigin)) {
-      throw makeProtocolError("origin_not_allowed", "This browser origin is not allowed to pair with SoundBridge.", {
+      throw makeProtocolError("origin_not_allowed", "This browser origin is not allowed to pair with PlugRelay.", {
         origin: requestedOrigin
       });
     }
 
     if (sessionsForOrigin(requestedOrigin).length >= maxSessionsPerOrigin) {
-      throw makeProtocolError("quota_exceeded", "Too many active SoundBridge sessions for this origin.", {
+      throw makeProtocolError("quota_exceeded", "Too many active PlugRelay sessions for this origin.", {
         origin: requestedOrigin,
         maxSessionsPerOrigin
       });
     }
 
     if (sessions.size >= maxTotalSessions) {
-      throw makeProtocolError("quota_exceeded", "The local SoundBridge daemon has reached its total session limit.", {
+      throw makeProtocolError("quota_exceeded", "The local PlugRelay daemon has reached its total session limit.", {
         maxTotalSessions
       });
     }

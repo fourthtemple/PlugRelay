@@ -1,12 +1,12 @@
 # Release Readiness
 
-This document defines the terms SoundBridge should use in release notes, compatibility dashboards, and host UI labels. It is intentionally narrower than "every plugin works": a status is meaningful only for the specific format, host profile, and feature buckets that were probed.
+This document defines the terms PlugRelay should use in release notes, compatibility dashboards, and host UI labels. It is intentionally narrower than "every plugin works": a status is meaningful only for the specific format, host profile, and feature buckets that were probed.
 
 ## Compatibility Status Terms
 
 `works` means the plugin was instantiated through a supported compatibility-worker profile and the bounded probe phases for that status completed. A plugin can work for scanning, parameters, state, MIDI, rendering, bus layouts, latency, or editor behavior independently; release notes should name the buckets that passed instead of implying total product coverage.
 
-`discovery-only` means SoundBridge can expose bounded, path-free metadata but must not instantiate the plugin yet. Public plugin listings should set `hostable: false`, include a path-free `hostUnavailableReason`, and reject `createInstance` with `plugin_not_hostable`. Discovery-only entries are useful compatibility leads, not failures in a supported profile.
+`discovery-only` means PlugRelay can expose bounded, path-free metadata but must not instantiate the plugin yet. Public plugin listings should set `hostable: false`, include a path-free `hostUnavailableReason`, and reject `createInstance` with `plugin_not_hostable`. Discovery-only entries are useful compatibility leads, not failures in a supported profile.
 
 `unsupported profile` means the scanner recognized a profile, extension, lifecycle, or bus shape that has no bounded host contract yet. Examples include offline render lifecycles, utility profiles that need special source/destination handling, or declared LV2 requirements outside the current extension set. Unsupported profiles should stay discovery-only until the profile has protocol docs, worker behavior, and smoke coverage.
 
@@ -16,7 +16,7 @@ This document defines the terms SoundBridge should use in release notes, compati
 
 ## Release Profiles
 
-The core release target is `compatibility-worker`: plugin DSP runs in a separate worker process under the normal user environment, while browser and desktop hosts only receive the bounded SoundBridge protocol.
+The core release target is `compatibility-worker`: plugin DSP runs in a separate worker process under the normal user environment, while browser and desktop hosts only receive the bounded PlugRelay protocol.
 
 `brokered-files` and `native-editor-broker` are production-readiness requirements for workflows that cross beyond simple DSP. Browser responses must stay path-free, and native editor code must stay outside the daemon.
 
@@ -24,7 +24,7 @@ The core release target is `compatibility-worker`: plugin DSP runs in a separate
 
 ## Compatibility Matrix Rules
 
-Compatibility matrix entries should be built from path-free probe reports. A matrix entry should include the SoundBridge commit or release, platform, architecture, plugin format, host profile, plugin kind, and feature buckets that passed, failed, or were not requested.
+Compatibility matrix entries should be built from path-free probe reports. A matrix entry should include the PlugRelay commit or release, platform, architecture, plugin format, host profile, plugin kind, and feature buckets that passed, failed, or were not requested.
 
 Public repository docs and tests should keep using neutral plugin examples. A public matrix can display plugin identity only when the report submitter intentionally provided public identity fields; release notes should otherwise prefer aggregate counts and feature coverage.
 

@@ -40,7 +40,7 @@ export function createDaemonRequestHandler({ dispatchCommand }) {
         send,
         envelope.id,
         error.code ?? "internal_error",
-        error.message ?? "SoundBridge mock daemon error.",
+        error.message ?? "PlugRelay mock daemon error.",
         error.details
       );
     }

@@ -1,5 +1,5 @@
-#include "SoundBridge/Lv2Scanner.h"
-#include "SoundBridge/Lv2TurtleMetadataSupport.h"
+#include "PlugRelay/Lv2Scanner.h"
+#include "PlugRelay/Lv2TurtleMetadataSupport.h"
 
 #include <cerrno>
 #include <cstdint>
@@ -10,13 +10,13 @@
 #include <string>
 #include <utility>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
 std::filesystem::path repositoryExampleLv2Path() {
-#ifdef SOUNDBRIDGE_SOURCE_DIR
-  return std::filesystem::path(SOUNDBRIDGE_SOURCE_DIR) / "native" / "example-plugins" / "LV2";
+#ifdef PLUGRELAY_SOURCE_DIR
+  return std::filesystem::path(PLUGRELAY_SOURCE_DIR) / "native" / "example-plugins" / "LV2";
 #else
   return {};
 #endif
@@ -128,8 +128,8 @@ std::filesystem::path exampleExecutablePath(
   return lv2BundleLocalRegularFile(bundlePath, *executableName);
 }
 
-void applySoundBridgeManifest(NativePluginInfo& info, const std::filesystem::path& bundlePath) {
-  const auto manifest = readTextFile(bundlePath / "SoundBridgePlugin.json");
+void applyPlugRelayManifest(NativePluginInfo& info, const std::filesystem::path& bundlePath) {
+  const auto manifest = readTextFile(bundlePath / "PlugRelayPlugin.json");
   if (manifest.empty()) {
     return;
   }
@@ -210,12 +210,15 @@ std::vector<NativePluginInfo> Lv2Scanner::scan() const {
         continue;
       }
 
-      const bool isBundle = entry.is_directory(error);
-      if (error || !isBundle) {
+      std::error_code entryError;
+      const bool isBundle = entry.is_directory(entryError);
+      if (entryError || !isBundle) {
         continue;
       }
 
-      const bool hasManifest = std::filesystem::is_regular_file(path / "manifest.ttl", error) && !error;
+      std::error_code manifestError;
+      const bool hasManifest =
+          std::filesystem::is_regular_file(path / "manifest.ttl", manifestError) && !manifestError;
       if (!hasManifest || !manifestDeclaresPlugin(path)) {
         continue;
       }
@@ -234,7 +237,7 @@ std::vector<NativePluginInfo> Lv2Scanner::scan() const {
       info.hasManifest = hasManifest;
       info.hasExecutable = hasSharedLibrary(path) || !lv2BinaryPath(path, manifest).empty();
       applyLv2TurtleMetadata(info, path, manifest);
-      applySoundBridgeManifest(info, path);
+      applyPlugRelayManifest(info, path);
       plugins.push_back(std::move(info));
     }
   }
@@ -242,4 +245,4 @@ std::vector<NativePluginInfo> Lv2Scanner::scan() const {
   return plugins;
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

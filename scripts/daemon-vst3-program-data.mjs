@@ -125,7 +125,7 @@ export function createDaemonVst3ProgramData({
       text.length === 0 ||
       !isBase64Text(text)
     ) {
-      throw protocolError("bad_program_data", "Program data was not valid SoundBridge VST3 program data.");
+      throw protocolError("bad_program_data", "Program data was not valid PlugRelay VST3 program data.");
     }
     if (Buffer.byteLength(text, "utf8") > maxPluginProgramDataEnvelopeBytes) {
       throw protocolError("program_data_too_large", "VST3 program data exceeded the configured envelope limit.", {
@@ -152,7 +152,7 @@ export function createDaemonVst3ProgramData({
       if (error?.code) {
         throw error;
       }
-      throw protocolError("bad_program_data", "Program data was not valid SoundBridge VST3 program data.");
+      throw protocolError("bad_program_data", "Program data was not valid PlugRelay VST3 program data.");
     }
   }
 

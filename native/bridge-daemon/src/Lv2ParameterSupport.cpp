@@ -1,12 +1,12 @@
-#include "SoundBridge/Lv2HostWorkerSupport.h"
+#include "PlugRelay/Lv2HostWorkerSupport.h"
 
-#include "SoundBridge/NativePlugin.h"
+#include "PlugRelay/NativePlugin.h"
 
 #include <algorithm>
 #include <cmath>
 #include <sstream>
 
-namespace soundbridge::lv2_worker {
+namespace plugrelay::lv2_worker {
 
 std::uint32_t boundedLatencySamples(double value) {
   if (!std::isfinite(value) || value <= 0.0) {
@@ -94,4 +94,4 @@ std::string parameterInfoToJson(const Lv2Port& port, float plainValue) {
   return output.str();
 }
 
-} // namespace soundbridge::lv2_worker
+} // namespace plugrelay::lv2_worker

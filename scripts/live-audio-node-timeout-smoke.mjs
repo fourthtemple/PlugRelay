@@ -27,7 +27,7 @@ class FakeAudioPort {
 
 globalThis.AudioWorkletNode = FakeAudioWorkletNode;
 
-const { SoundBridgeAudioNode } = await import("../packages/web-client/dist/soundbridge-client.js");
+const { PlugRelayAudioNode } = await import("../packages/web-client/dist/plugrelay-client.js");
 
 const fakeContext = {
   sampleRate: 48000,
@@ -44,11 +44,11 @@ const fakeClient = {
   }
 };
 
-const timeoutNode = await SoundBridgeAudioNode.createLivePerformance(fakeContext, fakeClient, {
+const timeoutNode = await PlugRelayAudioNode.createLivePerformance(fakeContext, fakeClient, {
   instanceId: "inst-timeout",
   inputChannels: 2,
   outputChannels: 2,
-  workletUrl: "/soundbridge-worklet.js"
+  workletUrl: "/plugrelay-worklet.js"
 });
 let timeoutEvents = 0;
 let timeoutDetail;
@@ -79,11 +79,11 @@ assert(timeoutNode.retry() === false, "AudioNode retry refuses quarantined rende
 timeoutNode.setBypassed(false);
 assert(timeoutNode.health.bypassed === true && timeoutNode.health.unhealthyReason === "process-timeout", "setBypassed(false) leaves quarantined nodes dry");
 
-const genericNode = await SoundBridgeAudioNode.createLivePerformance(fakeContext, fakeClient, {
+const genericNode = await PlugRelayAudioNode.createLivePerformance(fakeContext, fakeClient, {
   instanceId: "inst-generic",
   inputChannels: 2,
   outputChannels: 2,
-  workletUrl: "/soundbridge-worklet.js"
+  workletUrl: "/plugrelay-worklet.js"
 });
 let genericTimeoutEvents = 0;
 let genericTimeoutTripEvents = 0;

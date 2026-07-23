@@ -1,0 +1,13 @@
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<urn:plugrelay:example:wavefold>
+  a lv2:Plugin, lv2:InstrumentPlugin ;
+  doap:name "PlugRelay Example Wavefold" ;
+  doap:maintainer [
+    foaf:name "PlugRelay"
+  ] ;
+  lv2:binary <plugrelay-example-wavefold> ;
+  rdfs:seeAlso <plugrelay-example-wavefold.ttl> .

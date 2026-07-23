@@ -1,0 +1,48 @@
+{
+  "pluginId": "lv2:plugrelay-example-wavefold.lv2",
+  "format": "lv2",
+  "name": "Example Wavefold",
+  "vendor": "PlugRelay",
+  "category": "Instrument|Synth",
+  "kind": "instrument",
+  "source": "example-bundle",
+  "inputs": 0,
+  "outputs": 2,
+  "engine": "wavefold",
+  "defaults": {
+    "gain": 0.4,
+    "tone": 0.58,
+    "detune": 0.5
+  },
+  "presets": [
+    {
+      "id": "wavefold-default",
+      "name": "Glass Fold",
+      "parameters": {
+        "gain": 0.4,
+        "tone": 0.58,
+        "detune": 0.5
+      }
+    },
+    {
+      "id": "wavefold-edge",
+      "name": "Edge Stack",
+      "parameters": {
+        "gain": 0.52,
+        "tone": 0.82,
+        "detune": 0.61
+      }
+    },
+    {
+      "id": "wavefold-round",
+      "name": "Round Fold",
+      "parameters": {
+        "gain": 0.34,
+        "tone": 0.36,
+        "detune": 0.49
+      }
+    }
+  ],
+  "executable": "plugrelay-example-wavefold",
+  "renderPluginId": "lv2:plugrelay-example-wavefold.lv2"
+}

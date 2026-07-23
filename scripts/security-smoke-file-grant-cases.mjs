@@ -21,7 +21,7 @@ export function createSecurityFileGrantCases({
     const denied = await request(
       ctx,
       "createFileGrant",
-      { path: "/tmp/soundbridge-no-ambient-access", purpose: "sample", access: "read" },
+      { path: "/tmp/plugrelay-no-ambient-access", purpose: "sample", access: "read" },
       true,
       session
     ).then(
@@ -32,8 +32,8 @@ export function createSecurityFileGrantCases({
   }
 
   async function checkConfiguredFileBroker() {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-grants-"));
-    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-outside-"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "plugrelay-grants-"));
+    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "plugrelay-outside-"));
     const sampleDir = path.join(root, "Samples");
     const samplePath = path.join(sampleDir, "Kick.wav");
     const secondPath = path.join(sampleDir, "Snare.wav");
@@ -51,10 +51,10 @@ export function createSecurityFileGrantCases({
     const approvalDaemon = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
-        SOUNDBRIDGE_HOST: host,
-        SOUNDBRIDGE_PORT: String(approvalPort),
-        SOUNDBRIDGE_PAIRING_TOKEN: token,
-        SOUNDBRIDGE_FILE_GRANT_ROOTS: root
+        PLUGRELAY_HOST: host,
+        PLUGRELAY_PORT: String(approvalPort),
+        PLUGRELAY_PAIRING_TOKEN: token,
+        PLUGRELAY_FILE_GRANT_ROOTS: root
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -94,12 +94,12 @@ export function createSecurityFileGrantCases({
     const nativeApprovalDaemon = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
-        SOUNDBRIDGE_HOST: host,
-        SOUNDBRIDGE_PORT: String(nativeApprovalPort),
-        SOUNDBRIDGE_PAIRING_TOKEN: token,
-        SOUNDBRIDGE_FILE_GRANT_ROOTS: root,
-        SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: process.execPath,
-        SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: JSON.stringify([approvalFixturePath, "control-display-name", samplePath])
+        PLUGRELAY_HOST: host,
+        PLUGRELAY_PORT: String(nativeApprovalPort),
+        PLUGRELAY_PAIRING_TOKEN: token,
+        PLUGRELAY_FILE_GRANT_ROOTS: root,
+        PLUGRELAY_FILE_GRANT_BROKER_PATH: process.execPath,
+        PLUGRELAY_FILE_GRANT_BROKER_ARGS: JSON.stringify([approvalFixturePath, "control-display-name", samplePath])
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -144,12 +144,12 @@ export function createSecurityFileGrantCases({
     const outsideBrokerDaemon = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
-        SOUNDBRIDGE_HOST: host,
-        SOUNDBRIDGE_PORT: String(outsideBrokerPort),
-        SOUNDBRIDGE_PAIRING_TOKEN: token,
-        SOUNDBRIDGE_FILE_GRANT_ROOTS: root,
-        SOUNDBRIDGE_FILE_GRANT_BROKER_PATH: process.execPath,
-        SOUNDBRIDGE_FILE_GRANT_BROKER_ARGS: JSON.stringify([approvalFixturePath, "ok", outsidePath])
+        PLUGRELAY_HOST: host,
+        PLUGRELAY_PORT: String(outsideBrokerPort),
+        PLUGRELAY_PAIRING_TOKEN: token,
+        PLUGRELAY_FILE_GRANT_ROOTS: root,
+        PLUGRELAY_FILE_GRANT_BROKER_PATH: process.execPath,
+        PLUGRELAY_FILE_GRANT_BROKER_ARGS: JSON.stringify([approvalFixturePath, "ok", outsidePath])
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -182,13 +182,13 @@ export function createSecurityFileGrantCases({
     const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
-        SOUNDBRIDGE_HOST: host,
-        SOUNDBRIDGE_PORT: String(brokerPort),
-        SOUNDBRIDGE_PAIRING_TOKEN: token,
-        SOUNDBRIDGE_FILE_GRANT_ROOTS: root,
-        SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
-        SOUNDBRIDGE_MAX_FILE_GRANTS_PER_SESSION: "1",
-        SOUNDBRIDGE_MAX_TOTAL_FILE_GRANTS: "1"
+        PLUGRELAY_HOST: host,
+        PLUGRELAY_PORT: String(brokerPort),
+        PLUGRELAY_PAIRING_TOKEN: token,
+        PLUGRELAY_FILE_GRANT_ROOTS: root,
+        PLUGRELAY_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
+        PLUGRELAY_MAX_FILE_GRANTS_PER_SESSION: "1",
+        PLUGRELAY_MAX_TOTAL_FILE_GRANTS: "1"
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -461,13 +461,13 @@ export function createSecurityFileGrantCases({
     const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
       env: {
         ...process.env,
-        SOUNDBRIDGE_HOST: host,
-        SOUNDBRIDGE_PORT: String(cleanupPort),
-        SOUNDBRIDGE_PAIRING_TOKEN: token,
-        SOUNDBRIDGE_FILE_GRANT_ROOTS: root,
-        SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
-        SOUNDBRIDGE_MAX_FILE_GRANTS_PER_SESSION: "1",
-        SOUNDBRIDGE_MAX_TOTAL_FILE_GRANTS: "1"
+        PLUGRELAY_HOST: host,
+        PLUGRELAY_PORT: String(cleanupPort),
+        PLUGRELAY_PAIRING_TOKEN: token,
+        PLUGRELAY_FILE_GRANT_ROOTS: root,
+        PLUGRELAY_FILE_GRANT_ALLOW_BROWSER_PATHS: "1",
+        PLUGRELAY_MAX_FILE_GRANTS_PER_SESSION: "1",
+        PLUGRELAY_MAX_TOTAL_FILE_GRANTS: "1"
       },
       stdio: ["ignore", "pipe", "pipe"]
     });

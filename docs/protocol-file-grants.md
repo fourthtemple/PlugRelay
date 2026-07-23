@@ -14,7 +14,7 @@ Production-style grants omit `path`. The daemon asks an explicitly configured na
 }
 ```
 
-The reference daemon only accepts browser-supplied paths when `SOUNDBRIDGE_FILE_GRANT_ALLOW_BROWSER_PATHS=1` is set for development or test harnesses:
+The reference daemon only accepts browser-supplied paths when `PLUGRELAY_FILE_GRANT_ALLOW_BROWSER_PATHS=1` is set for development or test harnesses:
 
 ```json
 {

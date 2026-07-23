@@ -54,7 +54,7 @@ const TEST_COMMAND_TIMEOUT_MS = 500;
 let passed = 0;
 const failures = [];
 
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "soundbridge-worker-ipc-"));
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "plugrelay-worker-ipc-"));
 
 function protocolError(code, message, details) {
   return Object.assign(new Error(message), { code, details });
@@ -307,7 +307,7 @@ try {
   await expectRejectedRedacted(
     () => examplePathErrorWorker.render({ frames: 1, sampleRate: 48000, gain: 0.5, tone: 0.5, detune: 0.5 }),
     "failed while loading",
-    "/tmp/soundbridge-fixture/private-plugin.vst3",
+    "/tmp/plugrelay-fixture/private-plugin.vst3",
     "example instrument worker command errors redact local paths"
   );
   examplePathErrorWorker.destroy();
@@ -320,7 +320,7 @@ try {
   await expectRejectedRedacted(
     () => nativePathErrorWorker.getParameters(),
     "failed while opening",
-    "file:///tmp/soundbridge-fixture/private-license.lic",
+    "file:///tmp/plugrelay-fixture/private-license.lic",
     "native host worker command errors redact local paths"
   );
   nativePathErrorWorker.destroy();
@@ -369,7 +369,7 @@ try {
   await expectRejectedRedacted(
     () => invalidNativeReadyWorker.ready,
     "worker_ready_invalid",
-    "/tmp/soundbridge-fixture/private-plugin.vst3",
+    "/tmp/plugrelay-fixture/private-plugin.vst3",
     "native host workers reject invalid ready handshakes"
   );
   check(invalidNativeReadyWorker.process?.killed === true, "invalid-ready native host worker process is killed");

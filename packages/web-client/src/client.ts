@@ -34,7 +34,7 @@ import { createSharedAudioTransport, type SharedAudioTransportDescriptor, type S
 export type { SharedAudioTransportDescriptor } from "./shared-audio";
 export type { BinaryAudioBusBlock } from "./binary-audio-codec";
 
-export interface SoundBridgeClientOptions {
+export interface PlugRelayClientOptions {
   url?: string;
   origin?: string;
   pairingToken?: string;
@@ -60,13 +60,13 @@ export interface AudioWorkletTransportConnection {
   sharedAudio?: SharedAudioTransportDescriptor;
 }
 
-export class SoundBridgeProtocolError extends Error {
+export class PlugRelayProtocolError extends Error {
   readonly code: string;
   readonly details?: unknown;
 
   constructor(code: string, message: string, details?: unknown) {
     super(message);
-    this.name = "SoundBridgeProtocolError";
+    this.name = "PlugRelayProtocolError";
     this.code = code;
     this.details = details;
   }
@@ -85,7 +85,7 @@ interface WorkerTransportMessage {
   message?: string;
 }
 
-export class SoundBridgeClient extends EventTarget {
+export class PlugRelayClient extends EventTarget {
   readonly url: string;
   readonly origin: string;
   readonly requestTimeoutMs: number;
@@ -103,14 +103,14 @@ export class SoundBridgeClient extends EventTarget {
     this.handleWorkerMessage(event.data);
   };
 
-  constructor(options: SoundBridgeClientOptions = {}) {
+  constructor(options: PlugRelayClientOptions = {}) {
     super();
     this.url = options.url ?? "ws://127.0.0.1:47370/bridge";
     this.origin = options.origin ?? globalThis.location?.origin ?? "unknown-origin";
     this.requestTimeoutMs = options.requestTimeoutMs ?? 5000;
     this.pairingToken = options.pairingToken;
     this.transport = options.transport === "worker" ? "worker" : "main";
-    this.transportWorkerUrl = options.transportWorkerUrl ?? new URL("./soundbridge-transport-worker.js", import.meta.url);
+    this.transportWorkerUrl = options.transportWorkerUrl ?? new URL("./plugrelay-transport-worker.js", import.meta.url);
   }
 
   connect(): Promise<void> {
@@ -125,7 +125,7 @@ export class SoundBridgeClient extends EventTarget {
     const previousSocket = this.socket;
     if (previousSocket) {
       this.socket = undefined;
-      this.rejectPendingRequests("SoundBridge socket closed before reconnect");
+      this.rejectPendingRequests("PlugRelay socket closed before reconnect");
       previousSocket.close();
     }
     return new Promise((resolve, reject) => {
@@ -139,7 +139,7 @@ export class SoundBridgeClient extends EventTarget {
       socket.addEventListener("close", () => {
         if (this.socket !== socket) return;
         this.socket = undefined;
-        this.rejectPendingRequests("SoundBridge socket closed before response");
+        this.rejectPendingRequests("PlugRelay socket closed before response");
         this.dispatchEvent(new CustomEvent("disconnect"));
       });
     });
@@ -150,7 +150,7 @@ export class SoundBridgeClient extends EventTarget {
       return Promise.resolve();
     }
     if (typeof Worker === "undefined") {
-      return Promise.reject(new Error("SoundBridge worker transport is not available in this environment."));
+      return Promise.reject(new Error("PlugRelay worker transport is not available in this environment."));
     }
 
     return new Promise((resolve, reject) => {
@@ -178,7 +178,7 @@ export class SoundBridgeClient extends EventTarget {
       };
       const onConnectError = () => {
         cleanup();
-        reject(new Error(`Unable to start SoundBridge transport worker.`));
+        reject(new Error(`Unable to start PlugRelay transport worker.`));
       };
       worker.addEventListener("message", onConnectMessage);
       worker.addEventListener("error", onConnectError);
@@ -430,10 +430,10 @@ export class SoundBridgeClient extends EventTarget {
     if (this.transport === "main") {
       const socket = this.socket;
       if (!socket || socket.readyState !== WebSocket.OPEN) {
-        return Promise.reject(new Error("SoundBridge socket is not connected."));
+        return Promise.reject(new Error("PlugRelay socket is not connected."));
       }
     } else if (!this.worker || !this.workerConnected) {
-      return Promise.reject(new Error("SoundBridge worker transport is not connected."));
+      return Promise.reject(new Error("PlugRelay worker transport is not connected."));
     }
 
     const id = `req-${++this.requestSeq}`;
@@ -451,7 +451,7 @@ export class SoundBridgeClient extends EventTarget {
     return new Promise((resolve, reject) => {
       const timeout = timeoutMs > 0 ? globalThis.setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`SoundBridge request timed out: ${command}`));
+        reject(new Error(`PlugRelay request timed out: ${command}`));
       }, timeoutMs) : undefined;
       this.pending.set(id, { resolve: resolve as (payload: unknown) => void, reject, timeout });
       if (this.transport === "worker") {
@@ -485,13 +485,13 @@ export class SoundBridgeClient extends EventTarget {
       if (pending) {
         clearTimeout(pending.timeout);
         this.pending.delete(message.id);
-        pending.reject(new Error(message.message ?? "SoundBridge worker transport send failed."));
+        pending.reject(new Error(message.message ?? "PlugRelay worker transport send failed."));
       }
       return;
     }
     if (message?.type === "closed") {
       this.workerConnected = false;
-      this.rejectPendingRequests("SoundBridge worker transport closed before response");
+      this.rejectPendingRequests("PlugRelay worker transport closed before response");
       this.dispatchEvent(new CustomEvent("disconnect"));
     }
   }
@@ -519,8 +519,8 @@ export class SoundBridgeClient extends EventTarget {
       return;
     }
 
-    const error = envelope.error ?? { code: "unknown_error", message: "Unknown SoundBridge protocol error." };
-    pending.reject(new SoundBridgeProtocolError(error.code, error.message, error.details));
+    const error = envelope.error ?? { code: "unknown_error", message: "Unknown PlugRelay protocol error." };
+    pending.reject(new PlugRelayProtocolError(error.code, error.message, error.details));
   }
 
   private rejectPendingRequests(message: string): void {
@@ -536,4 +536,4 @@ function boundedAudioWorkletInteger(value: unknown, fallback: number, min: numbe
   const integer = Math.floor(Number(value ?? fallback));
   return Number.isFinite(integer) ? Math.max(min, Math.min(max, integer)) : fallback;
 }
-export { decodeBinaryAudioEnvelope as __soundBridgeDecodeBinaryAudioEnvelope, encodeBinaryAudioEnvelope as __soundBridgeEncodeBinaryAudioEnvelope };
+export { decodeBinaryAudioEnvelope as __plugRelayDecodeBinaryAudioEnvelope, encodeBinaryAudioEnvelope as __plugRelayEncodeBinaryAudioEnvelope };

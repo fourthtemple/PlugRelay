@@ -1,4 +1,4 @@
-# SoundBridge Native Bridge Daemon
+# PlugRelay Native Bridge Daemon
 
 This is the macOS-first native daemon skeleton. It currently builds command-line scanners for VST3, Audio Unit, and LV2 plugins, plus worker-process hosting for Audio Unit, SDK-backed VST3 audio effects, and basic LV2 audio/control effects.
 
@@ -22,25 +22,25 @@ LV2:
 - `/usr/local/lib/lv2`
 - `/usr/lib/lv2`
 
-It deliberately does not vendor Steinberg's VST3 SDK or require an external LV2 stack. Audio Unit hosting is implemented through the macOS CoreAudio APIs. VST3 hosting is enabled when `SOUNDBRIDGE_VST3_SDK_PATH` points at a Steinberg SDK checkout or the local development SDK path is present, including bounded note-expression metadata plus value/text event delivery where plugins expose it. LV2 hosting uses the stable LV2 C ABI directly for bundle-local dynamic libraries with basic audio/control ports, bounded integer/toggle/enumeration control metadata, bounded atom MIDI delivery, atom time-position transport, bounded fixed/power-of-two block-size profiles, bounded synchronous LV2 `work:schedule`, bounded standard latency output-port reporting, bounded portable POD `state:interface` save/restore, brokered file-backed state, and worker-native preset-state loading through file grants; UI and other advanced LV2 extensions remain future work.
+It deliberately does not vendor Steinberg's VST3 SDK or require an external LV2 stack. Audio Unit hosting is implemented through the macOS CoreAudio APIs. VST3 hosting is enabled when `PLUGRELAY_VST3_SDK_PATH` points at a Steinberg SDK checkout or the local development SDK path is present, including bounded note-expression metadata plus value/text event delivery where plugins expose it. LV2 hosting uses the stable LV2 C ABI directly for bundle-local dynamic libraries with basic audio/control ports, bounded integer/toggle/enumeration control metadata, bounded atom MIDI delivery, atom time-position transport, bounded fixed/power-of-two block-size profiles, bounded synchronous LV2 `work:schedule`, bounded standard latency output-port reporting, bounded portable POD `state:interface` save/restore, brokered file-backed state, and worker-native preset-state loading through file grants; UI and other advanced LV2 extensions remain future work.
 
 ## Build
 
 ```sh
 cmake -S native/bridge-daemon -B native/bridge-daemon/build
 cmake --build native/bridge-daemon/build
-native/bridge-daemon/build/soundbridge-daemon --scan
+native/bridge-daemon/build/plugrelay-daemon --scan
 ```
 
 Focused scans:
 
 ```sh
-native/bridge-daemon/build/soundbridge-daemon --scan-vst3
-native/bridge-daemon/build/soundbridge-daemon --scan-au
-native/bridge-daemon/build/soundbridge-daemon --scan-lv2
-native/bridge-daemon/build/soundbridge-daemon --scan-examples
-native/bridge-daemon/build/soundbridge-daemon --scan-installed
-native/bridge-daemon/build/soundbridge-daemon --host-status
+native/bridge-daemon/build/plugrelay-daemon --scan-vst3
+native/bridge-daemon/build/plugrelay-daemon --scan-au
+native/bridge-daemon/build/plugrelay-daemon --scan-lv2
+native/bridge-daemon/build/plugrelay-daemon --scan-examples
+native/bridge-daemon/build/plugrelay-daemon --scan-installed
+native/bridge-daemon/build/plugrelay-daemon --host-status
 ```
 
 `--scan-vst3` discovers VST3 bundles and reads macOS `Info.plist` metadata when present, including display name, bundle identifier, version, and vendor hints. Public scanner metadata is path-free; bundle and executable paths stay in diagnostics for the daemon's internal worker launch path. Scanning remains lightweight; binary loading happens in the separate `--host-vst3-worker` process.
@@ -61,43 +61,43 @@ Worker command text fields such as parameter ids, display strings, and file-gran
 
 `--scan-examples` returns the repo-local AU/VST/LV2 example bundles used by the browser demo:
 
-- `vst3:soundbridge-example-polysynth.vst3`
-- `au:soundbridge-example-tonewheel.component`
-- `lv2:soundbridge-example-wavefold.lv2`
-- `lv2:soundbridge-example-gain.lv2`
+- `vst3:plugrelay-example-polysynth.vst3`
+- `au:plugrelay-example-tonewheel.component`
+- `lv2:plugrelay-example-wavefold.lv2`
+- `lv2:plugrelay-example-gain.lv2`
 
 `--host-status` reports `exampleHostAvailable` separately from real binary plugin `hostAvailable`. On macOS, AU reports `hostAvailable: true`; VST3 reports `hostAvailable: true` when the SDK worker is linked; LV2 reports `hostAvailable: true` when the basic LV2 audio/control worker is available.
 
 For installed-plugin compatibility checks, run:
 
 ```sh
-SOUNDBRIDGE_PROBE_FILTER="Plugin Name" npm run probe:installed
+PLUGRELAY_PROBE_FILTER="Plugin Name" npm run probe:installed
 ```
 
-The probe starts a temporary paired loopback daemon with an explicit origin allowlist and runs bounded create, parameter, state, latency, tail, MIDI, render, output-bus layout, and destroy checks against matching installed VST3, AU, and LV2 plugins. Set `SOUNDBRIDGE_PROBE_FORMATS` only when you intentionally want to narrow the run to a comma-separated subset such as `vst3,au` or `lv2`. It is intended for compatibility evidence and debugging; it does not replace OS-level worker sandboxing.
+The probe starts a temporary paired loopback daemon with an explicit origin allowlist and runs bounded create, parameter, state, latency, tail, MIDI, render, output-bus layout, and destroy checks against matching installed VST3, AU, and LV2 plugins. Set `PLUGRELAY_PROBE_FORMATS` only when you intentionally want to narrow the run to a comma-separated subset such as `vst3,au` or `lv2`. It is intended for compatibility evidence and debugging; it does not replace OS-level worker sandboxing.
 
-Add `SOUNDBRIDGE_PROBE_NATIVE_EDITOR_BROKER=1` to also verify the opt-in native editor broker open/close path with the safe fixture broker, or with `SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH` and `SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS` when testing a real UI broker.
+Add `PLUGRELAY_PROBE_NATIVE_EDITOR_BROKER=1` to also verify the opt-in native editor broker open/close path with the safe fixture broker, or with `PLUGRELAY_NATIVE_EDITOR_BROKER_PATH` and `PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS` when testing a real UI broker.
 
 The example bundles live at:
 
-- `native/example-plugins/VST3/soundbridge-example-polysynth.vst3`
-- `native/example-plugins/Components/soundbridge-example-tonewheel.component`
-- `native/example-plugins/LV2/soundbridge-example-wavefold.lv2`
-- `native/example-plugins/LV2/soundbridge-example-gain.lv2`
+- `native/example-plugins/VST3/plugrelay-example-polysynth.vst3`
+- `native/example-plugins/Components/plugrelay-example-tonewheel.component`
+- `native/example-plugins/LV2/plugrelay-example-wavefold.lv2`
+- `native/example-plugins/LV2/plugrelay-example-gain.lv2`
 
 The native build installs a shared Mach-O helper into each instrument bundle:
 
-- `Contents/MacOS/soundbridge-example-polysynth`
-- `Contents/MacOS/soundbridge-example-tonewheel`
-- `soundbridge-example-wavefold`
+- `Contents/MacOS/plugrelay-example-polysynth`
+- `Contents/MacOS/plugrelay-example-tonewheel`
+- `plugrelay-example-wavefold`
 
-Those helpers are not full VST3 SDK, AudioComponent, or LV2 binaries. They are SoundBridge example executables that render the instrument blocks used by the website demo.
+Those helpers are not full VST3 SDK, AudioComponent, or LV2 binaries. They are PlugRelay example executables that render the instrument blocks used by the website demo.
 They support both one-shot rendering and worker mode. Worker mode owns note state and oscillator phase across render calls:
 
 The LV2 gain fixtures are different: they are small real LV2 dynamic-library bundles used by the native worker smoke path, including a restricted block-profile variant.
 
 ```sh
-native/example-plugins/VST3/soundbridge-example-polysynth.vst3/Contents/MacOS/soundbridge-example-polysynth --worker
+native/example-plugins/VST3/plugrelay-example-polysynth.vst3/Contents/MacOS/plugrelay-example-polysynth --worker
 ```
 
 Worker mode accepts newline-delimited commands on stdin:
@@ -113,9 +113,9 @@ quit
 Render one native example block:
 
 ```sh
-native/bridge-daemon/build/soundbridge-daemon --render-example-block vst3:soundbridge-example-polysynth.vst3 128 48000 0.42 0.68 0.5 60:0.8
-native/bridge-daemon/build/soundbridge-daemon --render-example-block au:soundbridge-example-tonewheel.component 128 48000 0.48 0.36 0.5 60:0.8
-native/bridge-daemon/build/soundbridge-daemon --render-example-block lv2:soundbridge-example-wavefold.lv2 128 48000 0.40 0.58 0.5 60:0.8
+native/bridge-daemon/build/plugrelay-daemon --render-example-block vst3:plugrelay-example-polysynth.vst3 128 48000 0.42 0.68 0.5 60:0.8
+native/bridge-daemon/build/plugrelay-daemon --render-example-block au:plugrelay-example-tonewheel.component 128 48000 0.48 0.36 0.5 60:0.8
+native/bridge-daemon/build/plugrelay-daemon --render-example-block lv2:plugrelay-example-wavefold.lv2 128 48000 0.40 0.58 0.5 60:0.8
 ```
 
 Arguments are plugin id, frame count, sample rate, normalized gain, normalized tone, normalized detune, and a comma-separated `note:velocity` list.

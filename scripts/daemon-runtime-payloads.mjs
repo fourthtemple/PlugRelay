@@ -48,7 +48,7 @@ export function createDaemonRuntimePayloads({
       Buffer.byteLength(text, "utf8") > maxPluginStateEnvelopeBytes ||
       !isBase64Text(text)
     ) {
-      throw makeProtocolError("bad_state", "State was not valid SoundBridge state.");
+      throw makeProtocolError("bad_state", "State was not valid PlugRelay state.");
     }
 
     try {
@@ -58,7 +58,7 @@ export function createDaemonRuntimePayloads({
       if (error?.code) {
         throw error;
       }
-      throw makeProtocolError("bad_state", "State was not valid SoundBridge state.");
+      throw makeProtocolError("bad_state", "State was not valid PlugRelay state.");
     }
   }
 

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>CFBundleIdentifier</key>
+    <string>dev.plugrelay.examples.polysynth.vst3</string>
+    <key>CFBundleName</key>
+    <string>PlugRelay Example PolySynth</string>
+    <key>CFBundlePackageType</key>
+    <string>BNDL</string>
+    <key>CFBundleExecutable</key>
+    <string>plugrelay-example-polysynth</string>
+    <key>PlugRelayExamplePlugin</key>
+    <true/>
+  </dict>
+</plist>

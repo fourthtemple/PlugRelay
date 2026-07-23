@@ -15,11 +15,11 @@ import {
   blockHasSignal
 } from "./smoke-test-assertions.mjs";
 
-const HOST = process.env.SOUNDBRIDGE_HOST ?? "127.0.0.1";
-const PORT = Number(process.env.SOUNDBRIDGE_PORT ?? 47370);
-const PAIRING_TOKEN = process.env.SOUNDBRIDGE_PAIRING_TOKEN ?? "dev-token";
+const HOST = process.env.PLUGRELAY_HOST ?? "127.0.0.1";
+const PORT = Number(process.env.PLUGRELAY_PORT ?? 47370);
+const PAIRING_TOKEN = process.env.PLUGRELAY_PAIRING_TOKEN ?? "dev-token";
 const ORIGIN = "http://127.0.0.1:5173";
-const NATIVE_RENDERER = process.env.SOUNDBRIDGE_NATIVE_RENDERER ?? "native/bridge-daemon/build-current/soundbridge-daemon";
+const NATIVE_RENDERER = process.env.PLUGRELAY_NATIVE_RENDERER ?? "native/bridge-daemon/build-current/plugrelay-daemon";
 
 const request = createRequestClient();
 const requestBinaryAudio = createBinaryAudioRequestClient();
@@ -702,4 +702,4 @@ await runExampleInstrumentSmoke({
 });
 socket.destroy();
 
-console.log("SoundBridge mock protocol smoke test passed.");
+console.log("PlugRelay mock protocol smoke test passed.");

@@ -1,4 +1,4 @@
-import { SoundBridgeLiveEffectRack } from "../packages/web-client/dist/soundbridge-client.js";
+import { PlugRelayLiveEffectRack } from "../packages/web-client/dist/plugrelay-client.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -42,7 +42,7 @@ function createClient() {
 }
 
 const client = createClient();
-const rack = await SoundBridgeLiveEffectRack.create({
+const rack = await PlugRelayLiveEffectRack.create({
   client,
   plugin,
   sampleRate: 48000,
@@ -75,7 +75,7 @@ assert(client.destroyed.includes("inst-1"), "recreate destroys the retired insta
 await rack.destroy();
 
 const failingClient = createClient();
-const failingRack = await SoundBridgeLiveEffectRack.create({
+const failingRack = await PlugRelayLiveEffectRack.create({
   client: failingClient,
   plugin,
   sampleRate: 48000,

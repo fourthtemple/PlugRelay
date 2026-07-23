@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const REAL_ROOT = fs.realpathSync(ROOT);
-const HOST = process.env.SOUNDBRIDGE_DEMO_HOST ?? "127.0.0.1";
-const PORT = Number(process.env.SOUNDBRIDGE_DEMO_PORT ?? 5173);
+const HOST = process.env.PLUGRELAY_DEMO_HOST ?? "127.0.0.1";
+const PORT = Number(process.env.PLUGRELAY_DEMO_PORT ?? 5173);
 const SERVED_PREFIXES = [
   path.join(REAL_ROOT, "examples/browser-demo") + path.sep,
   path.join(REAL_ROOT, "packages/web-client/dist") + path.sep
@@ -63,10 +63,10 @@ const server = http.createServer((request, response) => {
   });
 });
 
-assertLoopbackHost(HOST, "SOUNDBRIDGE_DEMO_HOST", "SOUNDBRIDGE_DEMO_ALLOW_NON_LOOPBACK");
+assertLoopbackHost(HOST, "PLUGRELAY_DEMO_HOST", "PLUGRELAY_DEMO_ALLOW_NON_LOOPBACK");
 
 server.listen(PORT, HOST, () => {
-  console.log(`SoundBridge browser demo listening on http://${HOST}:${PORT}`);
+  console.log(`PlugRelay browser demo listening on http://${HOST}:${PORT}`);
 });
 
 function isServedPath(absolute) {
@@ -86,7 +86,7 @@ function assertLoopbackHost(host, hostEnvName, allowEnvName) {
   }
 
   console.error(
-    `${hostEnvName}=${host} would expose the SoundBridge demo off this machine. ` +
+    `${hostEnvName}=${host} would expose the PlugRelay demo off this machine. ` +
       `Use 127.0.0.1, localhost, or ::1, or set ${allowEnvName}=1 if you are intentionally testing a non-loopback bind.`
   );
   process.exit(1);

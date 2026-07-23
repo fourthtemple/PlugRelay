@@ -1,10 +1,10 @@
-#include "SoundBridge/Vst3HostWorkerProcessSupport.h"
+#include "PlugRelay/Vst3HostWorkerProcessSupport.h"
 
-#ifdef SOUNDBRIDGE_ENABLE_VST3_SDK
+#ifdef PLUGRELAY_ENABLE_VST3_SDK
 
-#include "SoundBridge/Vst3HostWorkerSupport.h"
+#include "PlugRelay/Vst3HostWorkerSupport.h"
 
-namespace soundbridge::vst3_worker {
+namespace plugrelay::vst3_worker {
 
 Steinberg::Vst::ProcessContext processContextForTransport(
     const HostTransportContext& transport,
@@ -48,6 +48,6 @@ Steinberg::Vst::ProcessContext processContextForTransport(
   return processContext;
 }
 
-} // namespace soundbridge::vst3_worker
+} // namespace plugrelay::vst3_worker
 
 #endif

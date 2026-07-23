@@ -1,4 +1,4 @@
-import { liveTransportForBlock } from "../packages/web-client/dist/soundbridge-client.js";
+import { liveTransportForBlock } from "../packages/web-client/dist/plugrelay-client.js";
 
 const compensated = liveTransportForBlock({
   sampleRate: 48000,

@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import vm from "node:vm";
-import { liveTransportForBlock } from "../packages/web-client/dist/soundbridge-client.js";
+import { liveTransportForBlock } from "../packages/web-client/dist/plugrelay-client.js";
 
-const workerPath = resolve("packages/web-client/dist/soundbridge-transport-worker.js");
+const workerPath = resolve("packages/web-client/dist/plugrelay-transport-worker.js");
 const workerSource = readFileSync(workerPath, "utf8").replace(
-  /import \{[\s\S]*?\} from "\.\/soundbridge-client\.js";/,
+  /import \{[\s\S]*?\} from "\.\/plugrelay-client\.js";/,
   `
 const decodeBinaryAudioEnvelope = globalThis.decodeBinaryAudioEnvelope;
 const encodeBinaryAudioEnvelope = globalThis.encodeBinaryAudioEnvelope;

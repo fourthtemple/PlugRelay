@@ -1,6 +1,6 @@
-#include "SoundBridge/AudioUnitScanner.h"
+#include "PlugRelay/AudioUnitScanner.h"
 
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
 #endif
@@ -14,7 +14,7 @@
 #include <optional>
 #include <string>
 
-namespace soundbridge {
+namespace plugrelay {
 
 namespace {
 
@@ -27,8 +27,8 @@ std::filesystem::path homeLibraryAudioUnitPath() {
 }
 
 std::filesystem::path repositoryExampleAudioUnitPath() {
-#ifdef SOUNDBRIDGE_SOURCE_DIR
-  return std::filesystem::path(SOUNDBRIDGE_SOURCE_DIR) / "native" / "example-plugins" / "Components";
+#ifdef PLUGRELAY_SOURCE_DIR
+  return std::filesystem::path(PLUGRELAY_SOURCE_DIR) / "native" / "example-plugins" / "Components";
 #else
   return {};
 #endif
@@ -106,8 +106,8 @@ std::optional<std::uint32_t> manifestIntValue(const std::string& manifest, const
   return static_cast<std::uint32_t>(value);
 }
 
-void applySoundBridgeManifest(NativePluginInfo& info, const std::filesystem::path& bundlePath) {
-  const auto manifestPath = bundlePath / "Contents" / "Resources" / "SoundBridgePlugin.json";
+void applyPlugRelayManifest(NativePluginInfo& info, const std::filesystem::path& bundlePath) {
+  const auto manifestPath = bundlePath / "Contents" / "Resources" / "PlugRelayPlugin.json";
   const auto manifest = readTextFile(manifestPath);
   if (manifest.empty()) {
     return;
@@ -160,7 +160,7 @@ std::filesystem::path macBinaryPath(const std::filesystem::path& bundlePath) {
   return {};
 }
 
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
 std::string fourCharCodeToString(OSType value) {
   std::string text(4, ' ');
   text[0] = static_cast<char>((value >> 24) & 0xFF);
@@ -360,6 +360,7 @@ std::vector<NativePluginInfo> AudioUnitScanner::scan() const {
     if (!std::filesystem::is_directory(root, error)) {
       continue;
     }
+    const bool repositoryExampleRoot = root == repositoryExampleAudioUnitPath();
 
     for (const auto& entry : std::filesystem::directory_iterator(root, error)) {
       if (error) {
@@ -371,8 +372,9 @@ std::vector<NativePluginInfo> AudioUnitScanner::scan() const {
         continue;
       }
 
-      const bool isBundle = entry.is_directory(error);
-      if (error || !isBundle) {
+      std::error_code entryError;
+      const bool isBundle = entry.is_directory(entryError);
+      if (entryError || !isBundle) {
         continue;
       }
 
@@ -383,31 +385,35 @@ std::vector<NativePluginInfo> AudioUnitScanner::scan() const {
       info.vendor = "Unknown";
       info.category = "AudioUnit";
       info.kind = "unknown";
-      info.bundlePath = std::filesystem::weakly_canonical(path, error).string();
-      if (error) {
+      std::error_code canonicalError;
+      info.bundlePath = std::filesystem::weakly_canonical(path, canonicalError).string();
+      if (canonicalError) {
         info.bundlePath = path.string();
-        error.clear();
       }
-      info.hasContents = std::filesystem::is_directory(path / "Contents", error) && !error;
+      std::error_code contentsError;
+      info.hasContents = std::filesystem::is_directory(path / "Contents", contentsError) && !contentsError;
       auto executablePath = macBinaryPath(path);
       info.hasExecutable = !executablePath.empty();
       if (info.hasExecutable) {
-        info.executablePath = std::filesystem::weakly_canonical(executablePath, error).string();
-        if (error) {
+        canonicalError.clear();
+        info.executablePath = std::filesystem::weakly_canonical(executablePath, canonicalError).string();
+        if (canonicalError) {
           info.executablePath = executablePath.string();
-          error.clear();
         }
       }
-      applySoundBridgeManifest(info, path);
+      applyPlugRelayManifest(info, path);
+      if (repositoryExampleRoot && !info.hasManifest) {
+        continue;
+      }
       plugins.push_back(std::move(info));
     }
   }
 
-#ifdef SOUNDBRIDGE_MACOS
+#ifdef PLUGRELAY_MACOS
   mergeAudioComponentRegistryMetadata(plugins);
 #endif
 
   return plugins;
 }
 
-} // namespace soundbridge
+} // namespace plugrelay

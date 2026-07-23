@@ -17,7 +17,7 @@ import { createSecurityPairingCases } from "./security-smoke-pairing-cases.mjs";
 import { createSecuritySessionCases } from "./security-smoke-session-cases.mjs";
 
 const HOST = "127.0.0.1";
-const PORT = Number(process.env.SOUNDBRIDGE_PORT ?? await reservePort(HOST));
+const PORT = Number(process.env.PLUGRELAY_PORT ?? await reservePort(HOST));
 const TOKEN = "dev-token";
 const ORIGIN = "http://127.0.0.1:5173";
 const DISALLOWED_ORIGIN = "https://evil.example";
@@ -76,10 +76,10 @@ const sessionCases = createSecuritySessionCases({
 const daemon = spawn("node", ["scripts/mock-daemon.mjs"], {
   env: {
     ...process.env,
-    SOUNDBRIDGE_HOST: HOST,
-    SOUNDBRIDGE_PORT: String(PORT),
-    SOUNDBRIDGE_PAIRING_TOKEN: TOKEN,
-    SOUNDBRIDGE_MAX_PAIR_ATTEMPTS: "3"
+    PLUGRELAY_HOST: HOST,
+    PLUGRELAY_PORT: String(PORT),
+    PLUGRELAY_PAIRING_TOKEN: TOKEN,
+    PLUGRELAY_MAX_PAIR_ATTEMPTS: "3"
   },
   stdio: ["ignore", "pipe", "pipe"]
 });

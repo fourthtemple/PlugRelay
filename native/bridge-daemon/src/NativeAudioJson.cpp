@@ -1,10 +1,10 @@
-#include "SoundBridge/NativeAudioJson.h"
+#include "PlugRelay/NativeAudioJson.h"
 
 #include <charconv>
 #include <cmath>
 #include <system_error>
 
-namespace soundbridge::worker_audio_json {
+namespace plugrelay::worker_audio_json {
 namespace {
 
 void appendJsonSample(std::string& output, float sample) {
@@ -47,4 +47,4 @@ std::string channelsToJson(const std::vector<std::vector<float>>& channels) {
   return output;
 }
 
-} // namespace soundbridge::worker_audio_json
+} // namespace plugrelay::worker_audio_json

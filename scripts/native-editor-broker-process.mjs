@@ -12,15 +12,15 @@ const DEFAULT_COMMAND_TIMEOUT_MS = 5000;
 const DEFAULT_TERMINATION_GRACE_MS = 250;
 
 export function createConfiguredNativeEditorBroker({ env = process.env, limits = {} } = {}) {
-  const executablePath = String(env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH ?? "").trim();
+  const executablePath = String(env.PLUGRELAY_NATIVE_EDITOR_BROKER_PATH ?? "").trim();
   if (!executablePath) {
     return undefined;
   }
   if (!path.isAbsolute(executablePath)) {
-    throw new Error("SOUNDBRIDGE_NATIVE_EDITOR_BROKER_PATH must be an absolute executable path.");
+    throw new Error("PLUGRELAY_NATIVE_EDITOR_BROKER_PATH must be an absolute executable path.");
   }
 
-  const args = parseBrokerArgs(env.SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS);
+  const args = parseBrokerArgs(env.PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS);
   return new NativeEditorBroker({
     args,
     executablePath,
@@ -267,15 +267,15 @@ function parseBrokerArgs(rawArgs) {
   }
   const parsed = JSON.parse(String(rawArgs));
   if (!Array.isArray(parsed) || parsed.length > 16) {
-    throw new Error("SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS must be a JSON array of up to 16 strings.");
+    throw new Error("PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS must be a JSON array of up to 16 strings.");
   }
   return parsed.map((arg) => {
     if (typeof arg !== "string") {
-      throw new Error("SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS must contain only strings.");
+      throw new Error("PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS must contain only strings.");
     }
     const value = arg;
     if (Buffer.byteLength(value, "utf8") > 4096) {
-      throw new Error("SOUNDBRIDGE_NATIVE_EDITOR_BROKER_ARGS contains an oversized argument.");
+      throw new Error("PLUGRELAY_NATIVE_EDITOR_BROKER_ARGS contains an oversized argument.");
     }
     return value;
   });
@@ -309,9 +309,9 @@ function normalizeOpenResponse(response, policy) {
 
 function nativeEditorPolicyFromEnv(env) {
   return {
-    fileDialogs: env.SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_FILE_DIALOGS === "1",
-    clipboard: env.SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_CLIPBOARD === "1",
-    dragAndDrop: env.SOUNDBRIDGE_NATIVE_EDITOR_ALLOW_DRAG_DROP === "1"
+    fileDialogs: env.PLUGRELAY_NATIVE_EDITOR_ALLOW_FILE_DIALOGS === "1",
+    clipboard: env.PLUGRELAY_NATIVE_EDITOR_ALLOW_CLIPBOARD === "1",
+    dragAndDrop: env.PLUGRELAY_NATIVE_EDITOR_ALLOW_DRAG_DROP === "1"
   };
 }
 

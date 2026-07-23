@@ -233,7 +233,7 @@ setTimeout(() => {}, 30000);
       `#!/usr/bin/env node
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", () => {
-  process.stdout.write(JSON.stringify({ error: "failed while loading /tmp/soundbridge-fixture/private-plugin.vst3" }) + "\\n");
+  process.stdout.write(JSON.stringify({ error: "failed while loading /tmp/plugrelay-fixture/private-plugin.vst3" }) + "\\n");
 });
 setTimeout(() => {}, 30000);
 `
@@ -245,7 +245,7 @@ setTimeout(() => {}, 30000);
 process.stdout.write(JSON.stringify({ ok: true, ready: true }) + "\\n");
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", () => {
-  process.stdout.write(JSON.stringify({ error: "failed while opening file:///tmp/soundbridge-fixture/private-license.lic" }) + "\\n");
+  process.stdout.write(JSON.stringify({ error: "failed while opening file:///tmp/plugrelay-fixture/private-license.lic" }) + "\\n");
 });
 setTimeout(() => {}, 30000);
 `
@@ -273,7 +273,7 @@ setTimeout(() => {}, 30000);
       tempDir,
       "invalid-native-ready-worker.mjs",
       `#!/usr/bin/env node
-process.stdout.write(JSON.stringify({ ok: false, error: "bad-ready /tmp/soundbridge-fixture/private-plugin.vst3" }) + "\\n");
+process.stdout.write(JSON.stringify({ ok: false, error: "bad-ready /tmp/plugrelay-fixture/private-plugin.vst3" }) + "\\n");
 setTimeout(() => {}, 30000);
 `
     ),
