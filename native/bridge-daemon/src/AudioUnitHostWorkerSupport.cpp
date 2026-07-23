@@ -668,22 +668,25 @@ std::string renderedAudioToJson(const RenderedAudio& rendered) {
     }
   }
   output.reserve(
-      worker_audio_json::estimatedChannelsJsonBytes(rendered.channels) * 2 +
+      worker_audio_json::estimatedChannelsJsonBytes(rendered.channels) +
       busBytes +
       rendered.outputBuses.size() * 48 +
       64);
   output.append("{\"channels\":");
   worker_audio_json::appendChannelsJson(output, rendered.channels);
-  output.append(",\"outputBuses\":[{\"index\":0,\"channels\":");
-  worker_audio_json::appendChannelsJson(output, rendered.channels);
-  output.push_back('}');
+  output.append(",\"outputBuses\":[");
+  bool wroteBus = false;
   for (std::size_t busIndex = 0; busIndex < rendered.outputBuses.size(); ++busIndex) {
     if (rendered.outputBuses[busIndex].index == 0) {
       continue;
     }
-    output.append(",{\"index\":").append(std::to_string(rendered.outputBuses[busIndex].index)).append(",\"channels\":");
+    if (wroteBus) {
+      output.push_back(',');
+    }
+    output.append("{\"index\":").append(std::to_string(rendered.outputBuses[busIndex].index)).append(",\"channels\":");
     worker_audio_json::appendChannelsJson(output, rendered.outputBuses[busIndex].channels);
     output.push_back('}');
+    wroteBus = true;
   }
   output.append("]}");
   return output;
