@@ -404,7 +404,7 @@ function encodeBinaryAudioEnvelope(envelope, channels) {
   delete header.payload.channels;
   delete header.payload.inputBuses;
   delete header.payload.outputBuses;
-  const headerBytes = BINARY_TEXT_ENCODER.encode(JSON.stringify(header));
+  const headerBytes = encodedBinaryHeaderBytes(header);
   let sampleBytes = binaryBlockBytes(mainBlock);
   if (inputBuses.length > 0) sampleBytes += binaryBlocksBytes(inputBuses);
   if (outputBuses.length > 0) sampleBytes += binaryBlocksBytes(outputBuses);
@@ -580,6 +580,11 @@ function readBinaryChannels(view, offset, channelCount, frames) {
   const channels = [];
   const byteLength = frames * FLOAT_BYTES;
   for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+    if (LITTLE_ENDIAN_FLOATS && binaryFloatOffsetAligned(view, offset)) {
+      channels.push(new Float32Array(view.buffer, view.byteOffset + offset, frames));
+      offset += byteLength;
+      continue;
+    }
     const channel = new Float32Array(frames);
     if (LITTLE_ENDIAN_FLOATS) {
       new Uint8Array(channel.buffer).set(new Uint8Array(view.buffer, view.byteOffset + offset, byteLength));
@@ -593,6 +598,20 @@ function readBinaryChannels(view, offset, channelCount, frames) {
     channels.push(channel);
   }
   return channels;
+}
+
+function encodedBinaryHeaderBytes(header) {
+  const bytes = BINARY_TEXT_ENCODER.encode(JSON.stringify(header));
+  const padding = (FLOAT_BYTES - ((BINARY_AUDIO_HEADER_BYTES + bytes.length) % FLOAT_BYTES)) % FLOAT_BYTES;
+  if (padding === 0) return bytes;
+  const padded = new Uint8Array(bytes.length + padding);
+  padded.set(bytes);
+  padded.fill(0x20, bytes.length);
+  return padded;
+}
+
+function binaryFloatOffsetAligned(view, offset) {
+  return (view.byteOffset + offset) % FLOAT_BYTES === 0;
 }
 
 function binaryBytes(data) {

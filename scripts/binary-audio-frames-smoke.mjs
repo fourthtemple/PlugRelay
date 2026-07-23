@@ -23,14 +23,17 @@ const requestEnvelope = {
 
 const encodedRequest = encodeBinaryAudioEnvelope(requestEnvelope);
 const decodedRequest = decodeBinaryAudioEnvelope(encodedRequest);
+assert(sampleOffset(encodedRequest) % 4 === 0, "binary request sample payload is 4-byte aligned");
 assert(decodedRequest.id === "binary-smoke-1", "binary request preserves envelope id");
 assert(decodedRequest.payload.blockId === 7, "binary request preserves JSON payload fields");
 assert(decodedRequest.payload.channels.length === 2, "binary request restores channel count");
 assert(decodedRequest.payload.channels[0] instanceof Float32Array, "binary request restores typed channel buffers");
+assert(decodedRequest.payload.channels[0].buffer === encodedRequest.buffer, "binary request decodes channel views without copying aligned payloads");
 assert(Math.abs(decodedRequest.payload.channels[1][1] + 0.5) < 0.000001, "binary request restores Float32 samples");
 assert(decodedRequest.payload.inputBuses.length === 2, "binary request restores input bus count");
 assert(decodedRequest.payload.inputBuses[1].index === 2, "binary request restores input bus indexes");
 assert(decodedRequest.payload.inputBuses[1].channels[0] instanceof Float32Array, "binary request restores typed input bus buffers");
+assert(decodedRequest.payload.inputBuses[1].channels[0].buffer === encodedRequest.buffer, "binary request decodes input bus views without copying aligned payloads");
 assert(Math.abs(decodedRequest.payload.inputBuses[1].channels[0][2] - 0.7) < 0.000001, "binary request restores input bus samples");
 assert(!("channels" in readBinaryHeader(encodedRequest).payload), "binary request keeps samples out of JSON header");
 assert(!("inputBuses" in readBinaryHeader(encodedRequest).payload), "binary request keeps input bus samples out of JSON header");
@@ -68,7 +71,10 @@ const responseEnvelope = {
   }
 };
 
-const decodedResponse = decodeBinaryAudioEnvelope(encodeBinaryAudioEnvelope(responseEnvelope));
+const encodedResponse = encodeBinaryAudioEnvelope(responseEnvelope);
+const decodedResponse = decodeBinaryAudioEnvelope(encodedResponse);
+assert(sampleOffset(encodedResponse) % 4 === 0, "binary response sample payload is 4-byte aligned");
+assert(decodedResponse.payload.channels[0].buffer === encodedResponse.buffer, "binary response decodes channel views without copying aligned payloads");
 assert(decodedResponse.ok === true, "binary response preserves ok status");
 assert(decodedResponse.payload.latencySamples === 3, "binary response preserves non-audio payload metadata");
 assert(decodedResponse.payload.renderDurationMs === 1.5, "binary response preserves render timing metadata");
@@ -119,4 +125,8 @@ function assert(condition, message) {
 function readBinaryHeader(frame) {
   const headerLength = frame.readUInt32BE(4);
   return JSON.parse(frame.subarray(8, 8 + headerLength).toString("utf8"));
+}
+
+function sampleOffset(frame) {
+  return 8 + frame.readUInt32BE(4);
 }

@@ -79,7 +79,7 @@ export function encodeBinaryAudioEnvelope(envelope) {
   delete header.payload.inputBuses;
   delete header.payload.outputBuses;
 
-  const headerBytes = Buffer.from(JSON.stringify(header), "utf8");
+  const headerBytes = encodedHeaderBytes(header);
   const blocks = [mainBlock, ...inputBuses, ...outputBuses];
   const bodyBytes = blocks.reduce((total, block) => total + block.channels.length * block.frames * FLOAT_BYTES, 0);
   const frame = Buffer.alloc(HEADER_BYTES + headerBytes.length + bodyBytes);
@@ -129,6 +129,11 @@ function readPlanarFloat32(buffer, offset, channelCount, frames) {
   const channels = [];
   const bytes = frames * FLOAT_BYTES;
   for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+    if (LITTLE_ENDIAN_FLOATS && binaryFloatOffsetAligned(buffer, offset)) {
+      channels.push(new Float32Array(buffer.buffer, buffer.byteOffset + offset, frames));
+      offset += bytes;
+      continue;
+    }
     const channel = new Float32Array(frames);
     if (LITTLE_ENDIAN_FLOATS) {
       new Uint8Array(channel.buffer, channel.byteOffset, channel.byteLength).set(buffer.subarray(offset, offset + bytes));
@@ -142,6 +147,21 @@ function readPlanarFloat32(buffer, offset, channelCount, frames) {
     channels.push(channel);
   }
   return channels;
+}
+
+function encodedHeaderBytes(header) {
+  const bytes = Buffer.from(JSON.stringify(header), "utf8");
+  const padding = (FLOAT_BYTES - ((HEADER_BYTES + bytes.length) % FLOAT_BYTES)) % FLOAT_BYTES;
+  if (padding === 0) {
+    return bytes;
+  }
+  const padded = Buffer.alloc(bytes.length + padding, 0x20);
+  bytes.copy(padded);
+  return padded;
+}
+
+function binaryFloatOffsetAligned(buffer, offset) {
+  return (buffer.byteOffset + offset) % FLOAT_BYTES === 0;
 }
 
 function writeChannelBlocks(buffer, offset, blocks) {
